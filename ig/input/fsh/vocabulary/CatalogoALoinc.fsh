@@ -34,6 +34,11 @@ LOINC 2.82 es parcial —traduce los ejes, no el nombre largo—. El español qu
 `display` del catálogo local, que es el lado del mapeo que sí es nuestro.
 """
 
+// El `id` va explícito porque el de un `Instance:` sale del nombre del propio bloque, que es
+// PascalCase. Sin esto, la URL canónica diría `catalogo-a-loinc` y la página se publicaría como
+// `ConceptMap-CatalogoALoinc.html`: dos nombres para el mismo artefacto, y ninguno como el resto
+// de la terminología, que es toda kebab-case.
+* id = "catalogo-a-loinc"
 * url = "https://aojeda006.github.io/HispaLIS/fhir/ConceptMap/catalogo-a-loinc"
 * name = "CatalogoALoinc"
 * status = #draft

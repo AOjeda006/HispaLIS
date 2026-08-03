@@ -61,7 +61,7 @@ para acreditarse. La norma se cita únicamente como justificación de diseño de
 | Artefacto | Qué es |
 |---|---|
 | [CatalogoPruebas](CodeSystem-catalogo-pruebas.html) | El **dialecto local**: los códigos con los que el laboratorio pide y firma sus pruebas, cada uno con su unidad UCUM |
-| [CatalogoALoinc](ConceptMap-CatalogoALoinc.html) | El **traductor** del dialecto a LOINC |
+| [CatalogoALoinc](ConceptMap-catalogo-a-loinc.html) | El **traductor** del dialecto a LOINC |
 | [PruebasDelCatalogo](ValueSet-pruebas-del-catalogo.html) | Todas las pruebas ofertadas; es a lo que se atan `PeticionLab.code` y `ResultadoLab.code` |
 | [TiposMuestra](ValueSet-tipos-muestra.html) | Tipos de espécimen aceptados, en SNOMED CT |
 | [MotivosRechazoMuestra](ValueSet-motivos-rechazo-muestra.html) | Por qué se rechaza una muestra |
