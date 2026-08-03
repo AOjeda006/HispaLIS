@@ -28,31 +28,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Guarda de auto-omisión: RETIRAR en el mismo commit en que se cree backend/pom.xml.
-      - name: Comprobar que el backend está andamiado
-        id: guarda
-        run: |
-          if [ -f backend/pom.xml ]; then
-            echo "andamiado=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "andamiado=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::backend/pom.xml no existe todavía; se omite la construcción."
-          fi
-
       - uses: actions/setup-java@v4
-        if: steps.guarda.outputs.andamiado == 'true'
         with:
           distribution: temurin
           java-version: '21'
           cache: maven
 
+      # `verify` incluye la comprobación de formato de Spotless, enganchada a esa fase en el pom: el
+      # formato se exige con el mismo comando que corre los tests, sin una orden aparte que olvidar.
       - name: Build y tests
-        if: steps.guarda.outputs.andamiado == 'true'
         working-directory: backend
         run: ./mvnw --batch-mode verify
 
       - name: Publicar los informes de test
-        if: always() && steps.guarda.outputs.andamiado == 'true'
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: backend-informes-test

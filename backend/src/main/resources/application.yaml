@@ -1,0 +1,13 @@
+spring:
+  application:
+    name: hispalis-backend
+
+server:
+  port: 8080
+  # La API sirve nombres españoles: sin UTF-8 explícito, MUÑOZ y PEÑA salen corrompidos por la red
+  # aunque el código fuente esté bien.
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
