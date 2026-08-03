@@ -169,6 +169,34 @@ para tipar los *slices* de `identifier` —CIP-SNS `1551000122105`, CIP-AUT `157
   `fsh-generated/`. No son un defecto: la narrativa la genera el IG Publisher después, y lo que valida
   la CI es la entrada. Son avisos, no errores, y no detienen el build.
 
+### Decisiones tomadas al abrir el backend (ítem 6)
+
+- **2026-08-03 — Los tests del backend corren contra PostgreSQL embebido (`io.zonky.test`), no
+  Testcontainers ni H2.** *Decidido por el usuario tras plantearle las tres opciones.* HAPI JPA
+  necesita una base de datos real para arrancar, y **en el equipo de desarrollo no hay Docker
+  instalado**, así que Testcontainers dejaría los tests sin poder ejecutarse en local —solo en CI, a
+  ocho minutos por ciclo—. El embebido arranca un binario real de PostgreSQL en proceso: mismo motor
+  y mismo dialecto que producción, sin Docker. H2 se descartó porque su esquema y su dialecto no son
+  los de producción y esconderían hasta el ítem 15 cualquier fallo específico de PostgreSQL.
+  **Pendiente que afecta al ítem 15:** `docker compose up` (C12) sí necesita Docker; hay que
+  instalarlo antes de llegar ahí.
+- **2026-08-03 — Empotrar HAPI JPA cuesta siete obstáculos y ninguno falla al compilar.** Seis
+  `@Configuration` que importar en vez de una, beans que el `starter` define por ti, el dialecto que
+  hay que declarar explícito, `allow-circular-references` por un ciclo de HAPI, Hibernate Search y
+  Elasticsearch que hay que apagar, y **Spring Boot degradando `commons-lang3` por debajo de lo que
+  HAPI necesita** —conflicto que solo estalla al servir la primera petición—. Todo en
+  `docs/adr/adr-0011-empotrar-hapi-jpa-en-una-aplicacion-propia.md`.
+- **2026-08-03 — La lista de perfiles se duplica en el backend, pero con red.** El
+  `CapabilityStatement` debe declarar los perfiles y el backend no puede leer la guía en ejecución,
+  así que `PerfilesDeLaGuia` los repite. Un test cruza esa lista contra los `.fsh` —la fuente, no lo
+  generado, para no depender de que SUSHI haya corrido— y falla si divergen. Por eso `ci-backend`
+  vigila también `ig/input/fsh/profiles/**`: sin esa ruta, añadir un perfil a la guía no dispararía
+  el test que detecta justamente eso.
+- **2026-08-03 — Flyway queda apagado hasta el ítem 7.** Llega transitivo desde HAPI y se
+  autoconfigura solo, abortando el arranque porque le falta `flyway-database-postgresql`. No hay
+  nada que migrar todavía: el esquema de la proyección lo gobierna HAPI y el del dominio aún no
+  existe. **El ítem 7 lo enciende**, con su primera migración y con ese módulo.
+
 ### Decisiones tomadas al publicar la guía (ítem 5)
 
 - **2026-08-03 — El idioma de la guía se declara explícitamente; si no, el publisher la da por
@@ -226,21 +254,20 @@ para tipar los *slices* de `identifier` —CIP-SNS `1551000122105`, CIP-AUT `157
 
 ## Estado actual
 
-**Ítems 0 a 5 cerrados (2026-08-03): la guía de implementación está terminada y publicada.** Monorepo
-andamiado y subido a `origin/main`; la IG tiene sus nueve perfiles, su terminología y sus ejemplos, la
-CI la construye y la valida en verde, y está **en vivo en `https://aojeda006.github.io/HispaLIS/`**
-(las páginas cuelgan de `/es/`; la raíz redirige por JavaScript).
+**Ítems 0 a 6 cerrados (2026-08-03).** La guía de implementación está terminada y **publicada en
+`https://aojeda006.github.io/HispaLIS/`** (las páginas cuelgan de `/es/`; la raíz redirige por
+JavaScript), y el backend ya sirve su primera respuesta FHIR: `GET /fhir/metadata`.
 
 | Componente | Estado | Verificado con |
 |---|---|---|
 | `ig/` | 9 perfiles, extensión `codigo-ine`, `CodeSystem` de 21 pruebas, `ConceptMap` a LOINC, 4 `ValueSet` y 18 ejemplos — **publicada** | `npx fsh-sushi .` → **0 errores, 0 warnings**; en CI, IG Publisher y validador oficial **en verde**; sitio desplegado comprobado (19 enlaces de la portada, `lang="es"`, los tres avisos) |
-| `backend/` | Spring Boot 3.5.16 + HAPI FHIR R5 8.10.1, *wrapper* Maven | `./mvnw verify` → **BUILD SUCCESS, 3 tests** |
+| `backend/` | Spring Boot 3.5.16 + HAPI FHIR R5 8.10.1 con el **servidor JPA empotrado**; `GET /fhir/metadata` sirviendo | `./mvnw verify` → **BUILD SUCCESS, 7 tests**, contra un PostgreSQL real embebido |
 | `web-profesional/` | Angular 22.1 + vitest + angular-eslint | `npm run lint`, `npm test` (**3 tests**), `npm run build` |
 | `simuladores/` | Paquete `generador` con su CLI, ruff y pytest | `ruff check`/`format`, `pytest` → **7 tests** |
 | `integracion/`, `app-ciudadano/` | **Sin andamiar a propósito** (hito 2) | conservan su guarda de auto-omisión |
 
-**Siguiente: ítem 6** — el `CapabilityStatement` del backend. Con él arranca el bloque de backend
-(ítems 6 a 12), que es el grueso restante del hito 1.
+**Siguiente: ítem 7** — *read-your-writes* en una sola transacción, que es donde aparece el núcleo de
+dominio y con él la primera migración de Flyway.
 
 > **Estado de la CI.** Subido a `origin/main` por **SSH** (el PAT de HTTPS no tiene *scope* `workflow`
 > y GitHub rechaza el push de `.github/workflows/`). Comprobado ya en ejecuciones reales:
@@ -360,7 +387,16 @@ CI la construye y la valida en verde, y está **en vivo en `https://aojeda006.gi
 
 ### El backend
 
-- [ ] **6 — `CapabilityStatement` correcto. (C3)**
+- [x] **6 — `CapabilityStatement` correcto. (C3)**
+  *Hecho el 2026-08-03.* Servidor JPA de HAPI **empotrado** en la aplicación (no el
+  `hapi-fhir-jpaserver-starter`, que es una aplicación aparte y rompería la transacción única de D3).
+  `GET /fhir/metadata` responde `200` con `fhirVersion 5.0.0` y declara los nueve perfiles, cada uno
+  bajo el recurso que perfila. **Cuatro tests**, más los tres del andamiaje, contra la aplicación
+  entera y un PostgreSQL real: `./mvnw verify` → **BUILD SUCCESS, 7 tests**, Spotless incluido.
+  *Desviación del valor por defecto de HAPI:* HAPI rellena `supportedProfile` con **todos** los
+  perfiles que conoce —el núcleo de R5 al completo: `lipidprofile`, `clinicaldocument`,
+  `cqllibrary`…—. Se vacía y se declaran solo los de la guía: lo otro es afirmar que el servidor
+  soporta perfiles que no conoce ni valida, y justo en el documento del que un cliente se fía.
   *Criterio:* `GET /fhir/metadata` devuelve `200` con `fhirVersion` = **`5.0.0`** y declara los
   perfiles soportados. Test automatizado.
 
