@@ -361,6 +361,13 @@ Se detalla al cerrar el hito 1; no se adelanta trabajo.
 - **Doble escritura del mismo hecho.** Dominio y proyección pueden divergir por un bug de mapeo. Hace
   falta un **reconciliador** que recorra el dominio y regenere la proyección, como **vía de recuperación
   oficial**, no como script de emergencia. Se planifica en el hito 2.
+- **Se desarrolla en Windows y se construye en Linux**, y hay **dos** atributos de fichero que solo
+  fallan en el runner. El de los finales de línea se previó (`.gitattributes`); el del **bit de
+  ejecución no**, y tumbó la CI del backend en su primera ejecución: `backend/mvnw` estaba
+  commiteado como `100644` porque NTFS no sostiene el atributo. Corregido con
+  `git update-index --chmod=+x` y registrado en `docs/adr/adr-0008-windows-desarrolla-linux-construye.md`.
+  **Al andamiar cualquier componente cuya CI ejecute un script del repositorio, comprobar el modo en
+  el índice en el mismo commit.**
 - **Corrección factual a §2.1 y §4.3 del diseño** (no reabre ninguna decisión):
   - **R5 elimina `Organization.telecom` y `Organization.address`**, sustituidos por `contact`
     (`ExtendedContactDetail`). Faltaba en la tabla de diferencias R4→R5; se ha añadido a las tres

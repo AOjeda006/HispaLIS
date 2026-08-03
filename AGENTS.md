@@ -95,3 +95,15 @@ Un workflow por componente en `.github/workflows/`, **todos con filtrado por `pa
 desde el primer día, §13.1 del diseño: sin él, un cambio en Flutter recompila el backend). Mientras un
 componente no tenga su descriptor de construcción, su workflow se **auto-omite** con una guarda
 explícita; **retira la guarda en el mismo commit** en que andamias el componente.
+
+> ⚠️ **Se desarrolla en Windows y se construye en Linux.** Dos atributos de fichero fallan **solo en
+> el runner**: los finales de línea (resuelto con `.gitattributes`) y el **bit de ejecución**, que
+> `.gitattributes` **no** gobierna. Todo script que la CI invoque como `./script` debe estar en el
+> índice como `100755`:
+>
+> ```bash
+> git update-index --chmod=+x <ruta>   # al añadirlo
+> git ls-files -s <ruta>               # comprobar: empieza por 100755
+> ```
+>
+> Detalle y alternativas descartadas en `docs/adr/adr-0008-windows-desarrolla-linux-construye.md`.
