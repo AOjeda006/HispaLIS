@@ -25,9 +25,11 @@ NICA. En `CoberturaLab` la aseguradora se referencia como `Organization` sin per
 
 * identifier[nica].system = $SID_NICA
 * identifier[nica].value 1..1
+* identifier[nica].type = $TIPOS_IDENTIFICADOR_HL7#FI
 * identifier[nica] ^short = "NICA del Registro Andaluz de Centros, Servicios y Establecimientos Sanitarios"
 
 * identifier[nif].system = $SID_NIF
+* identifier[nif].type = $TIPOS_IDENTIFICADOR_HL7#TAX
 * identifier[nif] ^short = "NIF de la entidad titular"
 
 * active MS

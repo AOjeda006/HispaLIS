@@ -23,6 +23,7 @@ motivado — rechazar sin decir por qué obliga al peticionario a llamar por tel
 * status ^short = "`available` | `unavailable` | `unsatisfactory` | `entered-in-error`"
 
 * type 1..1 MS
+* type from TiposMuestra (extensible)
 * type ^short = "Tipo de muestra (sangre, orina, exudado…)"
 
 * subject 1..1 MS
@@ -42,6 +43,7 @@ motivado — rechazar sin decir por qué obliga al peticionario a llamar por tel
 * collection.bodySite MS
 
 * condition MS
+* condition from MotivosRechazoMuestra (extensible)
 * condition ^short = "Estado de la muestra: hemolizada, coagulada, insuficiente…"
 
 * note MS

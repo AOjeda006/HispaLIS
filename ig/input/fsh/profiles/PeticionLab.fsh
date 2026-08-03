@@ -19,6 +19,9 @@ mirar produce aquí un JSON que no valida.
 // El código de la prueba se expresa como concepto, no como referencia a una `ActivityDefinition`:
 // el catálogo del laboratorio es terminología, no un recurso de definición.
 * code 1..1 MS
+// El binding va sobre el CodeableReference entero: en R5 no se puede atar el `.concept` de
+// dentro, y ponerlo ahi es error de compilacion.
+* code from PruebasDelCatalogo (extensible)
 * code.concept 1..1 MS
 * code.concept ^short = "Prueba o perfil solicitado, del catálogo del laboratorio"
 

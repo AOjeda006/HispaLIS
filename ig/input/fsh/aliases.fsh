@@ -29,6 +29,11 @@ Alias: $SCT_ES_REFSET_DOCUMENTOS = http://snomed.info/sct/900000001000122104?fhi
 
 Alias: $TIPOS_IDENTIFICADOR_HL7 = http://terminology.hl7.org/CodeSystem/v2-0203
 
+// Motivos por los que se rechaza o se describe una muestra. Se usan los dos porque ninguno cubre
+// solo lo necesario: ver la descripción de `ValueSet/motivos-rechazo-muestra`.
+Alias: $CRITERIOS_RECHAZO      = http://terminology.hl7.org/CodeSystem/rejection-criteria
+Alias: $CONDICION_MUESTRA_HL7  = http://terminology.hl7.org/CodeSystem/v2-0493
+
 
 // ─── `Identifier.system` — ADOPTADOS de la IG española de ÚNICAS ─────────────
 //

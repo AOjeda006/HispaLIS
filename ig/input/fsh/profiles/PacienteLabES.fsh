@@ -28,20 +28,27 @@ conocen. Un perfil que los exigiese rechazaría pacientes reales.
 * identifier[nhc].system = $SID_NHC
 * identifier[nhc].value 1..1
 * identifier[nhc] obeys hlis-nhc-1
+* identifier[nhc].type = $TIPOS_IDENTIFICADOR_HL7#MR
 * identifier[nhc] ^short = "Número de historia clínica del laboratorio"
 * identifier[nhc] ^definition = "Código de identificación única del paciente en este centro. La Ley 41/2002 obliga a los centros privados no vinculados a la red pública a asignarlo, y es el único identificador que el laboratorio emite: por eso es el único obligatorio y el único con formato validado."
 
 * identifier[dniNie].system = $SID_DNI_NIE
+* identifier[dniNie].type = $TIPOS_IDENTIFICADOR_HL7#NI
 * identifier[dniNie] ^short = "DNI o NIE"
 
 * identifier[cipAutonomico].system = $SID_NUHSA
+// `JHN` (jurisdictional health number) describe con precisión lo que es un CIP autonómico, y
+// refuerza que este slice vale para cualquier comunidad, no solo para Andalucía.
+* identifier[cipAutonomico].type = $TIPOS_IDENTIFICADOR_HL7#JHN
 * identifier[cipAutonomico] ^short = "CIP autonómico — en Andalucía, el NUHSA"
 * identifier[cipAutonomico] ^definition = "Código de identificación personal de la comunidad autónoma. En Andalucía es el NUHSA («AN» más diez dígitos), que vive en la Base de Datos de Usuarios de Diraya. NUNCA es obligatorio: un laboratorio privado atiende a diario a pacientes que no lo conocen."
 
 * identifier[cipSns].system = $SID_CIP_SNS
+* identifier[cipSns].type = $TIPOS_IDENTIFICADOR_HL7#HC
 * identifier[cipSns] ^short = "CIP-SNS, código nacional único y vitalicio"
 
 * identifier[nass].system = $SID_NASS
+* identifier[nass].type = $TIPOS_IDENTIFICADOR_HL7#SS
 * identifier[nass] ^short = "Número de afiliación a la Seguridad Social"
 
 // Ningún `pattern` ni regex sobre el `value` de los identificadores ajenos (D16): el laboratorio no

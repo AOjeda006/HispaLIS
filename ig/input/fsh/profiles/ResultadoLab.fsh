@@ -20,6 +20,7 @@ re-ejecución por fallo técnico. En R4 esto había que inventarlo.
 * category MS
 
 * code MS
+* code from PruebasDelCatalogo (extensible)
 * code ^short = "Magnitud medida, del catálogo del laboratorio (mapeado a LOINC)"
 
 * subject 1..1 MS

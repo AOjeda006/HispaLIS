@@ -56,6 +56,29 @@ para acreditarse. La norma se cita únicamente como justificación de diseño de
 | [CoberturaLab](StructureDefinition-cobertura-lab.html) | `Coverage` | Quién paga: el paciente o una aseguradora |
 | [NotificacionEDO](StructureDefinition-notificacion-edo.html) | `Task` | Declaración obligatoria a Salud Pública |
 
+### Terminología
+
+| Artefacto | Qué es |
+|---|---|
+| [CatalogoPruebas](CodeSystem-catalogo-pruebas.html) | El **dialecto local**: los códigos con los que el laboratorio pide y firma sus pruebas, cada uno con su unidad UCUM |
+| [CatalogoALoinc](ConceptMap-CatalogoALoinc.html) | El **traductor** del dialecto a LOINC |
+| [PruebasDelCatalogo](ValueSet-pruebas-del-catalogo.html) | Todas las pruebas ofertadas; es a lo que se atan `PeticionLab.code` y `ResultadoLab.code` |
+| [TiposMuestra](ValueSet-tipos-muestra.html) | Tipos de espécimen aceptados, en SNOMED CT |
+| [MotivosRechazoMuestra](ValueSet-motivos-rechazo-muestra.html) | Por qué se rechaza una muestra |
+| [CatalogoEdo](ValueSet-catalogo-edo.html) | Pruebas cuyo resultado positivo obliga a declarar a Salud Pública |
+
+Todos los *bindings* son **extensibles**, nunca `required`: ninguno de estos conjuntos está cerrado
+en la práctica, y declarar cerrado lo que no lo está solo produce rechazos falsos.
+
+Dos avisos sobre los términos que se muestran:
+
+- **Los `display` de LOINC van en inglés y sin alterar.** Su licencia no permite cambiar el contenido
+  de sus campos, y la variante lingüística española de LOINC 2.82 es **parcial**: traduce los ejes,
+  no el nombre largo. El español que ve el usuario es el `display` del catálogo local.
+- **Los conceptos SNOMED se enumeran sin `display`.** El término lo resuelve el servidor de
+  terminología; mientras se resuelva contra la edición internacional se verán en inglés, y pasarán a
+  español al cargar la Edición Española del SNS.
+
 ### Qué exige `Must Support`
 
 Una guía que reparte `Must Support` sin decir qué significa no está exigiendo nada. En HispaLIS, un
