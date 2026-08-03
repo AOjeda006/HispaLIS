@@ -35,6 +35,13 @@ dependencies:
 
 parameters:
   show-inherited-invariants: false
+  # La guía está escrita entera en español y hay que decirlo. Sin este parámetro el publisher asume
+  # `en`: sirve las páginas bajo `/en/`, las etiqueta `<html lang="en">` y usa los textos ingleses de
+  # la plantilla. `fhir2.base.template` trae la traducción española completa.
+  i18n-default-lang: es
+  # Y con el idioma declarado, que lo herede cada recurso en su `Resource.language`, en vez de dejar
+  # sin marcar unas narrativas que están en español.
+  resource-language-policy: all-ig
 
 menu:
   Inicio: index.html
