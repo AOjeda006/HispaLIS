@@ -65,12 +65,33 @@ respuesta de IA o snippet basado en R4 que se copie sin mirar va a fallar aquí:
 `codigo-ine`, el `CodeSystem` del catálogo local, el `ConceptMap` catálogo → LOINC y los `ValueSet`
 de tipos de muestra, motivos de rechazo y catálogo EDO.
 
+## ⚠️ Trampas de la cadena de construcción — ya resueltas, no las reabras
+
+Las cuatro salieron al andamiar la IG, **antes de que existiera un solo perfil**, y ninguna da un
+mensaje que apunte a su causa. El detalle está en `../docs/adr/adr-0007-trampas-del-ig-publisher.md`.
+
+1. **`ig.ini` se mantiene a mano y está versionado.** SUSHI **retiró la propiedad `template`** de
+   `sushi-config.yaml` y ya no lo genera. Casi toda la documentación que encontrarás dice lo
+   contrario: está desactualizada.
+2. **`ig.ini` NO admite líneas de comentario.** Un `;` antes de `[IG]` hace que el publisher aborte
+   con *«unable to find an ig.ini»* — culpando a la ausencia del fichero, que sí está. Por eso ese
+   fichero no lleva comentarios explicativos y esta nota vive aquí. **Añadir un comentario "para
+   aclararlo" rompe la construcción.**
+3. **La plantilla es `fhir2.base.template`.** `fhir.base.template` ya no se considera segura ni está
+   mantenida, y está anunciado que el publisher **se negará a ejecutarse** con ella.
+4. **El publisher necesita Jekyll**, que no viene en el `.jar` ni en `ubuntu-latest`: la CI lo instala
+   aparte. Sin él, la construcción recorre entera la fase FHIR y muere al renderizar las páginas.
+
+> **Y una limitación del entorno local:** el IG Publisher **se niega a construir si hay un espacio en
+> la ruta** del proyecto. En la CI no ocurre. En local, si tu clon está bajo una ruta con espacios,
+> la IG solo se puede construir en la CI o clonando en otra ruta.
+
 ## Comandos
 
 ```bash
 cd ig
-sushi .                                   # compila el FSH → fsh-generated/
-java -jar publisher.jar -ig .             # IG Publisher → output/
+npx fsh-sushi .                            # compila el FSH → fsh-generated/
+java -jar publisher.jar -ig . -no-sushi    # IG Publisher → output/ (SUSHI ya ha corrido)
 ```
 
 Ejemplos y perfiles se validan en CI (`.github/workflows/ci-ig.yml`) contra
