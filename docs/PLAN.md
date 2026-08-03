@@ -82,15 +82,79 @@ ya hay un proyecto FHIR presentable.
 - **2026-08-03 — La consulta a la IG de ÚNICAS (§4.8) no se pudo hacer al preparar el encargo:** la
   política de red del entorno del orquestador bloquea `unicas-fhir.sanidad.gob.es` (403 en el túnel).
   Queda como **ítem 0 del checklist**, antes de escribir el FSH de `PacienteLabES`.
+  **Resuelto el 2026-08-03 desde el entorno local** — ver la decisión D21.
+
+### D21 — `system` de identificador: dos adoptados de ÚNICAS, seis propios (ítem 0)
+
+**Fecha:** 2026-08-03. Consultado el **paquete de definiciones** (`package.tgz`, 125 recursos), no el
+sitio renderizado. ÚNICAS v0.0.11 (Ministerio de Sanidad) resulta ser también **FHIR R5**.
+
+**Qué publica ÚNICAS, verificado uno a uno:**
+
+| Comprobación | Resultado |
+|---|---|
+| ¿`NamingSystem` de identificadores? | **No.** Cero en el paquete |
+| ¿*Slicing* de `Patient.identifier`? | **No.** Sin `patternIdentifier` ni `fixedUri` |
+| `Patient.identifier.system` | `1..1`, con `short` = *«OID registro según el tipo de documento»* |
+| **DNI** | `urn:oid:1.3.6.1.4.1.19126.3` — 72 ocurrencias, en ejemplos y en el `example` del elemento |
+| **CIP-SNS** | `urn:oid:2.16.724.4.40` — 75 ocurrencias, ídem |
+| **CIP-AUT de Andalucía (NUHSA)** | **No lo define.** La rama `2.16.724.4.21.5.*` es de catálogos clínicos, no de identificadores |
+| `ValueSet/TiposDocumentosIdentificacionPersona` | **Sí, normativo.** SNOMED CT ext. española del SNS |
+
+**Decisión:** se **adoptan** los dos OID que usa el Ministerio (DNI/NIE y CIP-SNS) y se mantienen
+**propios** los otros seis, que ÚNICAS no define. Es un caso intermedio —los usa de facto pero no los
+publica como canónicos— y se resuelve por el espíritu de §4.8 (*«adoptarlas en vez de inventar»*):
+coincidir con la autoridad nacional en los dos que ella sí usa no cuesta nada, y lo contrario sería
+que HispaLIS inventase para el DNI una URI que contradice al Ministerio.
+
+**Ganancia no prevista:** el `ValueSet` de tipos de documento da códigos SNOMED **oficiales del SNS**
+para tipar los *slices* de `identifier` —CIP-SNS `1551000122105`, CIP-AUT `1571000122102`, DNI
+`22851000122109`— en vez de inventarlos. Confirma además que modelar el NUHSA como CIP autonómico
+(§4.1) coincide con cómo lo modela el Ministerio.
+
+**La tabla definitiva vive en `ig/input/fsh/aliases.fsh`**, que es donde la consume el FSH: ningún
+`.fsh` escribe una URI a mano.
+
+### Decisiones triviales resueltas al andamiar (ítem 1)
+
+- **2026-08-03 — Spring Boot 3.5.16, no 4.1.0.** HAPI FHIR 8.x va sobre Spring Framework 6 y Jakarta
+  EE 10; Spring Boot 4.x salta a Spring Framework 7 y Jakarta EE 11. Coger la última rompería el
+  servidor JPA que sostiene la proyección. Revisar al actualizar HAPI.
+- **2026-08-03 — Maven por *wrapper* en modo `only-script`.** No hace falta Maven instalado y **no
+  entra ningún `.jar` en el repositorio**.
+- **2026-08-03 — Spotless enganchado a la fase `verify`**, no como orden suelta: el formato se exige
+  con el mismo comando que corre los tests.
+- **2026-08-03 — La web usa el ejecutor por defecto de Angular 22: vitest sobre jsdom, no Karma.**
+  Angular ya no genera Karma. Obliga a **Node 24** (`engines: ^22.22.3 || ^24.15.0 || >=26`) y a
+  quitar `--browsers=ChromeHeadless` del workflow, que era sintaxis de Karma.
+- **2026-08-03 — `.gitattributes` con `eol=lf`.** Se desarrolla en Windows y la CI corre en Linux:
+  sin esto, `mvnw` se commitea con CRLF y el runner falla con `bad interpreter`.
+- **2026-08-03 — La validación de ejemplos de la CI se activa en cuanto la IG tiene perfiles.**
+  Mientras solo esté andamiada no hay nada que validar. El criterio C2 queda intacto: con perfiles
+  presentes y sin ejemplos, el build se detiene.
 
 ## Estado actual
 
-**Repo recién inicializado con los artefactos de encargo.** No hay código todavía: `ig/`, `backend/`,
-`integracion/`, `web-profesional/`, `app-ciudadano/`, `simuladores/` e `infra/` son esqueletos con su
-`CLAUDE.md` y un `.gitkeep`.
+**Ítems 0 y 1 cerrados (2026-08-03). Monorepo andamiado y verificado en local.**
 
-**Siguiente: ítem 0 del checklist del hito 1** (consultar la IG de ÚNICAS y fijar los `system`), sin
-empezar.
+| Componente | Estado | Verificado con |
+|---|---|---|
+| `ig/` | `sushi-config.yaml`, `ig.ini`, alias y portada | `npx fsh-sushi .` → **0 errores, 0 warnings** |
+| `backend/` | Spring Boot 3.5.16 + HAPI FHIR R5 8.10.1, *wrapper* Maven | `./mvnw verify` → **BUILD SUCCESS, 3 tests** |
+| `web-profesional/` | Angular 22.1 + vitest + angular-eslint | `npm run lint`, `npm test` (**3 tests**), `npm run build` |
+| `simuladores/` | Paquete `generador` con su CLI, ruff y pytest | `ruff check`/`format`, `pytest` → **7 tests** |
+| `integracion/`, `app-ciudadano/` | **Sin andamiar a propósito** (hito 2) | conservan su guarda de auto-omisión |
+
+Los `system` de identificador están **fijados y justificados** (D21) en `ig/input/fsh/aliases.fsh`, que
+es lo que desbloquea el ítem 2.
+
+**Siguiente: ítem 2** — los 9 perfiles de §6.5 en FSH. Empezar por `PacienteLabES`, que es el que
+consume la tabla de `system` y el *slicing* CIP-SNS / CIP-AUT / NHC.
+
+> **Pendiente de la primera subida:** los seis workflows **no se han ejecutado nunca** en GitHub
+> Actions —este encargo no autoriza push—, así que su comportamiento real está sin comprobar. Lo
+> verificado es su configuración: YAML válido y `paths:` disjuntos entre los seis. La CI de `ig/`
+> lleva cambios de fondo (Ruby + Jekyll, plantilla `fhir2`) que solo se pueden confirmar allí.
 
 ---
 
@@ -102,14 +166,24 @@ empezar.
 
 ### Preparación
 
-- [ ] **0 — Consultar la IG española de ÚNICAS y fijar los `system` definitivos.**
+- [x] **0 — Consultar la IG española de ÚNICAS y fijar los `system` definitivos.**
+  *Hecho el 2026-08-03* — ver **D21**. Adoptados los OID del Ministerio para **DNI/NIE**
+  (`urn:oid:1.3.6.1.4.1.19126.3`) y **CIP-SNS** (`urn:oid:2.16.724.4.40`); los otros seis siguen
+  siendo propios porque ÚNICAS no los define. Tabla definitiva en `ig/input/fsh/aliases.fsh`.
   *Criterio:* consultada `https://unicas-fhir.sanidad.gob.es/` (paquete de definiciones, no el sitio
   renderizado); para **DNI/NIE** y **CIP-SNS**, si ÚNICAS publica URI canónica, **se adopta la suya**;
   si no, se mantiene la propia de §4.8. La tabla de `system` queda escrita en `ig/` y el resultado
   —adoptado o no, y por qué— anotado aquí en *Decisiones*. **Bloquea al ítem 2**: es el único punto
   del proyecto con riesgo real de retrabajo y toca hacerlo **antes** del FSH de `PacienteLabES`.
 
-- [ ] **1 — Andamiar el monorepo y dejar la CI en verde.**
+- [x] **1 — Andamiar el monorepo y dejar la CI en verde.**
+  *Hecho el 2026-08-03.* Andamiados `ig/`, `backend/`, `web-profesional/` y `simuladores/`, con sus
+  guardas de auto-omisión retiradas; `integracion/` y `app-ciudadano/` conservan la suya (hito 2).
+  Los **37 imports** de los siete `CLAUDE.md` verificados uno a uno. Verificado en local:
+  `npx fsh-sushi .` (0 errores, 0 warnings), `./mvnw verify` (3 tests), `npm run lint` + `npm test`
+  (3 tests) + `npm run build`, y `ruff` + `pytest` (7 tests).
+  **No verificado:** que los workflows corran de verdad en GitHub Actions — requiere push, que este
+  encargo no autoriza. Solo está comprobada su configuración (YAML válido y `paths:` disjuntos).
   *Criterio:* existen `ig/sushi-config.yaml`, `backend/pom.xml`, `web-profesional/package.json` y
   `simuladores/pyproject.toml`; cada workflow de `.github/workflows/` **corre y pasa** al tocar su
   ruta y **no corre** al tocar otra (comprobado en el historial de Actions); las guardas de
@@ -239,8 +313,14 @@ Se detalla al cerrar el hito 1; no se adelanta trabajo.
 
 ## Notas / riesgos
 
-- **URIs canónicas propias.** Único punto con riesgo real de **retrabajo**: resolverlo en el ítem 0,
-  antes del FSH de `PacienteLabES` (§4.8).
+- ~~**URIs canónicas propias.** Único punto con riesgo real de **retrabajo**~~ — **cerrado** por D21
+  (ítem 0). Quedan seis `system` propios, documentados como tales en la portada de la IG.
+- **El IG Publisher tiene cuatro trampas de *toolchain***, resueltas y registradas en
+  `docs/adr/adr-0007-trampas-del-ig-publisher.md`: `ig.ini` a mano y **sin comentarios** (uno solo
+  aborta la construcción con un mensaje que culpa a la ausencia del fichero), plantilla
+  `fhir2.base.template` (la anterior ya no se considera segura y el publisher dejará de admitirla),
+  **Jekyll instalado aparte** en la CI, y la negativa a construir **si hay un espacio en la ruta** —
+  que afecta al desarrollo local en este equipo, porque el repo cuelga de `PROYECTOS Y REPOS`.
 - **Acoplamiento de transacción con HAPI.** Escribir en el esquema de HAPI dentro de la transacción del
   dominio funciona (mismo *datasource*) pero ata a sus DAOs — registrado en `adr-0002`. Vigilar en cada
   actualización de HAPI.
