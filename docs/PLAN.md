@@ -133,28 +133,51 @@ para tipar los *slices* de `identifier` —CIP-SNS `1551000122105`, CIP-AUT `157
   Mientras solo esté andamiada no hay nada que validar. El criterio C2 queda intacto: con perfiles
   presentes y sin ejemplos, el build se detiene.
 
+### Decisiones triviales resueltas al escribir los perfiles (ítem 2)
+
+- **2026-08-03 — El NHC son ocho dígitos** (invariante `hlis-nhc-1`). El diseño exige que el NHC
+  propio sea el único identificador con formato validado (§4.1) pero no fija cuál. Se elige lo más
+  simple defendible: un secuencial de ocho dígitos con ceros a la izquierda. Lo emite el laboratorio,
+  así que validarlo no puede rechazar a un paciente real. **El generador (ítem 13) y el backend deben
+  emitir este mismo formato.**
+- **2026-08-03 — La extensión `codigo-ine` se adelanta del ítem 3 al 2.** `PacienteLabES` y
+  `LaboratorioOrg` la referencian sobre `address`: sin ella los perfiles no compilan. El ítem 3
+  conserva el resto de su alcance (`CodeSystem`, `ConceptMap` y los tres `ValueSet`).
+- **2026-08-03 — Los *bindings* de terminología se dejan para el ítem 3.** Los perfiles fijan
+  estructura y cardinalidades; atar `code`, `type` o `condition` a un `ValueSet` que aún no existe
+  haría fallar la compilación. Afecta también a `identifier.type`, que se codificará con los códigos
+  SNOMED del SNS hallados en ÚNICAS (D21) cuando exista la terminología.
+- **2026-08-03 — `FacultativoLab.identifier` NO se divide en *slices*.** El diseño (§4.3) pide «un
+  *slice* por colegio emisor», pero un discriminador por `system` exige un valor **fijo** por *slice*
+  y el `system` del colegiado es paramétrico (`…/sid/colegiado/{colegio}`): habría que enumerar los
+  52 colegios provinciales de médicos más los de farmacéuticos, biólogos y químicos. El colegio se
+  identifica con `identifier.assigner`, que es procesable y no cierra la lista. Ver *Notas / riesgos*.
+
 ## Estado actual
 
-**Ítems 0 y 1 cerrados (2026-08-03). Monorepo andamiado y verificado en local.**
+**Ítems 0, 1 y 2 cerrados (2026-08-03). Monorepo andamiado, subido a `origin/main` y con los nueve
+perfiles compilando.**
 
 | Componente | Estado | Verificado con |
 |---|---|---|
-| `ig/` | `sushi-config.yaml`, `ig.ini`, alias y portada | `npx fsh-sushi .` → **0 errores, 0 warnings** |
+| `ig/` | 9 perfiles + extensión `codigo-ine` + 3 `RuleSet` + 3 invariantes | `npx fsh-sushi .` → **0 errores, 0 warnings**; IG Publisher hasta Jekyll, limpio |
 | `backend/` | Spring Boot 3.5.16 + HAPI FHIR R5 8.10.1, *wrapper* Maven | `./mvnw verify` → **BUILD SUCCESS, 3 tests** |
 | `web-profesional/` | Angular 22.1 + vitest + angular-eslint | `npm run lint`, `npm test` (**3 tests**), `npm run build` |
 | `simuladores/` | Paquete `generador` con su CLI, ruff y pytest | `ruff check`/`format`, `pytest` → **7 tests** |
 | `integracion/`, `app-ciudadano/` | **Sin andamiar a propósito** (hito 2) | conservan su guarda de auto-omisión |
 
-Los `system` de identificador están **fijados y justificados** (D21) en `ig/input/fsh/aliases.fsh`, que
-es lo que desbloquea el ítem 2.
+**Siguiente: ítem 3** — terminología. `CodeSystem` del catálogo local, `ConceptMap` catálogo → LOINC
+y los `ValueSet` de tipos de muestra, motivos de rechazo y catálogo EDO. Al hacerlo hay que **atar
+los *bindings* que el ítem 2 dejó sin atar** (`code`, `type`, `condition`) y codificar
+`identifier.type` con los códigos SNOMED del SNS de D21.
 
-**Siguiente: ítem 2** — los 9 perfiles de §6.5 en FSH. Empezar por `PacienteLabES`, que es el que
-consume la tabla de `system` y el *slicing* CIP-SNS / CIP-AUT / NHC.
-
-> **Pendiente de la primera subida:** los seis workflows **no se han ejecutado nunca** en GitHub
-> Actions —este encargo no autoriza push—, así que su comportamiento real está sin comprobar. Lo
-> verificado es su configuración: YAML válido y `paths:` disjuntos entre los seis. La CI de `ig/`
-> lleva cambios de fondo (Ruby + Jekyll, plantilla `fhir2`) que solo se pueden confirmar allí.
+> **Estado de la CI, con precisión.** El repositorio está subido a `origin/main` (remoto por **SSH**:
+> el PAT de HTTPS no tiene *scope* `workflow` y GitHub rechaza el push de `.github/workflows/`). Los
+> seis workflows están **registrados y `active`**, pero **ninguno se ha ejecutado todavía**: en un
+> *push* que **crea** la rama, el `before` es el SHA nulo, no hay diff que comparar y los workflows
+> filtrados por `paths:` se saltan enteros. El primer push con diff real los disparará —y de paso
+> demostrará el filtrado—. Sigue **sin comprobar** que la CI de `ig/` funcione: es la que lleva los
+> cambios de fondo (Ruby + Jekyll, plantilla `fhir2`).
 
 ---
 
@@ -182,8 +205,10 @@ consume la tabla de `system` y el *slicing* CIP-SNS / CIP-AUT / NHC.
   Los **37 imports** de los siete `CLAUDE.md` verificados uno a uno. Verificado en local:
   `npx fsh-sushi .` (0 errores, 0 warnings), `./mvnw verify` (3 tests), `npm run lint` + `npm test`
   (3 tests) + `npm run build`, y `ruff` + `pytest` (7 tests).
-  **No verificado:** que los workflows corran de verdad en GitHub Actions — requiere push, que este
-  encargo no autoriza. Solo está comprobada su configuración (YAML válido y `paths:` disjuntos).
+  **No verificado:** que los workflows corran de verdad. Subido a `origin/main` el 2026-08-03: los
+  seis quedan **registrados y `active`** pero **sin ejecutar ninguna vez**, porque un *push* que crea
+  la rama no tiene diff contra el que evaluar los `paths:`. Comprobado hasta aquí: YAML válido,
+  `paths:` disjuntos y los workflows reconocidos por GitHub.
   *Criterio:* existen `ig/sushi-config.yaml`, `backend/pom.xml`, `web-profesional/package.json` y
   `simuladores/pyproject.toml`; cada workflow de `.github/workflows/` **corre y pasa** al tocar su
   ruta y **no corre** al tocar otra (comprobado en el historial de Actions); las guardas de
@@ -193,7 +218,16 @@ consume la tabla de `system` y el *slicing* CIP-SNS / CIP-AUT / NHC.
 
 ### La guía de implementación
 
-- [ ] **2 — Los 9 perfiles en FSH, compilando. (C1)**
+- [x] **2 — Los 9 perfiles en FSH, compilando. (C1)**
+  *Hecho el 2026-08-03.* Los nueve perfiles de §6.5 más la extensión `codigo-ine` (adelantada del
+  ítem 3, ver *Decisiones*) y tres `RuleSet` compartidos. Tres invariantes propias: `hlis-nhc-1`
+  (formato del NHC), `hlis-esp-1` (un espécimen rechazado documenta el motivo) y `hlis-cob-1`
+  (`insurance` lleva aseguradora, `self-pay` no). Verificado con `npx fsh-sushi .` → **0 errores,
+  0 warnings, 9 perfiles + 1 extensión**, y con el **IG Publisher**, que recorrió limpias las fases
+  de *snapshot*, validación de conformidad y generación de artefactos.
+  **No verificado:** el renderizado final. El publisher muere en Jekyll, que no está instalado en
+  este equipo, y la ruta local tiene un espacio (ADR-0007), así que `ig/output/` **no se ha llegado a
+  producir en local**: se comprobó copiando la IG a una ruta limpia. Queda pendiente de la CI.
   *Criterio:* `sushi .` termina **sin errores ni warnings nuevos** y el **IG Publisher** genera
   `ig/output/`; existen `PacienteLabES`, `PeticionLab`, `EspecimenLab`, `ResultadoLab`, `InformeLab`,
   `LaboratorioOrg`, `FacultativoLab`, `CoberturaLab` y `NotificacionEDO` (§6.5).
@@ -327,6 +361,14 @@ Se detalla al cerrar el hito 1; no se adelanta trabajo.
 - **Doble escritura del mismo hecho.** Dominio y proyección pueden divergir por un bug de mapeo. Hace
   falta un **reconciliador** que recorra el dominio y regenere la proyección, como **vía de recuperación
   oficial**, no como script de emergencia. Se planifica en el hito 2.
+- **Corrección factual a §2.1 y §4.3 del diseño** (no reabre ninguna decisión):
+  - **R5 elimina `Organization.telecom` y `Organization.address`**, sustituidos por `contact`
+    (`ExtendedContactDetail`). Faltaba en la tabla de diferencias R4→R5; se ha añadido a las tres
+    copias (§2.1, `ig/CLAUDE.md`, `backend/CLAUDE.md`). Verificado contra el paquete canónico al
+    compilar `LaboratorioOrg`.
+  - **§4.3 pide un *slice* por colegio emisor en `Practitioner.identifier` y eso no es realizable:**
+    el discriminador por `system` exige un valor fijo por *slice* y ese `system` es paramétrico. Se
+    modela con `identifier.assigner` (ver *Decisiones*, ítem 2).
 - **La IG propia es trabajo real:** nueve perfiles más terminología, sin US Core ni IPS de donde tirar.
   Es el ítem que más fácilmente se subestima.
 - **Sin la red de seguridad de Mirth** (D11): almacén de mensajes, reintentos y consola de reproceso
