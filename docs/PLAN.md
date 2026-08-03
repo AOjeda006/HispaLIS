@@ -169,6 +169,27 @@ para tipar los *slices* de `identifier` —CIP-SNS `1551000122105`, CIP-AUT `157
   `fsh-generated/`. No son un defecto: la narrativa la genera el IG Publisher después, y lo que valida
   la CI es la entrada. Son avisos, no errores, y no detienen el build.
 
+### Decisiones tomadas al publicar la guía (ítem 5)
+
+- **2026-08-03 — El idioma de la guía se declara explícitamente; si no, el publisher la da por
+  inglesa.** La guía está escrita entera en castellano y se publicó etiquetada `<html lang="en">`,
+  bajo `/en/` y con los rótulos de la plantilla en inglés, **con toda la cadena de construcción en
+  verde**: ninguna herramienta puede detectar que el texto está en un idioma distinto del declarado.
+  Se declara ahora en los dos sitios que hacen cosas distintas —`i18n-default-lang` (renderizado) y
+  `ImplementationGuide.language` (recurso, y fuente de `resource-language-policy: all-ig`)— más
+  `jurisdiction: ES`. Registrado como
+  `docs/adr/adr-0010-el-idioma-de-una-ig-se-declara-o-se-asume-ingles.md`.
+  **La comprobación es sobre el sitio desplegado, no sobre el build.**
+- **2026-08-03 — La salida del publisher se reparte por carpeta de idioma y la raíz es un *stub* de
+  JavaScript.** Es su diseño, no algo desactivable: las páginas cuelgan de `/es/` y
+  `https://aojeda006.github.io/HispaLIS/` redirige por JS. Un cliente sin JavaScript no obtiene nada
+  en la raíz. Afecta a cómo se enlaza la guía desde fuera.
+- **2026-08-03 — El `id` de un `Instance:` sale del nombre del bloque, que es PascalCase.** El
+  `ConceptMap` declaraba `url = …/ConceptMap/catalogo-a-loinc` pero se publicaba como
+  `ConceptMap-CatalogoALoinc.html`: dos nombres para el mismo artefacto. Se fija el `id` explícito.
+  Vale para cualquier artefacto de conformidad escrito como `Instance:` —`ConceptMap`,
+  `CapabilityStatement`, `NamingSystem`—, que es donde SUSHI no puede derivarlo de un `Id:`.
+
 ### Decisiones tomadas al escribir la terminología (ítem 3)
 
 - **2026-08-03 — La unidad decide el término LOINC, no el nombre.** El laboratorio informa la glucosa
@@ -205,23 +226,21 @@ para tipar los *slices* de `identifier` —CIP-SNS `1551000122105`, CIP-AUT `157
 
 ## Estado actual
 
-**Ítems 0 a 4 cerrados (2026-08-03). Monorepo andamiado y subido a `origin/main`; la IG tiene sus
-nueve perfiles, su terminología y sus ejemplos, y la CI la construye y la valida en verde.**
-
-**El ítem 5 está bloqueado y necesita una acción tuya:** hay que habilitar GitHub Pages en
-*Settings → Pages → Build and deployment → Source: «GitHub Actions»*. No se puede hacer desde el
-workflow —la API de Pages exige un token con scope `repo` y el `GITHUB_TOKEN` no lo tiene—, así que
-el job de publicación falla con ese mensaje hasta que se active. Todo lo demás del workflow pasa.
+**Ítems 0 a 5 cerrados (2026-08-03): la guía de implementación está terminada y publicada.** Monorepo
+andamiado y subido a `origin/main`; la IG tiene sus nueve perfiles, su terminología y sus ejemplos, la
+CI la construye y la valida en verde, y está **en vivo en `https://aojeda006.github.io/HispaLIS/`**
+(las páginas cuelgan de `/es/`; la raíz redirige por JavaScript).
 
 | Componente | Estado | Verificado con |
 |---|---|---|
-| `ig/` | 9 perfiles, extensión `codigo-ine`, `CodeSystem` de 21 pruebas, `ConceptMap` a LOINC, 4 `ValueSet` y 18 ejemplos | `npx fsh-sushi .` → **0 errores, 0 warnings**; en CI, IG Publisher y validador oficial **en verde** |
+| `ig/` | 9 perfiles, extensión `codigo-ine`, `CodeSystem` de 21 pruebas, `ConceptMap` a LOINC, 4 `ValueSet` y 18 ejemplos — **publicada** | `npx fsh-sushi .` → **0 errores, 0 warnings**; en CI, IG Publisher y validador oficial **en verde**; sitio desplegado comprobado (19 enlaces de la portada, `lang="es"`, los tres avisos) |
 | `backend/` | Spring Boot 3.5.16 + HAPI FHIR R5 8.10.1, *wrapper* Maven | `./mvnw verify` → **BUILD SUCCESS, 3 tests** |
 | `web-profesional/` | Angular 22.1 + vitest + angular-eslint | `npm run lint`, `npm test` (**3 tests**), `npm run build` |
 | `simuladores/` | Paquete `generador` con su CLI, ruff y pytest | `ruff check`/`format`, `pytest` → **7 tests** |
 | `integracion/`, `app-ciudadano/` | **Sin andamiar a propósito** (hito 2) | conservan su guarda de auto-omisión |
 
-**Siguiente: ítem 5** — publicar la IG en GitHub Pages, en cuanto esté habilitado. Después, el ítem 6 abre el backend.
+**Siguiente: ítem 6** — el `CapabilityStatement` del backend. Con él arranca el bloque de backend
+(ítems 6 a 12), que es el grueso restante del hito 1.
 
 > **Estado de la CI.** Subido a `origin/main` por **SSH** (el PAT de HTTPS no tiene *scope* `workflow`
 > y GitHub rechaza el push de `.github/workflows/`). Comprobado ya en ejecuciones reales:
@@ -229,10 +248,9 @@ el job de publicación falla con ese mensaje hasta que se active. Todo lo demás
 > - **El filtrado por ruta funciona**, con evidencia en los dos sentidos: un push que tocó `ig/**` y
 >   `backend/**` disparó exactamente esos dos workflows y ninguno de los otros cuatro.
 > - **`backend` en verde**, tras corregir el bit de ejecución de `mvnw`.
-> - **`ig`: el job de construcción pasa entero.** El IG Publisher construye la guía —Ruby + Jekyll y
->   plantilla `fhir2` incluidos—, la comprobación de «un ejemplo por perfil» pasa y el **validador
->   oficial de HL7 valida los 18 ejemplos** contra sus perfiles. Solo falla el job de publicación,
->   por Pages sin habilitar.
+> - **`ig`: los dos jobs pasan.** El IG Publisher construye la guía —Ruby + Jekyll y plantilla `fhir2`
+>   incluidos—, la comprobación de «un ejemplo por perfil» pasa, el **validador oficial de HL7 valida
+>   los 18 ejemplos** contra sus perfiles, y el job de publicación despliega a Pages.
 > - **La salvaguarda de C2 se ha visto fallar de verdad**: con los nueve perfiles escritos y sin
 >   ejemplos, la CI detuvo el build. No es una comprobación teórica.
 > - **`web-profesional`, `simuladores`, `integracion` y `app-ciudadano` siguen sin ejecutarse nunca**:
@@ -319,16 +337,22 @@ el job de publicación falla con ese mensaje hasta que se active. Todo lo demás
   el workflow contra `hl7.fhir.r5.core@5.0.0` y **falla el build** si un ejemplo no valida contra su
   perfil. Probado en rojo: se rompe un ejemplo a propósito y la CI lo detiene.
 
-- [ ] **5 — La IG publicada en GitHub Pages.** ⛔ **Bloqueado: requiere una acción manual.**
-  El workflow ya construye la guía y sube el artefacto; lo que falta es que **GitHub Pages esté
-  habilitado** en *Settings → Pages → Build and deployment → Source: «GitHub Actions»*. No se puede
-  automatizar: la API de Pages exige un token con scope `repo` y el `GITHUB_TOKEN` del workflow no lo
-  tiene —se intentó con `actions/configure-pages@v5` y `enablement: true`, y falla en cuatro
-  segundos—. El job comprueba ahora el estado y falla con esa instrucción concreta.
+- [x] **5 — La IG publicada en GitHub Pages.**
+  *Hecho el 2026-08-03.* La guía está en vivo en `https://aojeda006.github.io/HispaLIS/`. Requirió una
+  acción manual del usuario —habilitar Pages en *Settings → Pages → Source: «GitHub Actions»*—, que no
+  se puede automatizar: la API de Pages exige un token con scope `repo` y el `GITHUB_TOKEN` no lo
+  tiene. Se intentó con `actions/configure-pages@v5` y `enablement: true` y falla en cuatro segundos,
+  así que el job comprueba el estado y **falla con la instrucción concreta** en vez de morir con un
+  error de la acción.
+  **Verificado sobre el sitio desplegado, no sobre el build:** los dos jobs en verde; 9 perfiles,
+  1 extensión, 4 `ValueSet`, 1 `CodeSystem`, 1 `ConceptMap` y los ejemplos publicados y navegables;
+  los **19 enlaces de la portada resuelven**; y los tres avisos obligatorios están presentes.
   *Nota sobre las URIs canónicas:* Pages sirve el repositorio en `https://aojeda006.github.io/HispaLIS/`
-  y la base canónica es `…/HispaLIS/fhir` (D19), así que **las URIs canónicas no resolverán a la guía
-  publicada**. No es un defecto: una URI canónica en FHIR es un identificador, no necesariamente una
-  URL descargable, y la guía documenta cuáles son.
+  y la base canónica es `…/HispaLIS/fhir` (D19), así que **las URIs canónicas no resuelven a la guía
+  publicada** —incluido el enlace a `history.html` de la cabecera del publisher, que da 404—. No es un
+  defecto: una URI canónica en FHIR es un identificador, no necesariamente una URL descargable, y la
+  guía documenta cuáles son. Hacerlas resolver obligaría a publicar la salida bajo `fhir/`, que
+  contradice el criterio de este ítem; queda como propuesta, no como pendiente.
   *Criterio:* el workflow despliega `ig/output/` y la IG es navegable en
   `https://aojeda006.github.io/HispaLIS/`. En la portada consta que es una **simulación con datos
   sintéticos**, que las URIs canónicas son **propias y no oficiales**, y que **ISO 15189 está fuera de
