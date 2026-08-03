@@ -59,6 +59,17 @@ respuesta de IA o snippet basado en R4 que se copie sin mirar va a fallar aquí:
   no sale del *pipeline*.
 - **Queda escrito en la IG** que es una **simulación** con datos sintéticos, que las URIs canónicas
   son **propias y no oficiales**, y que **ISO 15189 está fuera de alcance** (D17).
+- **⚠️ El idioma se declara, o el publisher asume inglés.** Están puestos `language: es`,
+  `jurisdiction: ES`, `i18n-default-lang: es` y `resource-language-policy: all-ig` en
+  `sushi-config.yaml`: **no los quites**. Sin ellos la guía se publica etiquetada `lang="en"` bajo
+  `/en/` **con todo el build en verde** — ninguna herramienta detecta que el texto está en otro
+  idioma. La salida se reparte por carpeta de idioma (`/es/`) y la raíz es un *stub* de JS que
+  redirige: eso es diseño del publisher. Detalle en
+  `../docs/adr/adr-0010-el-idioma-de-una-ig-se-declara-o-se-asume-ingles.md`.
+- **El `id` de un `Instance:` sale del nombre del bloque, que es PascalCase.** En un artefacto de
+  conformidad escrito como `Instance:` (`ConceptMap`, `CapabilityStatement`, `NamingSystem`) hay que
+  poner `* id = "kebab-case"` explícito, o la página publicada y la URL canónica dirán cosas
+  distintas.
 
 ## Artefactos a producir (§6.5 del diseño)
 
