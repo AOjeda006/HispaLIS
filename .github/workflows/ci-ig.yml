@@ -153,12 +153,24 @@ jobs:
       name: github-pages
       url: ${{ steps.despliegue.outputs.page_url }}
     steps:
-      # `enablement: true` da de alta GitHub Pages en modo «GitHub Actions» si aún no lo está, para
-      # que publicar la guía no dependa de que alguien recuerde tocar los ajustes del repositorio.
+      # Dar de alta Pages desde el propio workflow NO es posible: `configure-pages` con
+      # `enablement: true` llama a la API de Pages, que exige un token con scope `repo`, y el
+      # GITHUB_TOKEN no lo tiene. Se comprueba y se falla con el paso concreto que hay que dar, en
+      # vez de morir con un error de la acción que no dice qué hacer.
+      - name: Comprobar que GitHub Pages está habilitado
+        run: |
+          codigo=$(curl -s -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/pages")
+          if [ "$codigo" = "404" ]; then
+            echo "::error::GitHub Pages no está habilitado. Actívalo en Settings → Pages → Build and deployment → Source: «GitHub Actions». No se puede hacer desde aquí: la API de Pages exige un token con scope repo y el GITHUB_TOKEN no lo tiene."
+            exit 1
+          fi
+          echo "GitHub Pages habilitado (HTTP $codigo)."
+
       - name: Preparar GitHub Pages
         uses: actions/configure-pages@v5
-        with:
-          enablement: true
 
       - name: Desplegar
         id: despliegue

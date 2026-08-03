@@ -205,20 +205,23 @@ para tipar los *slices* de `identifier` —CIP-SNS `1551000122105`, CIP-AUT `157
 
 ## Estado actual
 
-**Ítems 0, 1, 2 y 3 cerrados (2026-08-03). Monorepo andamiado y subido a `origin/main`; la IG tiene
-sus nueve perfiles y su terminología.**
+**Ítems 0 a 4 cerrados (2026-08-03). Monorepo andamiado y subido a `origin/main`; la IG tiene sus
+nueve perfiles, su terminología y sus ejemplos, y la CI la construye y la valida en verde.**
+
+**El ítem 5 está bloqueado y necesita una acción tuya:** hay que habilitar GitHub Pages en
+*Settings → Pages → Build and deployment → Source: «GitHub Actions»*. No se puede hacer desde el
+workflow —la API de Pages exige un token con scope `repo` y el `GITHUB_TOKEN` no lo tiene—, así que
+el job de publicación falla con ese mensaje hasta que se active. Todo lo demás del workflow pasa.
 
 | Componente | Estado | Verificado con |
 |---|---|---|
-| `ig/` | 9 perfiles, extensión `codigo-ine`, `CodeSystem` de 21 pruebas, `ConceptMap` a LOINC y 4 `ValueSet` | `npx fsh-sushi .` → **0 errores, 0 warnings**; IG Publisher en CI, verde |
+| `ig/` | 9 perfiles, extensión `codigo-ine`, `CodeSystem` de 21 pruebas, `ConceptMap` a LOINC, 4 `ValueSet` y 18 ejemplos | `npx fsh-sushi .` → **0 errores, 0 warnings**; en CI, IG Publisher y validador oficial **en verde** |
 | `backend/` | Spring Boot 3.5.16 + HAPI FHIR R5 8.10.1, *wrapper* Maven | `./mvnw verify` → **BUILD SUCCESS, 3 tests** |
 | `web-profesional/` | Angular 22.1 + vitest + angular-eslint | `npm run lint`, `npm test` (**3 tests**), `npm run build` |
 | `simuladores/` | Paquete `generador` con su CLI, ruff y pytest | `ruff check`/`format`, `pytest` → **7 tests** |
 | `integracion/`, `app-ciudadano/` | **Sin andamiar a propósito** (hito 2) | conservan su guarda de auto-omisión |
 
-**Siguiente: ítem 4** — al menos un ejemplo por perfil en `ig/input/examples/`, validando en CI, y
-probar la salvaguarda en rojo. **La CI de `ig/` está en rojo hasta que se haga**, y lo está a
-propósito: el paso de validación falla en cuanto hay perfiles sin ejemplos, que es el criterio C2.
+**Siguiente: ítem 5** — publicar la IG en GitHub Pages, en cuanto esté habilitado. Después, el ítem 6 abre el backend.
 
 > **Estado de la CI.** Subido a `origin/main` por **SSH** (el PAT de HTTPS no tiene *scope* `workflow`
 > y GitHub rechaza el push de `.github/workflows/`). Comprobado ya en ejecuciones reales:
@@ -226,9 +229,12 @@ propósito: el paso de validación falla en cuanto hay perfiles sin ejemplos, qu
 > - **El filtrado por ruta funciona**, con evidencia en los dos sentidos: un push que tocó `ig/**` y
 >   `backend/**` disparó exactamente esos dos workflows y ninguno de los otros cuatro.
 > - **`backend` en verde**, tras corregir el bit de ejecución de `mvnw`.
-> - **`ig`: el IG Publisher construye la guía entera en CI** —Ruby + Jekyll y plantilla `fhir2`
->   incluidos—, que era lo que quedaba sin probar del ítem 1. Falla el paso siguiente, el de validar
->   ejemplos, por no haberlos todavía.
+> - **`ig`: el job de construcción pasa entero.** El IG Publisher construye la guía —Ruby + Jekyll y
+>   plantilla `fhir2` incluidos—, la comprobación de «un ejemplo por perfil» pasa y el **validador
+>   oficial de HL7 valida los 18 ejemplos** contra sus perfiles. Solo falla el job de publicación,
+>   por Pages sin habilitar.
+> - **La salvaguarda de C2 se ha visto fallar de verdad**: con los nueve perfiles escritos y sin
+>   ejemplos, la CI detuvo el build. No es una comprobación teórica.
 > - **`web-profesional`, `simuladores`, `integracion` y `app-ciudadano` siguen sin ejecutarse nunca**:
 >   no se ha tocado su ruta desde la primera subida.
 
@@ -313,7 +319,16 @@ propósito: el paso de validación falla en cuanto hay perfiles sin ejemplos, qu
   el workflow contra `hl7.fhir.r5.core@5.0.0` y **falla el build** si un ejemplo no valida contra su
   perfil. Probado en rojo: se rompe un ejemplo a propósito y la CI lo detiene.
 
-- [ ] **5 — La IG publicada en GitHub Pages.**
+- [ ] **5 — La IG publicada en GitHub Pages.** ⛔ **Bloqueado: requiere una acción manual.**
+  El workflow ya construye la guía y sube el artefacto; lo que falta es que **GitHub Pages esté
+  habilitado** en *Settings → Pages → Build and deployment → Source: «GitHub Actions»*. No se puede
+  automatizar: la API de Pages exige un token con scope `repo` y el `GITHUB_TOKEN` del workflow no lo
+  tiene —se intentó con `actions/configure-pages@v5` y `enablement: true`, y falla en cuatro
+  segundos—. El job comprueba ahora el estado y falla con esa instrucción concreta.
+  *Nota sobre las URIs canónicas:* Pages sirve el repositorio en `https://aojeda006.github.io/HispaLIS/`
+  y la base canónica es `…/HispaLIS/fhir` (D19), así que **las URIs canónicas no resolverán a la guía
+  publicada**. No es un defecto: una URI canónica en FHIR es un identificador, no necesariamente una
+  URL descargable, y la guía documenta cuáles son.
   *Criterio:* el workflow despliega `ig/output/` y la IG es navegable en
   `https://aojeda006.github.io/HispaLIS/`. En la portada consta que es una **simulación con datos
   sintéticos**, que las URIs canónicas son **propias y no oficiales**, y que **ISO 15189 está fuera de
