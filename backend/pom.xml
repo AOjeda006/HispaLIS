@@ -30,7 +30,19 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     <hapi-fhir.version>8.10.1</hapi-fhir.version>
+    <embedded-postgres.version>2.1.0</embedded-postgres.version>
     <spotless.version>2.44.5</spotless.version>
+
+    <!--
+      Spring Boot 3.5.16 gestiona commons-lang3 en la 3.17.0 y HAPI 8.10.1 necesita la 3.18.0, que
+      es donde aparece `ObjectUtils.getIfNull(T, T)`. Gana el `dependencyManagement` del padre, así
+      que hay que subirla aquí a mano.
+
+      No es un fallo de compilación: los dos son compatibles al compilar y el conflicto solo estalla
+      en ejecución, con un `NoSuchMethodError` al servir la primera petición. Al actualizar Spring
+      Boot, comprobar si ya alcanza a HAPI y quitar esta línea.
+    -->
+    <commons-lang3.version>3.18.0</commons-lang3.version>
   </properties>
 
   <dependencies>
@@ -46,9 +58,43 @@
       <version>${hapi-fhir.version}</version>
     </dependency>
 
+    <!--
+      El servidor JPA de HAPI es la proyección de lectura (§9 del diseño): da búsqueda por
+      SearchParameter, _include, paginación por Bundle.link, _history, ETag/versionId y $validate.
+      Se empotra en esta aplicación —no se usa `hapi-fhir-jpaserver-starter`, que es una aplicación
+      aparte— porque la proyección tiene que escribirse en la MISMA transacción que el dominio.
+    -->
+    <dependency>
+      <groupId>ca.uhn.hapi.fhir</groupId>
+      <artifactId>hapi-fhir-jpaserver-base</artifactId>
+      <version>${hapi-fhir.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-data-jpa</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.postgresql</groupId>
+      <artifactId>postgresql</artifactId>
+      <scope>runtime</scope>
+    </dependency>
+
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+
+    <!--
+      PostgreSQL de verdad en los tests, arrancado en proceso desde un binario: mismo motor y mismo
+      dialecto que producción, sin necesitar Docker. Ver la decisión del ítem 6 en docs/PLAN.md.
+    -->
+    <dependency>
+      <groupId>io.zonky.test</groupId>
+      <artifactId>embedded-postgres</artifactId>
+      <version>${embedded-postgres.version}</version>
       <scope>test</scope>
     </dependency>
   </dependencies>

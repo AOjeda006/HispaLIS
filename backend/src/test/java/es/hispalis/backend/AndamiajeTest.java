@@ -7,7 +7,6 @@ import ca.uhn.fhir.context.FhirVersionEnum;
 import org.hl7.fhir.r5.model.HumanName;
 import org.hl7.fhir.r5.model.Patient;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
 
 /**
  * Comprobaciones de que la cadena de construcción del backend está bien montada.
@@ -16,8 +15,7 @@ import org.springframework.boot.test.context.SpringBootTest;
  * cosas que, si están mal, hacen fallar todo lo demás de forma confusa: que la versión de FHIR es
  * R5 y que el juego de caracteres español sobrevive a un viaje de ida y vuelta por el serializador.
  */
-@SpringBootTest
-class AndamiajeTest {
+class AndamiajeTest extends TestDeIntegracion {
 
     @Test
     void el_contexto_de_spring_arranca() {

@@ -2,6 +2,53 @@ spring:
   application:
     name: hispalis-backend
 
+  main:
+    # Spring Boot prohíbe las referencias circulares entre beans desde la 2.6, y hace bien. Esta
+    # excepción no es nuestra: el grafo de beans de HAPI JPA tiene un ciclo propio entre
+    # `searchParamRegistry` e `inMemoryResourceMatcher`, y sin esto el contexto no arranca. El
+    # código de este proyecto sigue sin poder tener ciclos.
+    allow-circular-references: true
+
+  # HAPI arrastra el cliente de Elasticsearch como dependencia transitiva —lo usa Hibernate Search
+  # para la búsqueda de texto libre, que aquí está apagada—, y con solo estar en el classpath Spring
+  # Boot lo autoconfigura contra `localhost:9200`. El resultado es un hilo que reintenta conectarse
+  # eternamente a un servidor que no existe y ensucia el log con errores que no lo son.
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.elasticsearch.ElasticsearchRestClientAutoConfiguration
+      - org.springframework.boot.autoconfigure.elasticsearch.ElasticsearchClientAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.elasticsearch.ElasticsearchDataAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.elasticsearch.ElasticsearchRepositoriesAutoConfiguration
+
+  # PostgreSQL sostiene los dos esquemas: el del dominio, que es la fuente de verdad, y el de la
+  # proyección FHIR que gobierna HAPI (§9 del diseño). Son la misma base de datos a propósito: es
+  # lo que permite escribir los dos en una sola transacción.
+  #
+  # Nunca una credencial en el repositorio: los valores de aquí son los del `docker compose` de
+  # desarrollo y se sustituyen por variables de entorno en cualquier otro sitio.
+  datasource:
+    url: ${HISPALIS_BD_URL:jdbc:postgresql://localhost:5432/hispalis}
+    username: ${HISPALIS_BD_USUARIO:hispalis}
+    password: ${HISPALIS_BD_CLAVE:hispalis}
+
+  jpa:
+    # `open-in-view` deja la sesión de Hibernate abierta durante el renderizado de la respuesta, así
+    # que una carga perezosa puede lanzar consultas fuera de la transacción, cuando ya no hay a quién
+    # devolverle el error. Spring lo activa por defecto y avisa de ello en cada arranque.
+    open-in-view: false
+
+  # HAPI trae Thymeleaf para generar narrativa, y eso hace que Spring Boot busque una carpeta de
+  # plantillas web que este proyecto no tiene ni va a tener: la API sirve FHIR, no HTML.
+  thymeleaf:
+    check-template-location: false
+
+  # Flyway llega aquí de rebote, como dependencia transitiva de HAPI, y se autoconfigura solo. Se
+  # apaga porque todavía no hay nada que migrar: el esquema de la proyección lo gobierna HAPI y el
+  # del dominio aún no existe. Se enciende en el ítem 7, junto con la primera migración y con
+  # `flyway-database-postgresql`, que es el módulo que falta para que reconozca a PostgreSQL.
+  flyway:
+    enabled: false
+
 server:
   port: 8080
   # La API sirve nombres españoles: sin UTF-8 explícito, MUÑOZ y PEÑA salen corrompidos por la red

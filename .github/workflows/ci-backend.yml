@@ -8,10 +8,18 @@ on:
     paths:
       - 'backend/**'
       - '.github/workflows/ci-backend.yml'
+      # El backend declara en su `CapabilityStatement` los perfiles de la guía, y un test cruza esa
+      # lista contra el FSH para que no diverjan. Sin esta ruta, añadir un perfil a la guía no
+      # dispararía el test que detecta justamente eso.
+      - 'ig/input/fsh/profiles/**'
   pull_request:
     paths:
       - 'backend/**'
       - '.github/workflows/ci-backend.yml'
+      # El backend declara en su `CapabilityStatement` los perfiles de la guía, y un test cruza esa
+      # lista contra el FSH para que no diverjan. Sin esta ruta, añadir un perfil a la guía no
+      # dispararía el test que detecta justamente eso.
+      - 'ig/input/fsh/profiles/**'
   workflow_dispatch:
 
 permissions:
