@@ -65,8 +65,12 @@ Cada subproyecto tiene su propio `CLAUDE.md` con las convenciones de su stack (v
 
 ## Cómo levantarlo
 
-**Requisitos:** Docker y Docker Compose · JDK 21 · Node 20 · Python 3.12 · (Flutter, solo para
-`app-ciudadano/`) · Java 11+ y Node para SUSHI y el IG Publisher.
+**Requisitos:** Docker y Docker Compose · **JDK 21** · **Node 24** (Angular 22 exige
+`^22.22.3 || ^24.15.0 || >=26`) · **Python 3.11 o superior** · (Flutter, solo para `app-ciudadano/`).
+SUSHI y el IG Publisher necesitan Node y JDK 21, ya cubiertos por lo anterior.
+
+Maven **no hace falta instalarlo**: el backend trae el *wrapper* (`./mvnw`), configurado en modo
+`only-script` para que el repositorio no contenga ningún binario.
 
 ```bash
 git clone https://github.com/AOjeda006/HispaLIS.git
@@ -93,12 +97,20 @@ La web profesional queda en `http://localhost:4200`.
 
 | Componente | Build | Tests | Lint / formato | Arranque |
 |---|---|---|---|---|
-| `ig/` | `sushi .` · `java -jar publisher.jar -ig .` | validador oficial sobre `input/examples/` | `sushi . --strict` | salida en `ig/output/` |
-| `backend/` | `./mvnw -q package` | `./mvnw verify` | `./mvnw spotless:check` | `./mvnw spring-boot:run` |
-| `integracion/` | `./mvnw -q package` | `./mvnw verify` | `./mvnw spotless:check` | `./mvnw spring-boot:run` |
-| `web-profesional/` | `npm run build` | `npm test` | `npm run lint` | `npm start` |
-| `app-ciudadano/` | `flutter build apk` | `flutter test` | `flutter analyze` | `flutter run` |
-| `simuladores/` | — | `pytest` | `ruff check .` | `python -m generador --seed 42` |
+| `ig/` | `npx fsh-sushi .` · `java -jar publisher.jar -ig . -no-sushi` | validador oficial sobre `input/examples/` | `npx fsh-sushi . --strict` | salida en `ig/output/` |
+| `backend/` | `./mvnw -q package` | `./mvnw verify` | `./mvnw spotless:check` · `./mvnw spotless:apply` | `./mvnw spring-boot:run` |
+| `integracion/` | *(sin andamiar — hito 2)* | | | |
+| `web-profesional/` | `npm run build` | `npm test` | `npm run lint` · `npm run format` | `npm start` |
+| `app-ciudadano/` | *(sin andamiar — hito 2)* | | | |
+| `simuladores/` | — | `pytest` | `ruff check .` · `ruff format --check .` | `python -m generador --seed 42` |
+
+Notas de las cadenas de construcción, por si sorprenden:
+
+- **`backend/`** — `./mvnw verify` **ya comprueba el formato**: Spotless está enganchado a la fase
+  `verify`, así que no hay una orden de *lint* aparte que haya que acordarse de ejecutar.
+- **`web-profesional/`** — los tests corren con **vitest sobre jsdom**, el ejecutor por defecto de
+  Angular 22. **No es Karma**: `--browsers=ChromeHeadless` no es una opción válida aquí.
+- **`simuladores/`** — antes de nada, `python -m pip install -e ".[dev]"` dentro de `simuladores/`.
 
 ## Integración continua
 

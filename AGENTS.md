@@ -62,16 +62,32 @@ es `true`, **no commitees** y avisa (ver `CLAUDE.md` §3).
 
 | Componente | Build | Tests | Lint / formato | Arranque |
 |---|---|---|---|---|
-| `ig/` | `sushi .` + `java -jar publisher.jar -ig .` | validador oficial sobre `input/examples/` | `sushi . --strict` | — (salida en `ig/output/`) |
-| `backend/` | `./mvnw -q package` | `./mvnw verify` | `./mvnw spotless:check` | `./mvnw spring-boot:run` |
-| `integracion/` | `./mvnw -q package` | `./mvnw verify` | `./mvnw spotless:check` | `./mvnw spring-boot:run` |
-| `web-profesional/` | `npm run build` | `npm test` | `npm run lint` | `npm start` |
-| `app-ciudadano/` | `flutter build apk` | `flutter test` | `flutter analyze` | `flutter run` |
+| `ig/` | `npx fsh-sushi .` + `java -jar publisher.jar -ig . -no-sushi` | validador oficial sobre `input/examples/` | `npx fsh-sushi . --strict` | — (salida en `ig/output/`) |
+| `backend/` | `./mvnw -q package` | `./mvnw verify` | `./mvnw spotless:check` · `./mvnw spotless:apply` | `./mvnw spring-boot:run` |
+| `integracion/` | *(sin andamiar — hito 2)* | | | |
+| `web-profesional/` | `npm run build` | `npm test` | `npm run lint` · `npm run format` | `npm start` |
+| `app-ciudadano/` | *(sin andamiar — hito 2)* | | | |
 | `simuladores/` | — | `pytest` | `ruff check . && ruff format --check .` | `python -m generador --seed 42` |
 | **Todo junto** | — | — | — | `docker compose -f infra/compose/docker-compose.yml up` |
 
-> Las herramientas concretas de *lint* y formato (`spotless`, `ruff`) se fijan al andamiar cada
-> componente; si eliges otras, **actualiza esta tabla y el workflow de CI en el mismo commit**.
+Herramientas fijadas al andamiar (ítem 1), y lo que hay que saber de cada una:
+
+- **`backend/`** — Spotless con `palantir-java-format`, **enganchado a la fase `verify`**: `./mvnw
+  verify` ya falla si el formato está mal, sin orden aparte. Maven va por *wrapper* (`./mvnw`) en modo
+  `only-script`, así que **no hay ningún `.jar` en el repositorio** y no hace falta Maven instalado.
+- **`web-profesional/`** — `ng lint` (angular-eslint) más `prettier --check`. Los tests corren con
+  **vitest sobre jsdom**, el ejecutor por defecto de Angular 22: **no es Karma**, y
+  `--browsers=ChromeHeadless` no es una opción válida. Requiere **Node 24**.
+- **`simuladores/`** — `ruff` para *lint* y formato. Requiere `pip install -e ".[dev]"` previo.
+- **`ig/`** — SUSHI por `npx`, sin instalación global. **SUSHI ya no genera `ig.ini`** (retiró la
+  propiedad `template`), así que `ig/ig.ini` se mantiene a mano y **sí está versionado**.
+
+> ⚠️ **El IG Publisher tiene cuatro trampas de *toolchain* ya resueltas** —`ig.ini` sin comentarios,
+> plantilla `fhir2`, Jekyll aparte y la negativa a construir si hay un espacio en la ruta. Están
+> documentadas en `docs/adr/adr-0007-trampas-del-ig-publisher.md`; **léelo antes de tocar `ig/`**.
+
+> Si cambias alguna de estas herramientas, **actualiza esta tabla, el `README.md` y el workflow de CI
+> en el mismo commit**.
 
 ## CI
 
