@@ -29,6 +29,7 @@ respuesta de IA o librería basada en R4 que se copie sin mirar va a fallar aqu�
 | `Observation.bodyStructure` | no existe | `0..1 Reference` | |
 | `DiagnosticReport.composition` | no existe | `0..1 Reference` | |
 | `Specimen.combined` / `.role` / `.feature` | no existen | nuevos | |
+| `Organization.telecom` / `.address` | existen | **eliminados** → `contact` (`ExtendedContactDetail`) | Un `Organization` de R4 **no valida** en R5 |
 | **Extensiones** | dentro del núcleo | **paquete aparte** `hl7.fhir.uv.extensions` | Otra dependencia que declarar |
 
 > Usa **siempre** el modelo `org.hl7.fhir.r5` de HAPI. Si un import trae `…model.r4…`, está mal.
