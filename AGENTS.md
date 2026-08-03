@@ -62,7 +62,7 @@ es `true`, **no commitees** y avisa (ver `CLAUDE.md` §3).
 
 | Componente | Build | Tests | Lint / formato | Arranque |
 |---|---|---|---|---|
-| `ig/` | `npx fsh-sushi .` + `java -jar publisher.jar -ig . -no-sushi` | validador oficial sobre `input/examples/` | `npx fsh-sushi . --strict` | — (salida en `ig/output/`) |
+| `ig/` | `npx fsh-sushi .` + `java -jar publisher.jar -ig . -no-sushi` | validador oficial sobre `input/examples/` | `npx fsh-sushi .` con **0 warnings** | — (salida en `ig/output/`) |
 | `backend/` | `./mvnw -q package` | `./mvnw verify` | `./mvnw spotless:check` · `./mvnw spotless:apply` | `./mvnw spring-boot:run` |
 | `integracion/` | *(sin andamiar — hito 2)* | | | |
 | `web-profesional/` | `npm run build` | `npm test` | `npm run lint` · `npm run format` | `npm start` |
