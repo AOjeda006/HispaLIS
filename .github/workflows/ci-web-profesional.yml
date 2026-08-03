@@ -28,40 +28,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Guarda de auto-omisión: RETIRAR al crear web-profesional/package.json.
-      - name: Comprobar que la web está andamiada
-        id: guarda
-        run: |
-          if [ -f web-profesional/package.json ]; then
-            echo "andamiada=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "andamiada=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::web-profesional/package.json no existe todavía; se omite la construcción."
-          fi
-
+      # Angular 22 declara `engines.node: ^22.22.3 || ^24.15.0 || >=26.0.0`. Con Node 20 la
+      # instalación falla, así que esta versión no es intercambiable: se sube junto con Angular.
       - uses: actions/setup-node@v4
-        if: steps.guarda.outputs.andamiada == 'true'
         with:
-          node-version: '20'
+          node-version: '24'
           cache: npm
           cache-dependency-path: web-profesional/package-lock.json
 
       - name: Instalar dependencias
-        if: steps.guarda.outputs.andamiada == 'true'
         working-directory: web-profesional
         run: npm ci
 
-      - name: Lint
-        if: steps.guarda.outputs.andamiada == 'true'
+      - name: Lint y formato
         working-directory: web-profesional
         run: npm run lint
 
+      # El proyecto usa el ejecutor por defecto de Angular 22: vitest sobre jsdom, no Karma. Por eso
+      # no lleva `--browsers=ChromeHeadless`, que es sintaxis de Karma y aquí haría fallar la orden.
       - name: Tests
-        if: steps.guarda.outputs.andamiada == 'true'
         working-directory: web-profesional
-        run: npm test -- --watch=false --browsers=ChromeHeadless
+        run: npm test
 
       - name: Build
-        if: steps.guarda.outputs.andamiada == 'true'
         working-directory: web-profesional
         run: npm run build
