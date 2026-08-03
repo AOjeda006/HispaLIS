@@ -42,6 +42,41 @@ para acreditarse. La norma se cita únicamente como justificación de diseño de
 
 ---
 
+### Perfiles
+
+| Perfil | Recurso | Para qué |
+|---|---|---|
+| [PacienteLabES](StructureDefinition-paciente-lab-es.html) | `Patient` | Paciente, con la jerarquía real de identificadores del SNS y apellidos dobles |
+| [PeticionLab](StructureDefinition-peticion-lab.html) | `ServiceRequest` | Línea de petición analítica |
+| [EspecimenLab](StructureDefinition-especimen-lab.html) | `Specimen` | Muestra recibida, con número de acceso y motivo de rechazo |
+| [ResultadoLab](StructureDefinition-resultado-lab.html) | `Observation` | Resultado, con unidad UCUM, rango de referencia y reflejas |
+| [InformeLab](StructureDefinition-informe-lab.html) | `DiagnosticReport` | Informe validado y su PDF |
+| [LaboratorioOrg](StructureDefinition-laboratorio-org.html) | `Organization` | Centro sanitario, con NICA y NIF |
+| [FacultativoLab](StructureDefinition-facultativo-lab.html) | `Practitioner` | Profesional que solicita o valida |
+| [CoberturaLab](StructureDefinition-cobertura-lab.html) | `Coverage` | Quién paga: el paciente o una aseguradora |
+| [NotificacionEDO](StructureDefinition-notificacion-edo.html) | `Task` | Declaración obligatoria a Salud Pública |
+
+### Qué exige `Must Support`
+
+Una guía que reparte `Must Support` sin decir qué significa no está exigiendo nada. En HispaLIS, un
+elemento marcado `MS` obliga a un sistema conforme a:
+
+1. **Poblarlo** cuando el dato existe y se conoce. No es válido omitir un elemento `MS` disponible.
+2. **Procesarlo** al recibirlo: almacenarlo y devolverlo tal cual en una lectura posterior, sin
+   perderlo ni truncarlo — en particular, sin perder tildes ni la `ñ`.
+3. **No romperse** cuando el elemento falta, si su cardinalidad mínima es `0`. La ausencia de un
+   `MS` opcional es un caso normal, no un error.
+
+`MS` **no** implica que el elemento sea obligatorio: la obligatoriedad la fija la cardinalidad. Un
+`0..1 MS` significa «puede faltar, pero si está hay que tratarlo bien».
+
+Cuando la ausencia de un dato *es* información —un paciente extranjero que no tiene DNI, frente a
+uno cuyo DNI no se registró—, se declara con la extensión estándar
+[`data-absent-reason`](http://hl7.org/fhir/StructureDefinition/data-absent-reason). Nunca con un
+valor vacío.
+
+---
+
 ### Alcance
 
 El circuito modelado es: **petición → extracción → espécimen → resultado → validación facultativa →
