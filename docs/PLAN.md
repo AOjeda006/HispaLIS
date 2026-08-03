@@ -153,6 +153,22 @@ para tipar los *slices* de `identifier` —CIP-SNS `1551000122105`, CIP-AUT `157
   52 colegios provinciales de médicos más los de farmacéuticos, biólogos y químicos. El colegio se
   identifica con `identifier.assigner`, que es procesable y no cierra la lista. Ver *Notas / riesgos*.
 
+### Decisiones tomadas al escribir los ejemplos (ítem 4)
+
+- **2026-08-03 — Nunca se fija a mano el `display` de un código de terminología externa.** El
+  validador oficial aplica la **variante lingüística según el locale**: `$LOINC#11502-2` con
+  `display = "Laboratory report"` —que es literalmente el `LONG_COMMON_NAME` de la tabla LOINC 2.82—
+  **falla** en un equipo con locale español, porque `tx.fhir.org` responde con el nombre en
+  castellano. El mismo recurso pasaría en la CI y fallaría en local. Registrado como
+  `docs/adr/adr-0009-display-de-terminologia-externa.md`. Los `display` propios del catálogo local se
+  quedan, porque de ese CodeSystem somos la autoridad.
+- **2026-08-03 — Los ejemplos se validan en local antes de subir.** El validador oficial cazó los dos
+  errores de arriba en un ciclo de dos minutos; descubrirlos en la CI habría costado dos ciclos de
+  ocho. Requiere descargar `validator_cli.jar`, que no se versiona.
+- **2026-08-03 — Quedan 18 avisos `dom-6`** («*a resource should have narrative*») al validar
+  `fsh-generated/`. No son un defecto: la narrativa la genera el IG Publisher después, y lo que valida
+  la CI es la entrada. Son avisos, no errores, y no detienen el build.
+
 ### Decisiones tomadas al escribir la terminología (ítem 3)
 
 - **2026-08-03 — La unidad decide el término LOINC, no el nombre.** El laboratorio informa la glucosa
@@ -284,7 +300,15 @@ propósito: el paso de validación falla en cuanto hay perfiles sin ejemplos, qu
   muestra, motivos de rechazo y catálogo EDO, y la extensión propia `codigo-ine` — todos compilan y
   se publican en la IG. `hl7.fhir.uv.extensions@5.3.0` declarado como dependencia en `sushi-config.yaml`.
 
-- [ ] **4 — Ejemplos que validan contra su perfil, en CI. (C2)**
+- [x] **4 — Ejemplos que validan contra su perfil, en CI. (C2)**
+  *Hecho el 2026-08-03.* **18 ejemplos** en tres escenarios (`analitica`, `rechazo`, `edo`), con los
+  nueve perfiles cubiertos. `MUÑOZ`, `ÁLVAREZ` y `PEÑA` presentes, y «Muñoz de la Torre» como
+  apellido que rompe cualquier heurístico de partir por el espacio. Cubren además la refleja con
+  `triggeredBy`, el rechazo de muestra con su motivo, y `self-pay` frente a `insurance`.
+  *Desviación registrada:* los ejemplos van en **`ig/input/fsh/examples/`** como instancias FSH, no
+  como JSON a mano en `ig/input/examples/` —que se ha eliminado—. Es lo que manda la convención de
+  perfilado (*«toda guía publica ejemplos: `Instance:` con `Usage: #example`»*) y lo que permite que
+  SUSHI los compruebe. El workflow se adaptó en consecuencia.
   *Criterio:* al menos un ejemplo por perfil en `ig/input/examples/`; el **validador oficial** corre en
   el workflow contra `hl7.fhir.r5.core@5.0.0` y **falla el build** si un ejemplo no valida contra su
   perfil. Probado en rojo: se rompe un ejemplo a propósito y la CI lo detiene.
