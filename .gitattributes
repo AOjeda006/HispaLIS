@@ -1,0 +1,29 @@
+# Normalización de finales de línea del monorepo.
+#
+# Por qué existe este fichero: se desarrolla en Windows y la CI corre en `ubuntu-latest`. Sin esta
+# normalización, git convierte a CRLF los scripts de la cadena de construcción y el runner Linux
+# falla con `bad interpreter: No such file or directory` — un fallo que no se reproduce en local.
+
+# Por defecto: git normaliza a LF en el repositorio y deja que el working copy use lo del sistema.
+* text=auto eol=lf
+
+# ─── Scripts que SIEMPRE deben ser LF (los ejecuta un shell POSIX) ────────────
+*.sh            text eol=lf
+mvnw            text eol=lf
+gradlew         text eol=lf
+
+# ─── Scripts que SIEMPRE deben ser CRLF (los ejecuta cmd.exe) ─────────────────
+*.bat           text eol=crlf
+*.cmd           text eol=crlf
+
+# ─── Binarios: git no los toca ────────────────────────────────────────────────
+*.jar           binary
+*.tgz           binary
+*.png           binary
+*.jpg           binary
+*.jpeg          binary
+*.gif           binary
+*.ico           binary
+*.pdf           binary
+*.woff          binary
+*.woff2         binary
