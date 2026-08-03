@@ -32,45 +32,35 @@ jobs:
   construir-ig:
     name: Compilar FSH, construir la IG y validar los ejemplos
     runs-on: ubuntu-latest
-    outputs:
-      andamiada: ${{ steps.guarda.outputs.andamiada }}
     steps:
       - uses: actions/checkout@v4
 
-      # Guarda de auto-omisión: mientras la IG no esté andamiada, el workflow pasa en verde sin
-      # hacer nada. RETIRAR esta guarda en el mismo commit en que se cree ig/sushi-config.yaml.
-      - name: Comprobar que la IG está andamiada
-        id: guarda
-        run: |
-          if [ -f ig/sushi-config.yaml ]; then
-            echo "andamiada=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "andamiada=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::ig/sushi-config.yaml no existe todavía; se omite la construcción de la IG."
-          fi
-
       - uses: actions/setup-java@v4
-        if: steps.guarda.outputs.andamiada == 'true'
         with:
           distribution: temurin
           java-version: '21'
 
       - uses: actions/setup-node@v4
-        if: steps.guarda.outputs.andamiada == 'true'
         with:
-          node-version: '20'
+          node-version: '22'
+
+      # El IG Publisher genera el HTML con Jekyll, que NO viene en el runner. Sin esto, la
+      # construcción llega hasta el final de la fase FHIR y muere al renderizar las páginas.
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+
+      - name: Instalar Jekyll
+        run: gem install jekyll
 
       - name: Instalar SUSHI
-        if: steps.guarda.outputs.andamiada == 'true'
         run: npm install -g fsh-sushi
 
       - name: Compilar el FSH
-        if: steps.guarda.outputs.andamiada == 'true'
         working-directory: ig
         run: sushi .
 
       - name: Cachear los paquetes FHIR
-        if: steps.guarda.outputs.andamiada == 'true'
         uses: actions/cache@v4
         with:
           path: ~/.fhir/packages
@@ -78,31 +68,39 @@ jobs:
           restore-keys: fhir-packages-
 
       - name: Descargar el IG Publisher
-        if: steps.guarda.outputs.andamiada == 'true'
         run: |
           curl -sSL -o ig/publisher.jar \
             https://github.com/HL7/fhir-ig-publisher/releases/latest/download/publisher.jar
 
       - name: Construir la IG
-        if: steps.guarda.outputs.andamiada == 'true'
         working-directory: ig
         run: java -Xmx4g -jar publisher.jar -ig . -no-sushi
 
       # Criterio de aceptación 2 (§14): ningún recurso de ejemplo sale del pipeline sin validar
       # contra su perfil, con el validador OFICIAL y la versión FIJADA.
       - name: Descargar el validador oficial de HL7
-        if: steps.guarda.outputs.andamiada == 'true'
         run: |
           curl -sSL -o validator_cli.jar \
             https://github.com/hapifhir/org.hl7.fhir.core/releases/latest/download/validator_cli.jar
 
+      # La exigencia se activa en cuanto la IG tiene perfiles: en ese momento, no tener ejemplos es
+      # un error que detiene el build. Mientras la IG esté solo andamiada no hay nada que validar,
+      # y fallar por ello sería ruido, no una salvaguarda.
       - name: Validar los ejemplos contra sus perfiles
-        if: steps.guarda.outputs.andamiada == 'true'
         run: |
-          if [ -z "$(ls -A ig/input/examples 2>/dev/null | grep -v .gitkeep)" ]; then
-            echo "::error::No hay ejemplos en ig/input/examples. La IG debe traer al menos un ejemplo por perfil."
+          perfiles=$(find ig/input/fsh -name '*.fsh' -not -name 'aliases.fsh' | wc -l)
+          ejemplos=$(find ig/input/examples -type f -not -name '.gitkeep' | wc -l)
+
+          if [ "$perfiles" -eq 0 ]; then
+            echo "::notice::La IG todavía no define perfiles; no hay ejemplos que validar."
+            exit 0
+          fi
+
+          if [ "$ejemplos" -eq 0 ]; then
+            echo "::error::La IG define $perfiles artefactos FSH y no hay ningún ejemplo en ig/input/examples. Todo perfil necesita al menos un ejemplo que valide (criterio de aceptación 2)."
             exit 1
           fi
+
           java -jar validator_cli.jar ig/input/examples \
             -version "$VERSION_FHIR" \
             -ig "$PAQUETE_FHIR" \
@@ -111,7 +109,6 @@ jobs:
             -output-style compact
 
       - name: Publicar la IG construida como artefacto
-        if: steps.guarda.outputs.andamiada == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: ig-output
@@ -119,7 +116,7 @@ jobs:
           retention-days: 7
 
       - name: Preparar el artefacto de GitHub Pages
-        if: steps.guarda.outputs.andamiada == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-pages-artifact@v3
         with:
           path: ig/output/
@@ -127,7 +124,7 @@ jobs:
   publicar:
     name: Publicar la IG en GitHub Pages
     needs: construir-ig
-    if: needs.construir-ig.outputs.andamiada == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       pages: write

@@ -1,0 +1,39 @@
+# Configuración de SUSHI para la guía de implementación de HispaLIS.
+#
+# La versión de FHIR está FIJADA a 5.0.0: nada de «FHIR» a secas (ig/CLAUDE.md).
+# SUSHI genera a partir de aquí el recurso ImplementationGuide, que es artefacto generado y no se
+# commitea. El `ig.ini` que consume el IG Publisher SÍ se mantiene a mano y está versionado: SUSHI
+# retiró la propiedad `template` y ya no lo genera.
+
+id: hispalis
+canonical: https://aojeda006.github.io/HispaLIS/fhir
+name: HispaLIS
+title: "HispaLIS — Sistema de Información de Laboratorio (SIL) sobre HL7 FHIR R5"
+description: >-
+  Guía de implementación de HispaLIS, una simulación de un Sistema de Información de Laboratorio
+  (SIL) para un laboratorio clínico privado de Sevilla. Perfila HL7 FHIR R5 para el circuito de
+  petición, espécimen, resultado e informe en el contexto sanitario español.
+status: draft
+version: 0.1.0
+fhirVersion: 5.0.0
+releaseLabel: ci-build
+copyrightYear: 2026+
+license: CC0-1.0
+
+publisher:
+  name: Andrés Ojeda Rodríguez
+  url: https://github.com/aojeda006/HispaLIS
+
+# El paquete de extensiones está FUERA del núcleo en R5 (§2.1): las extensiones de apellidos y
+# `data-absent-reason` viven aquí, así que la dependencia es obligatoria, no opcional.
+dependencies:
+  hl7.fhir.uv.extensions: 5.3.0
+
+parameters:
+  show-inherited-invariants: false
+
+menu:
+  Inicio: index.html
+  Perfiles: artifacts.html
+  Terminología: artifacts.html#terminology
+  Ejemplos: artifacts.html#example
