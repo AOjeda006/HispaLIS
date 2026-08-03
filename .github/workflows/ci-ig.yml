@@ -1,0 +1,141 @@
+# CI de la guía de implementación (ig/): compila el FSH, construye la IG, valida los ejemplos
+# con el validador oficial de HL7 contra hl7.fhir.r5.core@5.0.0 y publica a GitHub Pages.
+#
+# El filtrado por `paths:` es OBLIGATORIO en este monorepo (§13.1 del diseño): sin él, un cambio en
+# Flutter recompilaría el backend.
+name: CI · IG
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'ig/**'
+      - '.github/workflows/ci-ig.yml'
+  pull_request:
+    paths:
+      - 'ig/**'
+      - '.github/workflows/ci-ig.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-ig-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  VERSION_FHIR: 5.0.0
+  PAQUETE_FHIR: hl7.fhir.r5.core#5.0.0
+
+jobs:
+  construir-ig:
+    name: Compilar FSH, construir la IG y validar los ejemplos
+    runs-on: ubuntu-latest
+    outputs:
+      andamiada: ${{ steps.guarda.outputs.andamiada }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Guarda de auto-omisión: mientras la IG no esté andamiada, el workflow pasa en verde sin
+      # hacer nada. RETIRAR esta guarda en el mismo commit en que se cree ig/sushi-config.yaml.
+      - name: Comprobar que la IG está andamiada
+        id: guarda
+        run: |
+          if [ -f ig/sushi-config.yaml ]; then
+            echo "andamiada=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "andamiada=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::ig/sushi-config.yaml no existe todavía; se omite la construcción de la IG."
+          fi
+
+      - uses: actions/setup-java@v4
+        if: steps.guarda.outputs.andamiada == 'true'
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: actions/setup-node@v4
+        if: steps.guarda.outputs.andamiada == 'true'
+        with:
+          node-version: '20'
+
+      - name: Instalar SUSHI
+        if: steps.guarda.outputs.andamiada == 'true'
+        run: npm install -g fsh-sushi
+
+      - name: Compilar el FSH
+        if: steps.guarda.outputs.andamiada == 'true'
+        working-directory: ig
+        run: sushi .
+
+      - name: Cachear los paquetes FHIR
+        if: steps.guarda.outputs.andamiada == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~/.fhir/packages
+          key: fhir-packages-${{ hashFiles('ig/sushi-config.yaml') }}
+          restore-keys: fhir-packages-
+
+      - name: Descargar el IG Publisher
+        if: steps.guarda.outputs.andamiada == 'true'
+        run: |
+          curl -sSL -o ig/publisher.jar \
+            https://github.com/HL7/fhir-ig-publisher/releases/latest/download/publisher.jar
+
+      - name: Construir la IG
+        if: steps.guarda.outputs.andamiada == 'true'
+        working-directory: ig
+        run: java -Xmx4g -jar publisher.jar -ig . -no-sushi
+
+      # Criterio de aceptación 2 (§14): ningún recurso de ejemplo sale del pipeline sin validar
+      # contra su perfil, con el validador OFICIAL y la versión FIJADA.
+      - name: Descargar el validador oficial de HL7
+        if: steps.guarda.outputs.andamiada == 'true'
+        run: |
+          curl -sSL -o validator_cli.jar \
+            https://github.com/hapifhir/org.hl7.fhir.core/releases/latest/download/validator_cli.jar
+
+      - name: Validar los ejemplos contra sus perfiles
+        if: steps.guarda.outputs.andamiada == 'true'
+        run: |
+          if [ -z "$(ls -A ig/input/examples 2>/dev/null | grep -v .gitkeep)" ]; then
+            echo "::error::No hay ejemplos en ig/input/examples. La IG debe traer al menos un ejemplo por perfil."
+            exit 1
+          fi
+          java -jar validator_cli.jar ig/input/examples \
+            -version "$VERSION_FHIR" \
+            -ig "$PAQUETE_FHIR" \
+            -ig ig/output/package.tgz \
+            -recurse \
+            -output-style compact
+
+      - name: Publicar la IG construida como artefacto
+        if: steps.guarda.outputs.andamiada == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ig-output
+          path: ig/output/
+          retention-days: 7
+
+      - name: Preparar el artefacto de GitHub Pages
+        if: steps.guarda.outputs.andamiada == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ig/output/
+
+  publicar:
+    name: Publicar la IG en GitHub Pages
+    needs: construir-ig
+    if: needs.construir-ig.outputs.andamiada == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.despliegue.outputs.page_url }}
+    steps:
+      - name: Desplegar
+        id: despliegue
+        uses: actions/deploy-pages@v4

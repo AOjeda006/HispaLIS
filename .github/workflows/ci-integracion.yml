@@ -1,0 +1,52 @@
+# CI del motor de integración (canales HL7 V2.5.1 sobre MLLP). Componente del hito 2.
+# Filtrado por `paths:` OBLIGATORIO (§13.1 del diseño).
+name: CI · integracion
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'integracion/**'
+      - '.github/workflows/ci-integracion.yml'
+  pull_request:
+    paths:
+      - 'integracion/**'
+      - '.github/workflows/ci-integracion.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-integracion-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    name: Build + tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Guarda de auto-omisión: RETIRAR en el mismo commit en que se cree integracion/pom.xml.
+      - name: Comprobar que el motor está andamiado
+        id: guarda
+        run: |
+          if [ -f integracion/pom.xml ]; then
+            echo "andamiado=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "andamiado=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::integracion/pom.xml no existe todavía; se omite la construcción."
+          fi
+
+      - uses: actions/setup-java@v4
+        if: steps.guarda.outputs.andamiado == 'true'
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Build y tests
+        if: steps.guarda.outputs.andamiado == 'true'
+        working-directory: integracion
+        run: ./mvnw --batch-mode verify

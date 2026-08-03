@@ -1,0 +1,61 @@
+# CI de la app del ciudadano (Flutter). Componente del hito 2.
+# Filtrado por `paths:` OBLIGATORIO (§13.1 del diseño).
+name: CI · app-ciudadano
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'app-ciudadano/**'
+      - '.github/workflows/ci-app-ciudadano.yml'
+  pull_request:
+    paths:
+      - 'app-ciudadano/**'
+      - '.github/workflows/ci-app-ciudadano.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-app-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    name: Analyze + tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Guarda de auto-omisión: RETIRAR al crear app-ciudadano/pubspec.yaml.
+      - name: Comprobar que la app está andamiada
+        id: guarda
+        run: |
+          if [ -f app-ciudadano/pubspec.yaml ]; then
+            echo "andamiada=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "andamiada=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::app-ciudadano/pubspec.yaml no existe todavía; se omite la construcción."
+          fi
+
+      - uses: subosito/flutter-action@v2
+        if: steps.guarda.outputs.andamiada == 'true'
+        with:
+          channel: stable
+          cache: true
+
+      - name: Dependencias
+        if: steps.guarda.outputs.andamiada == 'true'
+        working-directory: app-ciudadano
+        run: flutter pub get
+
+      - name: Analyze
+        if: steps.guarda.outputs.andamiada == 'true'
+        working-directory: app-ciudadano
+        run: flutter analyze
+
+      - name: Tests
+        if: steps.guarda.outputs.andamiada == 'true'
+        working-directory: app-ciudadano
+        run: flutter test

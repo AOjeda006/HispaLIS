@@ -1,0 +1,109 @@
+# ─── Secretos y entorno ────────────────────────────────────────────────────────
+# Nunca, en ningún caso, commitear credenciales ni datos de pacientes.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.jks
+*.keystore
+secrets/
+**/application-local.yml
+**/application-secret*.yml
+
+# ─── Datos: solo sintéticos, y ni esos se commitean ───────────────────────────
+datos-generados/
+**/salida-generador/
+*.ndjson
+*.hl7.recibido
+
+# ─── FHIR IG (artefacto generado: nunca se edita ni se commitea) ──────────────
+ig/output/
+ig/temp/
+ig/input-cache/
+ig/fsh-generated/
+ig/template/
+ig/generated_output/
+ig/publisher.jar
+ig/validator_cli.jar
+**/*.tgz
+
+# ─── Java / Maven / Gradle ────────────────────────────────────────────────────
+target/
+build/
+.gradle/
+out/
+*.class
+*.jar
+*.war
+*.ear
+# los wrappers sí se commitean: son parte de la cadena de construcción reproducible
+!**/gradle-wrapper.jar
+!**/maven-wrapper.jar
+hs_err_pid*
+replay_pid*
+.mvn/timing.properties
+
+# ─── Node / Angular ───────────────────────────────────────────────────────────
+node_modules/
+dist/
+.angular/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.npm/
+coverage/
+*.tsbuildinfo
+
+# ─── Dart / Flutter ───────────────────────────────────────────────────────────
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+.flutter-plugins
+.flutter-plugins-dependencies
+**/doc/api/
+app-ciudadano/build/
+app-ciudadano/android/.gradle/
+app-ciudadano/android/local.properties
+app-ciudadano/ios/Pods/
+app-ciudadano/ios/Flutter/Flutter.framework
+app-ciudadano/ios/Flutter/Generated.xcconfig
+app-ciudadano/ios/Flutter/flutter_export_environment.sh
+*.iml
+
+# ─── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+
+# ─── Docker / infraestructura local ───────────────────────────────────────────
+infra/**/data/
+infra/**/volumes/
+docker-compose.override.yml
+
+# ─── Editores y sistema operativo ─────────────────────────────────────────────
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+__MACOSX/
+._*
+
+# ─── Claude Code: la configuración compartida SÍ se commitea ──────────────────
+.claude/settings.local.json

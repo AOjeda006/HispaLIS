@@ -1,0 +1,61 @@
+# CI del backend (dominio + API FHIR R5 + proyección HAPI).
+# Filtrado por `paths:` OBLIGATORIO (§13.1 del diseño).
+name: CI · backend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/ci-backend.yml'
+  pull_request:
+    paths:
+      - 'backend/**'
+      - '.github/workflows/ci-backend.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-backend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    name: Build + tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Guarda de auto-omisión: RETIRAR en el mismo commit en que se cree backend/pom.xml.
+      - name: Comprobar que el backend está andamiado
+        id: guarda
+        run: |
+          if [ -f backend/pom.xml ]; then
+            echo "andamiado=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "andamiado=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::backend/pom.xml no existe todavía; se omite la construcción."
+          fi
+
+      - uses: actions/setup-java@v4
+        if: steps.guarda.outputs.andamiado == 'true'
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Build y tests
+        if: steps.guarda.outputs.andamiado == 'true'
+        working-directory: backend
+        run: ./mvnw --batch-mode verify
+
+      - name: Publicar los informes de test
+        if: always() && steps.guarda.outputs.andamiado == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-informes-test
+          path: backend/target/surefire-reports/
+          retention-days: 7
+          if-no-files-found: ignore

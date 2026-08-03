@@ -1,0 +1,67 @@
+# CI de la web profesional (Angular).
+# Filtrado por `paths:` OBLIGATORIO (§13.1 del diseño).
+name: CI · web-profesional
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web-profesional/**'
+      - '.github/workflows/ci-web-profesional.yml'
+  pull_request:
+    paths:
+      - 'web-profesional/**'
+      - '.github/workflows/ci-web-profesional.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-web-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    name: Lint + tests + build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Guarda de auto-omisión: RETIRAR al crear web-profesional/package.json.
+      - name: Comprobar que la web está andamiada
+        id: guarda
+        run: |
+          if [ -f web-profesional/package.json ]; then
+            echo "andamiada=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "andamiada=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::web-profesional/package.json no existe todavía; se omite la construcción."
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.guarda.outputs.andamiada == 'true'
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: web-profesional/package-lock.json
+
+      - name: Instalar dependencias
+        if: steps.guarda.outputs.andamiada == 'true'
+        working-directory: web-profesional
+        run: npm ci
+
+      - name: Lint
+        if: steps.guarda.outputs.andamiada == 'true'
+        working-directory: web-profesional
+        run: npm run lint
+
+      - name: Tests
+        if: steps.guarda.outputs.andamiada == 'true'
+        working-directory: web-profesional
+        run: npm test -- --watch=false --browsers=ChromeHeadless
+
+      - name: Build
+        if: steps.guarda.outputs.andamiada == 'true'
+        working-directory: web-profesional
+        run: npm run build

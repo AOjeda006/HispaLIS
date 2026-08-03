@@ -1,0 +1,63 @@
+# CI de los simuladores y el generador de datos sintéticos (Python).
+# Filtrado por `paths:` OBLIGATORIO (§13.1 del diseño).
+name: CI · simuladores
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'simuladores/**'
+      - '.github/workflows/ci-simuladores.yml'
+  pull_request:
+    paths:
+      - 'simuladores/**'
+      - '.github/workflows/ci-simuladores.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-simuladores-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    name: Lint + tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Guarda de auto-omisión: RETIRAR al crear simuladores/pyproject.toml.
+      - name: Comprobar que los simuladores están andamiados
+        id: guarda
+        run: |
+          if [ -f simuladores/pyproject.toml ]; then
+            echo "andamiados=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "andamiados=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::simuladores/pyproject.toml no existe todavía; se omite la construcción."
+          fi
+
+      - uses: actions/setup-python@v5
+        if: steps.guarda.outputs.andamiados == 'true'
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Instalar dependencias
+        if: steps.guarda.outputs.andamiados == 'true'
+        working-directory: simuladores
+        run: python -m pip install -e ".[dev]"
+
+      - name: Lint y formato
+        if: steps.guarda.outputs.andamiados == 'true'
+        working-directory: simuladores
+        run: |
+          ruff check .
+          ruff format --check .
+
+      - name: Tests
+        if: steps.guarda.outputs.andamiados == 'true'
+        working-directory: simuladores
+        run: pytest
