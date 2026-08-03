@@ -19,6 +19,11 @@ fhirVersion: 5.0.0
 releaseLabel: ci-build
 copyrightYear: 2026+
 license: CC0-1.0
+# `language` es el idioma del propio recurso ImplementationGuide, y es de donde sale el que hereda
+# cada recurso con `resource-language-policy: all-ig`. `jurisdiction` fija el ámbito: esto perfila el
+# contexto sanitario español, no uno internacional.
+language: es
+jurisdiction: urn:iso:std:iso:3166#ES
 
 publisher:
   name: Andrés Ojeda Rodríguez
