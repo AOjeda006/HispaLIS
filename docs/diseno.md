@@ -82,6 +82,7 @@ tutorial, respuesta de IA o librería basada en R4 que se copie sin mirar va a f
 | `DiagnosticReport.composition` | no existe | `0..1 Reference` | |
 | `Specimen.combined` / `.role` / `.feature` | no existen | nuevos | |
 | `Organization.telecom` / `.address` | existen | **eliminados** → `contact` (`ExtendedContactDetail`) | Un `Organization` de R4 **no valida** en R5 |
+| `ConceptMap.source[x]` / `.target[x]` · `element.target.equivalence` | así se llaman | **`sourceScope[x]`/`targetScope[x]`** y **`relationship`**, con códigos distintos | Un `ConceptMap` de R4 **no valida** en R5 |
 | **Extensiones** | dentro del núcleo | **paquete aparte** `hl7.fhir.uv.extensions` | Ver §6.2 |
 
 > `Coverage.kind` obligatorio juega a favor: `self-pay` (privado que paga) frente a `insurance`

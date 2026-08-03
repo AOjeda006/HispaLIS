@@ -153,31 +153,68 @@ para tipar los *slices* de `identifier` —CIP-SNS `1551000122105`, CIP-AUT `157
   52 colegios provinciales de médicos más los de farmacéuticos, biólogos y químicos. El colegio se
   identifica con `identifier.assigner`, que es procesable y no cierra la lista. Ver *Notas / riesgos*.
 
+### Decisiones tomadas al escribir la terminología (ítem 3)
+
+- **2026-08-03 — La unidad decide el término LOINC, no el nombre.** El laboratorio informa la glucosa
+  en `mg/dL`, así que el término correcto es `2345-7` (*masa/volumen*) y **no** `14749-6`
+  (*moles/volumen*), que es el que sale al buscar «glucosa» por texto. Igual con creatinina, urea y
+  colesterol. Y **urea (`3091-6`) no es nitrógeno ureico (`3094-0`)**: son magnitudes distintas con un
+  factor de 2,14 entre ellas. Este es el error de mapeo LOINC más frecuente y estuvo a punto de
+  colarse aquí.
+- **2026-08-03 — No todas las correspondencias son equivalencias.** Cinco de las 21 se declaran
+  `source-is-broader-than-target`, porque el término LOINC fija un método que el código local no fija.
+  Forzar `equivalent` para que quedase uniforme sería inventar una precisión que el catálogo no tiene.
+- **2026-08-03 — La unidad UCUM vive en el `CodeSystem`, como propiedad.** El generador (ítem 13) y el
+  backend necesitan la unidad de cada prueba; sin la propiedad se construirían una tabla paralela, que
+  es justo lo que prohíbe el invariante 4 del proyecto.
+- **2026-08-03 — Los `display` de LOINC van en inglés, sin alterar.** Su licencia prohíbe cambiar el
+  contenido de sus campos, y la **variante lingüística española de LOINC 2.82 es parcial**: traduce
+  los ejes (`Glucosa`, `Concentración de masa`, `Suero o Plasma`) pero deja vacío el nombre largo. El
+  español que ve el usuario es el `display` del catálogo local, que sí es nuestro. Los conceptos
+  SNOMED se enumeran **sin `display`** por el mismo motivo: lo resuelve el servidor.
+- **2026-08-03 — `identifier.type` con códigos de v2-0203, no con los SNOMED del SNS de D21.** Los
+  tres códigos de la extensión española (`1551000122105`, `1571000122102`, `22851000122109`)
+  **no resuelven en `tx.fhir.org`**, que solo sirve la edición internacional: usarlos rompería la
+  validación en CI. Se usan los de THO, que sí se validan — y `JHN` (*jurisdictional health number*)
+  describe el CIP autonómico mejor de lo esperado. **Los SNOMED del SNS se recuperan en el hito 2**,
+  al montar el servidor de terminología con la Edición Española (D14); un `CodeableConcept` admite
+  las dos codificaciones a la vez.
+- **2026-08-03 — Los motivos de rechazo combinan dos sistemas de THO**, porque ninguno basta:
+  `RejectionCriterion` aporta volumen insuficiente y contenedor roto, y `specimenCondition` —al que R5
+  ata `Specimen.condition`— aporta contaminada y autolizada. Ninguno inventado.
+- **2026-08-03 — El `ConceptMap` se escribe explícito, sin `RuleSet`.** Los parámetros de un `RuleSet`
+  de FSH **no admiten paréntesis**, ni escapados, y los nombres oficiales de LOINC los llevan
+  (`Thyroxine (T4) free…`). Como no se puede alterar el nombre publicado por LOINC, la tabla va
+  entera. Un `ConceptMap` es datos, no lógica repetida: escribirlo explícito no es duplicación.
+
 ## Estado actual
 
-**Ítems 0, 1 y 2 cerrados (2026-08-03). Monorepo andamiado, subido a `origin/main` y con los nueve
-perfiles compilando.**
+**Ítems 0, 1, 2 y 3 cerrados (2026-08-03). Monorepo andamiado y subido a `origin/main`; la IG tiene
+sus nueve perfiles y su terminología.**
 
 | Componente | Estado | Verificado con |
 |---|---|---|
-| `ig/` | 9 perfiles + extensión `codigo-ine` + 3 `RuleSet` + 3 invariantes | `npx fsh-sushi .` → **0 errores, 0 warnings**; IG Publisher hasta Jekyll, limpio |
+| `ig/` | 9 perfiles, extensión `codigo-ine`, `CodeSystem` de 21 pruebas, `ConceptMap` a LOINC y 4 `ValueSet` | `npx fsh-sushi .` → **0 errores, 0 warnings**; IG Publisher en CI, verde |
 | `backend/` | Spring Boot 3.5.16 + HAPI FHIR R5 8.10.1, *wrapper* Maven | `./mvnw verify` → **BUILD SUCCESS, 3 tests** |
 | `web-profesional/` | Angular 22.1 + vitest + angular-eslint | `npm run lint`, `npm test` (**3 tests**), `npm run build` |
 | `simuladores/` | Paquete `generador` con su CLI, ruff y pytest | `ruff check`/`format`, `pytest` → **7 tests** |
 | `integracion/`, `app-ciudadano/` | **Sin andamiar a propósito** (hito 2) | conservan su guarda de auto-omisión |
 
-**Siguiente: ítem 3** — terminología. `CodeSystem` del catálogo local, `ConceptMap` catálogo → LOINC
-y los `ValueSet` de tipos de muestra, motivos de rechazo y catálogo EDO. Al hacerlo hay que **atar
-los *bindings* que el ítem 2 dejó sin atar** (`code`, `type`, `condition`) y codificar
-`identifier.type` con los códigos SNOMED del SNS de D21.
+**Siguiente: ítem 4** — al menos un ejemplo por perfil en `ig/input/examples/`, validando en CI, y
+probar la salvaguarda en rojo. **La CI de `ig/` está en rojo hasta que se haga**, y lo está a
+propósito: el paso de validación falla en cuanto hay perfiles sin ejemplos, que es el criterio C2.
 
-> **Estado de la CI, con precisión.** El repositorio está subido a `origin/main` (remoto por **SSH**:
-> el PAT de HTTPS no tiene *scope* `workflow` y GitHub rechaza el push de `.github/workflows/`). Los
-> seis workflows están **registrados y `active`**, pero **ninguno se ha ejecutado todavía**: en un
-> *push* que **crea** la rama, el `before` es el SHA nulo, no hay diff que comparar y los workflows
-> filtrados por `paths:` se saltan enteros. El primer push con diff real los disparará —y de paso
-> demostrará el filtrado—. Sigue **sin comprobar** que la CI de `ig/` funcione: es la que lleva los
-> cambios de fondo (Ruby + Jekyll, plantilla `fhir2`).
+> **Estado de la CI.** Subido a `origin/main` por **SSH** (el PAT de HTTPS no tiene *scope* `workflow`
+> y GitHub rechaza el push de `.github/workflows/`). Comprobado ya en ejecuciones reales:
+>
+> - **El filtrado por ruta funciona**, con evidencia en los dos sentidos: un push que tocó `ig/**` y
+>   `backend/**` disparó exactamente esos dos workflows y ninguno de los otros cuatro.
+> - **`backend` en verde**, tras corregir el bit de ejecución de `mvnw`.
+> - **`ig`: el IG Publisher construye la guía entera en CI** —Ruby + Jekyll y plantilla `fhir2`
+>   incluidos—, que era lo que quedaba sin probar del ítem 1. Falla el paso siguiente, el de validar
+>   ejemplos, por no haberlos todavía.
+> - **`web-profesional`, `simuladores`, `integracion` y `app-ciudadano` siguen sin ejecutarse nunca**:
+>   no se ha tocado su ruta desde la primera subida.
 
 ---
 
@@ -234,7 +271,15 @@ los *bindings* que el ítem 2 dejó sin atar** (`code`, `type`, `condition`) y c
   *Trampas:* `ServiceRequest.code` es **`CodeableReference`**; las extensiones de apellidos se declaran
   sobre **`HumanName.family`**, no sobre `HumanName`; `Coverage.kind` es **`1..1`**.
 
-- [ ] **3 — Terminología y extensión propia.**
+- [x] **3 — Terminología y extensión propia.**
+  *Hecho el 2026-08-03.* `CodeSystem/catalogo-pruebas` con **21 pruebas** y la unidad UCUM como
+  propiedad; `ConceptMap/catalogo-a-loinc` con las 21 correspondencias; y cuatro `ValueSet`
+  (`pruebas-del-catalogo`, `tipos-muestra`, `motivos-rechazo-muestra`, `catalogo-edo`). Atados los
+  *bindings* que el ítem 2 dejó sueltos y añadidos los `identifier.type`. La extensión `codigo-ine`
+  se hizo en el ítem 2. Verificado con `npx fsh-sushi .` → **0 errores, 0 warnings**.
+  **Todos los códigos verificados contra fuente primaria:** los LOINC contra la tabla Core de
+  LOINC 2.82 archivada en la biblioteca (existen, `ACTIVE`, sin copyright de terceros); los SNOMED
+  contra `tx.fhir.org`; los de HL7 contra el paquete `hl7.terminology.r5#7.3.0`.
   *Criterio:* `CodeSystem` del catálogo local, `ConceptMap` catálogo → LOINC, `ValueSet` de tipos de
   muestra, motivos de rechazo y catálogo EDO, y la extensión propia `codigo-ine` — todos compilan y
   se publican en la IG. `hl7.fhir.uv.extensions@5.3.0` declarado como dependencia en `sushi-config.yaml`.

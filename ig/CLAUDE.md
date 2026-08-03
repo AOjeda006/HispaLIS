@@ -26,6 +26,7 @@ respuesta de IA o snippet basado en R4 que se copie sin mirar va a fallar aquí:
 | `DiagnosticReport.composition` | no existe | `0..1 Reference` | |
 | `Specimen.combined` / `.role` / `.feature` | no existen | nuevos | |
 | `Organization.telecom` / `.address` | existen | **eliminados** → `contact` (`ExtendedContactDetail`) | Un `Organization` de R4 **no valida** en R5 |
+| `ConceptMap.source[x]` / `.target[x]` · `element.target.equivalence` | así se llaman | **`sourceScope[x]`/`targetScope[x]`** y **`relationship`**, con códigos distintos | Un `ConceptMap` de R4 **no valida** en R5 |
 | **Extensiones** | dentro del núcleo | **paquete aparte** `hl7.fhir.uv.extensions` | Hay que declararlo como dependencia |
 
 ---
