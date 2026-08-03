@@ -34,6 +34,9 @@ Alias: $TIPOS_IDENTIFICADOR_HL7 = http://terminology.hl7.org/CodeSystem/v2-0203
 Alias: $CRITERIOS_RECHAZO      = http://terminology.hl7.org/CodeSystem/rejection-criteria
 Alias: $CONDICION_MUESTRA_HL7  = http://terminology.hl7.org/CodeSystem/v2-0493
 
+// Estado de ayuno del paciente: `Specimen.collection.fastingStatus` lo ata con fuerza required.
+Alias: $AYUNO_HL7              = http://terminology.hl7.org/CodeSystem/v2-0916
+
 
 // ─── `Identifier.system` — ADOPTADOS de la IG española de ÚNICAS ─────────────
 //
@@ -62,6 +65,10 @@ Alias: $SID_NASS      = https://aojeda006.github.io/HispaLIS/sid/nass
 Alias: $SID_NICA      = https://aojeda006.github.io/HispaLIS/sid/nica
 Alias: $SID_NIF       = https://aojeda006.github.io/HispaLIS/sid/nif
 Alias: $SID_COLEGIADO = https://aojeda006.github.io/HispaLIS/sid/colegiado
+
+// El `system` del colegiado lleva el colegio emisor al final, así que hay uno por colegio. Se
+// declaran aquí los que usan los ejemplos, para que tampoco esos escriban la URI a mano.
+Alias: $SID_COLEGIADO_COM_SEVILLA = https://aojeda006.github.io/HispaLIS/sid/colegiado/com-sevilla
 
 
 // ─── Extensiones estándar (paquete aparte en R5: `hl7.fhir.uv.extensions`) ───

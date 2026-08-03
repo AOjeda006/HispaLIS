@@ -26,74 +26,77 @@ término LOINC por el nombre en vez de por sus seis ejes es el error de mapeo m�
 * ^valueSet = Canonical(PruebasDelCatalogo)
 * ^property[0].code = #unidad-ucum
 * ^property[0].description = "Unidad UCUM en la que el laboratorio emite el resultado. Ausente en las pruebas cualitativas."
-* ^property[0].type = #code
+// `Coding` y no `code`: la unidad va con su sistema, que es la regla dura del proyecto. Además,
+// una propiedad de tipo `code` se interpreta como código de ESTE CodeSystem, que no es lo que se
+// quiere decir: `mg/dL` no es una prueba del catálogo.
+* ^property[0].type = #Coding
 
 
 // ─── Bioquímica ──────────────────────────────────────────────────────────────
 
 * #GLU "Glucosa" "Glucosa en suero o plasma."
 * #GLU ^property[0].code = #unidad-ucum
-* #GLU ^property[0].valueCode = #mg/dL
+* #GLU ^property[0].valueCoding = $UCUM#"mg/dL"
 
 * #CREA "Creatinina" "Creatinina en suero o plasma."
 * #CREA ^property[0].code = #unidad-ucum
-* #CREA ^property[0].valueCode = #mg/dL
+* #CREA ^property[0].valueCoding = $UCUM#"mg/dL"
 
 // En España se informa la UREA; en el mundo anglosajón, el NITRÓGENO UREICO (BUN). Son magnitudes
 // distintas con códigos LOINC distintos y un factor de conversión de 2,14 entre ellas.
 * #UREA "Urea" "Urea en suero o plasma."
 * #UREA ^property[0].code = #unidad-ucum
-* #UREA ^property[0].valueCode = #mg/dL
+* #UREA ^property[0].valueCoding = $UCUM#"mg/dL"
 
 * #NA "Sodio" "Sodio en suero o plasma."
 * #NA ^property[0].code = #unidad-ucum
-* #NA ^property[0].valueCode = #mmol/L
+* #NA ^property[0].valueCoding = $UCUM#"mmol/L"
 
 * #K "Potasio" "Potasio en suero o plasma."
 * #K ^property[0].code = #unidad-ucum
-* #K ^property[0].valueCode = #mmol/L
+* #K ^property[0].valueCoding = $UCUM#"mmol/L"
 
 * #COLT "Colesterol total" "Colesterol total en suero o plasma."
 * #COLT ^property[0].code = #unidad-ucum
-* #COLT ^property[0].valueCode = #mg/dL
+* #COLT ^property[0].valueCoding = $UCUM#"mg/dL"
 
 * #GOT "GOT (AST)" "Aspartato aminotransferasa en suero o plasma."
 * #GOT ^property[0].code = #unidad-ucum
-* #GOT ^property[0].valueCode = #U/L
+* #GOT ^property[0].valueCoding = $UCUM#"U/L"
 
 * #GPT "GPT (ALT)" "Alanina aminotransferasa en suero o plasma."
 * #GPT ^property[0].code = #unidad-ucum
-* #GPT ^property[0].valueCode = #U/L
+* #GPT ^property[0].valueCoding = $UCUM#"U/L"
 
 // «PCR» es ambiguo en un laboratorio español: proteína C reactiva y reacción en cadena de la
 // polimerasa. Aquí es la primera, y la definición es lo que lo resuelve. Esa ambigüedad es
 // exactamente la razón de que un dialecto local necesite mapearse a un lenguaje común.
 * #PCR "Proteína C reactiva" "Proteína C reactiva en suero o plasma. No confundir con la reacción en cadena de la polimerasa."
 * #PCR ^property[0].code = #unidad-ucum
-* #PCR ^property[0].valueCode = #mg/L
+* #PCR ^property[0].valueCoding = $UCUM#"mg/L"
 
 * #HBA1C "Hemoglobina glicosilada" "Fracción de hemoglobina A1c sobre hemoglobina total, en sangre."
 * #HBA1C ^property[0].code = #unidad-ucum
-* #HBA1C ^property[0].valueCode = #%
+* #HBA1C ^property[0].valueCoding = $UCUM#"%"
 
 
 // ─── Hematología ─────────────────────────────────────────────────────────────
 
 * #HB "Hemoglobina" "Hemoglobina en sangre."
 * #HB ^property[0].code = #unidad-ucum
-* #HB ^property[0].valueCode = #g/dL
+* #HB ^property[0].valueCoding = $UCUM#"g/dL"
 
 * #HTO "Hematocrito" "Fracción de volumen de eritrocitos en sangre."
 * #HTO ^property[0].code = #unidad-ucum
-* #HTO ^property[0].valueCode = #%
+* #HTO ^property[0].valueCoding = $UCUM#"%"
 
 * #LEU "Leucocitos" "Recuento de leucocitos en sangre."
 * #LEU ^property[0].code = #unidad-ucum
-* #LEU ^property[0].valueCode = #"10*3/uL"
+* #LEU ^property[0].valueCoding = $UCUM#"10*3/uL"
 
 * #PLAQ "Plaquetas" "Recuento de plaquetas en sangre."
 * #PLAQ ^property[0].code = #unidad-ucum
-* #PLAQ ^property[0].valueCode = #"10*3/uL"
+* #PLAQ ^property[0].valueCoding = $UCUM#"10*3/uL"
 
 
 // ─── Hormonas ────────────────────────────────────────────────────────────────
@@ -102,11 +105,11 @@ término LOINC por el nombre en vez de por sus seis ejes es el error de mapeo m�
 // que se enlaza con `Observation.triggeredBy`.
 * #TSH "TSH (tirotropina)" "Tirotropina en suero o plasma."
 * #TSH ^property[0].code = #unidad-ucum
-* #TSH ^property[0].valueCode = #"u[IU]/mL"
+* #TSH ^property[0].valueCoding = $UCUM#"u[IU]/mL"
 
 * #T4L "T4 libre" "Tiroxina libre en suero o plasma."
 * #T4L ^property[0].code = #unidad-ucum
-* #T4L ^property[0].valueCode = #ng/dL
+* #T4L ^property[0].valueCoding = $UCUM#"ng/dL"
 
 
 // ─── Microbiología y serología ───────────────────────────────────────────────

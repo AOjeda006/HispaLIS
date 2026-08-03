@@ -40,7 +40,9 @@ LOINC 2.82 es parcial —traduce los ejes, no el nombre largo—. El español qu
 * experimental = true
 
 * sourceScopeCanonical = Canonical(PruebasDelCatalogo)
-* targetScopeUri = "http://loinc.org"
+// `targetScope` tiene que ser un ValueSet: `http://loinc.org` es el CodeSystem y el validador lo
+// rechaza. `http://loinc.org/vs` es el conjunto implícito de todos los códigos LOINC.
+* targetScopeUri = "http://loinc.org/vs"
 
 * group[+].source = Canonical(CatalogoPruebas)
 * group[=].target = "http://loinc.org"

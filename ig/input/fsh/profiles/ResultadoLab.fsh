@@ -43,11 +43,12 @@ re-ejecución por fallo técnico. En R4 esto había que inventarlo.
 // tipos de `value[x]` no corresponden a este dominio.
 * value[x] only Quantity or CodeableConcept or string
 * value[x] MS
+* valueQuantity MS
 * valueQuantity.value 1..1
 * valueQuantity.unit 1..1 MS
 * valueQuantity.unit ^short = "Unidad tal como se imprime en el informe"
 * valueQuantity.system 1..1
-* valueQuantity.system = $UCUM (exactly)
+* valueQuantity.system = $UCUM
 * valueQuantity.code 1..1 MS
 * valueQuantity.code ^short = "Código UCUM de la unidad, que es el que permite convertir y comparar"
 

@@ -83,27 +83,47 @@ jobs:
           curl -sSL -o validator_cli.jar \
             https://github.com/hapifhir/org.hl7.fhir.core/releases/latest/download/validator_cli.jar
 
-      # La exigencia se activa en cuanto la IG tiene perfiles: en ese momento, no tener ejemplos es
-      # un error que detiene el build. Mientras la IG esté solo andamiada no hay nada que validar,
-      # y fallar por ello sería ruido, no una salvaguarda.
+      # Criterio de aceptación 2, literalmente: TODO perfil necesita al menos un ejemplo. No basta
+      # con que existan ejemplos sueltos — se comprueba perfil por perfil, cruzando cada
+      # StructureDefinition con los `meta.profile` de las instancias.
+      - name: Comprobar que cada perfil tiene ejemplo
+        run: |
+          python3 - <<'PY'
+          import glob, json, sys
+
+          perfiles, declarados = {}, set()
+          for ruta in glob.glob("ig/fsh-generated/resources/*.json"):
+              with open(ruta, encoding="utf-8") as f:
+                  r = json.load(f)
+              if (r.get("resourceType") == "StructureDefinition"
+                      and r.get("derivation") == "constraint"
+                      and r.get("type") != "Extension"):
+                  perfiles[r["url"]] = r["id"]
+              declarados.update(r.get("meta", {}).get("profile", []))
+
+          if not perfiles:
+              print("::notice::La IG todavía no define perfiles; no hay ejemplos que validar.")
+              sys.exit(0)
+
+          sin_ejemplo = sorted(i for u, i in perfiles.items() if u not in declarados)
+          if sin_ejemplo:
+              for i in sin_ejemplo:
+                  print(f"::error::El perfil «{i}» no tiene ningún ejemplo que lo declare en meta.profile.")
+              print(f"::error::{len(sin_ejemplo)} de {len(perfiles)} perfiles se quedan sin ejemplo (criterio de aceptación 2).")
+              sys.exit(1)
+
+          print(f"Los {len(perfiles)} perfiles tienen al menos un ejemplo.")
+          PY
+
+      # Los ejemplos se escriben en FSH, así que lo que hay que validar es lo que SUSHI genera, no
+      # una carpeta de JSON a mano. Se valida el paquete entero: las instancias contra el perfil que
+      # declaran en `meta.profile`, y de paso los propios artefactos de conformidad.
       - name: Validar los ejemplos contra sus perfiles
         run: |
-          perfiles=$(find ig/input/fsh -name '*.fsh' -not -name 'aliases.fsh' | wc -l)
-          ejemplos=$(find ig/input/examples -type f -not -name '.gitkeep' | wc -l)
-
-          if [ "$perfiles" -eq 0 ]; then
-            echo "::notice::La IG todavía no define perfiles; no hay ejemplos que validar."
-            exit 0
-          fi
-
-          if [ "$ejemplos" -eq 0 ]; then
-            echo "::error::La IG define $perfiles artefactos FSH y no hay ningún ejemplo en ig/input/examples. Todo perfil necesita al menos un ejemplo que valide (criterio de aceptación 2)."
-            exit 1
-          fi
-
-          java -jar validator_cli.jar ig/input/examples \
+          java -jar validator_cli.jar ig/fsh-generated/resources \
             -version "$VERSION_FHIR" \
             -ig "$PAQUETE_FHIR" \
+            -ig hl7.fhir.uv.tools.r5#1.1.2 \
             -ig ig/output/package.tgz \
             -recurse \
             -output-style compact
@@ -133,6 +153,13 @@ jobs:
       name: github-pages
       url: ${{ steps.despliegue.outputs.page_url }}
     steps:
+      # `enablement: true` da de alta GitHub Pages en modo «GitHub Actions» si aún no lo está, para
+      # que publicar la guía no dependa de que alguien recuerde tocar los ajustes del repositorio.
+      - name: Preparar GitHub Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
       - name: Desplegar
         id: despliegue
         uses: actions/deploy-pages@v4
