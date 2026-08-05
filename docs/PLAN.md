@@ -313,7 +313,7 @@ para tipar los *slices* de `identifier` —CIP-SNS `1551000122105`, CIP-AUT `157
 
 ## Estado actual
 
-**Ítems 0 a 12 cerrados (2026-08-05).** La guía de implementación está terminada y **publicada en
+**Ítems 0 a 13 cerrados (2026-08-05).** La guía de implementación está terminada y **publicada en
 `https://aojeda006.github.io/HispaLIS/`** (las páginas cuelgan de `/es/`; la raíz redirige por
 JavaScript), y el backend ya tiene su primer circuito de escritura completo: un `POST /fhir/Patient`
 entra por la API, pasa por el núcleo de dominio y sale publicado como proyección, todo en una sola
@@ -324,7 +324,7 @@ transacción, y el primer invariante de negocio puro ya rechaza lo que no debe.
 | `ig/` | 9 perfiles, extensión `codigo-ine`, `CodeSystem` de 21 pruebas, `ConceptMap` a LOINC, 4 `ValueSet` y 18 ejemplos — **publicada** | `npx fsh-sushi .` → **0 errores, 0 warnings**; en CI, IG Publisher y validador oficial **en verde**; sitio desplegado comprobado (19 enlaces de la portada, `lang="es"`, los tres avisos) |
 | `backend/` | Servidor JPA empotrado · **los cinco agregados del hito 1** sobre el esquema `dominio` con Flyway · circuito completo `Patient` → `ServiceRequest` → `Specimen` → `Observation` → `DiagnosticReport` · concurrencia optimista con `If-Match` → `412` · búsqueda filtrada y paginada por `Bundle.link` · los siete caminos de error, cada uno con su código y su `OperationOutcome` | `./mvnw verify` → **BUILD SUCCESS, 42 tests**; validador oficial sobre lo que publica el circuito → **0 errores** |
 | `web-profesional/` | Angular 22.1 + vitest + angular-eslint | `npm run lint`, `npm test` (**3 tests**), `npm run build` |
-| `simuladores/` | Paquete `generador` con su CLI, ruff y pytest | `ruff check`/`format`, `pytest` → **7 tests** |
+| `simuladores/` | **Generador de datos sintéticos completo**: terminología leída de la guía, identificadores españoles con dígito de control, paneles correlacionados, reflejas y muestras rechazadas | `ruff check`/`format`, `pytest` → **70 tests**; validador oficial sobre el corpus generado → **0 errores** |
 | `integracion/`, `app-ciudadano/` | **Sin andamiar a propósito** (hito 2) | conservan su guarda de auto-omisión |
 
 **Con el 12 cerrado, la API del hito 1 está completa**: escribe por el núcleo, lee por la proyección,
@@ -334,10 +334,13 @@ predijeron baratos «porque vienen heredados de HAPI y solo hay que probarlos»;
 dominio atrás—. Lo heredado hay que **probarlo antes de darlo por bueno**, que es distinto de
 implementarlo y distinto de confiar en ello.
 
-**Siguiente: ítem 13** — el generador de datos sintéticos en Python. Es el primero que sale del
-backend y **consume el mismo `CodeSystem` y el mismo `ConceptMap` que la guía publica** (D15): nada
-de una lista paralela de códigos. Antes del ítem 14 hay que cerrar además la carencia anotada abajo
-(`Observation` sin `effective[x]` ni `performer`), porque la web profesional los va a pintar.
+**Siguiente: ítem 14** — la web profesional en Angular. Antes hay que cerrar la carencia anotada
+abajo: **el resultado se publica sin `effective[x]` ni `performer`**, los dos `Must Support`, y la
+web tiene que pintarlos. Toca el agregado `Resultado` y una migración, así que va primero y con su
+propio commit.
+
+Queda **una sola pieza de infraestructura** después: el ítem 15 (`docker compose up`), que **necesita
+que el usuario instale Docker** — está anotado más abajo.
 
 > **Estado de la CI.** Subido a `origin/main` por **SSH** (el PAT de HTTPS no tiene *scope* `workflow`
 > y GitHub rechaza el push de `.github/workflows/`). Comprobado ya en ejecuciones reales:
@@ -571,7 +574,33 @@ de una lista paralela de códigos. Antes del ítem 14 hay que cerrar además la 
 
 ### Los clientes y el arranque
 
-- [ ] **13 — Generador de datos sintéticos. (C11)**
+- [x] **13 — Generador de datos sintéticos. (C11)** — *hecho el 2026-08-05.*
+  Siete módulos en `simuladores/generador/` y 63 tests nuevos (7 → 70). `python -m generador --seed 42`
+  produce 100 pacientes, ~126 episodios y ~1.000 recursos; **el validador oficial de HL7 los da por
+  conformes con 0 errores**, y la CI de simuladores lo comprueba en cada empujón.
+  *La terminología se lee, no se copia (D15).* Consume los mismos `CodeSystem-catalogo-pruebas` y
+  `ConceptMap-catalogo-a-loinc` que publica la guía. Como no están versionados —los produce SUSHI—,
+  **el generador se niega a arrancar si faltan** y dice qué ejecutar: arrancar con un catálogo a
+  medias produce un corpus que parece bueno y no lo es. Dos tests cruzan los códigos de los paneles
+  y de los rangos contra el catálogo, y los tipos de muestra contra el `ValueSet`: es la puerta por
+  la que se colaría una lista paralela, y queda cerrada por comprobación y no por buena voluntad.
+  *Los casos obligatorios se garantizan, no se esperan.* De un generador aleatorio no se obtiene una
+  garantía sino una probabilidad, así que los primeros pacientes de toda ejecución son los casos que
+  rompen sistemas: `MUÑOZ`, `ÁLVAREZ` y `PEÑA` para el charset, y «de la Torre Gómez» y «Fernández
+  de Córdoba Ruiz» para el heurístico de partir por el espacio — el test comprueba que el primer
+  apellido de «de la Torre Gómez» es «de la Torre» y no «de».
+  *Y donde de verdad se falla:* la letra del NIE se calcula sustituyendo la inicial por su dígito
+  (`X`→0, `Y`→1, `Z`→2). Quien se salte ese paso acierta con las `X` y falla con dos tercios del
+  corpus, así que hay un test que exige que salgan las tres iniciales y que las tres validen.
+  *Resultados que se comportan como resultados:* se piden por paneles y no de uno en uno, el
+  hematocrito cuadra con la hemoglobina (regla de los tres), el rango de referencia depende del sexo
+  en la serie roja, una TSH alta dispara una T4 libre enlazada con `Observation.triggeredBy` —nuevo
+  en R5—, y una de cada diez muestras llega rechazada y no produce resultados, para que el corpus
+  ejercite el invariante C6 y no solo el camino feliz.
+  *La reproducibilidad la fijan tres parámetros, no uno:* semilla, pacientes y **fecha**, porque la
+  actividad se reparte hacia atrás desde ese día. Un test compara dos volcados completos y otro
+  —el control negativo— comprueba que con otra semilla la salida cambia: sin él, un generador que
+  devolviera siempre lo mismo aprobaría el primero con matrícula de honor.
   *Criterio:* `python -m generador --seed 42` produce pacientes con **apellidos dobles** (incluidos
   casos como `"de la Torre Gómez"`), **DNI/NIE con dígito de control válido** y **NUHSA con formato
   `AN` + 10 dígitos**; **`MUÑOZ`, `ÁLVAREZ` y `PEÑA` entre los casos**; una parte de los pacientes
@@ -669,6 +698,16 @@ Se detalla al cerrar el hito 1; no se adelanta trabajo.
   líneas de la petición resueltas*; ahora se exige que no esté vacío y que no mezcle pacientes.
   Cerrar la versión completa necesita cruzar las líneas de la petición con sus resultados, y el
   enlace ya existe (`Resultado.peticionId`). Pendiente para el cierre del hito.
+- **Los códigos INE de municipio del generador son una lista corta escrita a mano** (ocho municipios
+  de la provincia 41), no el registro del INE. La provincia sí está verificada —41, Sevilla, la
+  misma que usa el ejemplo de la guía— y el `codigo-ine` no se valida contra ningún `ValueSet`, así
+  que un municipio equivocado no rompe nada ni lo detecta el validador. Es deuda consciente y de
+  poco calado: si algún día el código INE se ata a un conjunto de valores, hay que traer el registro
+  completo en vez de ampliar la lista.
+- **La reproducibilidad del generador depende de la versión de Faker.** Sus corpus cambian entre
+  versiones mayores, así que la dependencia está acotada (`faker>=40,<41`). Subir de mayor cambiará
+  la salida con la misma semilla; no es un fallo, pero hay que saberlo antes de investigar por qué
+  un volcado ya no coincide.
 - **La IG propia es trabajo real:** nueve perfiles más terminología, sin US Core ni IPS de donde tirar.
   Es el ítem que más fácilmente se subestima.
 - **Sin la red de seguridad de Mirth** (D11): almacén de mensajes, reintentos y consola de reproceso
