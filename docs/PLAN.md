@@ -169,6 +169,28 @@ para tipar los *slices* de `identifier` —CIP-SNS `1551000122105`, CIP-AUT `157
   `fsh-generated/`. No son un defecto: la narrativa la genera el IG Publisher después, y lo que valida
   la CI es la entrada. Son avisos, no errores, y no detienen el build.
 
+### Decisiones tomadas al abrir el dominio (ítem 7)
+
+- **2026-08-05 — El dominio persiste con SQL explícito, no con Spring Data JPA.** *Desviación
+  consciente de la convención de Spring del proyecto.* El `EntityManagerFactory` es de HAPI
+  (ADR-0011): meter nuestras entidades dentro obligaría a reproducir a mano la lista de paquetes que
+  HAPI escanea, que es interna suya y puede crecer en una versión menor —y lo que falte desaparece
+  en silencio—. A cambio el agregado queda **libre de anotaciones de persistencia**, que es lo que
+  Clean Architecture pide de un núcleo. La convención sigue valiendo donde el EMF sea nuestro.
+- **2026-08-05 — La transacción única se prueba por el lado del fallo, no por el camino feliz.** Un
+  test que solo dé de alta y lea pasa igual con una transacción que con dos. El que la prueba es el
+  del NHC duplicado: si el rechazo del dominio dejara un `Patient` detrás, habría dos transacciones.
+  Todo depende de `JpaTransactionManager.setDataSource(...)`, que no da ningún aviso al faltar.
+- **2026-08-05 — El proveedor de `Patient` hereda del de HAPI y solo sustituye la creación.** La
+  lectura, la búsqueda, `_history` y el `ETag`/`If-Match` vienen de ahí, y son los criterios 8, 10 y
+  11. Se registra sustituyendo al de HAPI —dos proveedores del mismo recurso es error de arranque— y
+  hay que enlazarlo a su DAO a mano, porque es un bean de Spring y la fábrica de HAPI no lo toca.
+- **2026-08-05 — El NHC lo emite el laboratorio y su unicidad se declara en la base de datos.** Una
+  comprobación previa en Java no sobrevive a dos altas concurrentes; el índice único no se equivoca.
+- **2026-08-05 — Flyway gobierna `dominio`; HAPI gobierna lo suyo.** Conviven un Flyway y un
+  `hbm2ddl.auto` sin pisarse porque cada uno manda en su esquema. Añadido
+  `flyway-database-postgresql`, que es lo que faltaba en el ítem 6.
+
 ### Decisiones tomadas al abrir el backend (ítem 6)
 
 - **2026-08-03 — Los tests del backend corren contra PostgreSQL embebido (`io.zonky.test`), no
@@ -254,20 +276,23 @@ para tipar los *slices* de `identifier` —CIP-SNS `1551000122105`, CIP-AUT `157
 
 ## Estado actual
 
-**Ítems 0 a 6 cerrados (2026-08-03).** La guía de implementación está terminada y **publicada en
+**Ítems 0 a 7 cerrados (2026-08-05).** La guía de implementación está terminada y **publicada en
 `https://aojeda006.github.io/HispaLIS/`** (las páginas cuelgan de `/es/`; la raíz redirige por
-JavaScript), y el backend ya sirve su primera respuesta FHIR: `GET /fhir/metadata`.
+JavaScript), y el backend ya tiene su primer circuito de escritura completo: un `POST /fhir/Patient`
+entra por la API, pasa por el núcleo de dominio y sale publicado como proyección, todo en una sola
+transacción.
 
 | Componente | Estado | Verificado con |
 |---|---|---|
 | `ig/` | 9 perfiles, extensión `codigo-ine`, `CodeSystem` de 21 pruebas, `ConceptMap` a LOINC, 4 `ValueSet` y 18 ejemplos — **publicada** | `npx fsh-sushi .` → **0 errores, 0 warnings**; en CI, IG Publisher y validador oficial **en verde**; sitio desplegado comprobado (19 enlaces de la portada, `lang="es"`, los tres avisos) |
-| `backend/` | Spring Boot 3.5.16 + HAPI FHIR R5 8.10.1 con el **servidor JPA empotrado**; `GET /fhir/metadata` sirviendo | `./mvnw verify` → **BUILD SUCCESS, 7 tests**, contra un PostgreSQL real embebido |
+| `backend/` | Servidor JPA de HAPI empotrado · **núcleo de dominio** (`Paciente`) sobre el esquema `dominio` con Flyway · `GET /fhir/metadata` y `POST /fhir/Patient` | `./mvnw verify` → **BUILD SUCCESS, 16 tests**, contra un PostgreSQL real embebido |
 | `web-profesional/` | Angular 22.1 + vitest + angular-eslint | `npm run lint`, `npm test` (**3 tests**), `npm run build` |
 | `simuladores/` | Paquete `generador` con su CLI, ruff y pytest | `ruff check`/`format`, `pytest` → **7 tests** |
 | `integracion/`, `app-ciudadano/` | **Sin andamiar a propósito** (hito 2) | conservan su guarda de auto-omisión |
 
-**Siguiente: ítem 7** — *read-your-writes* en una sola transacción, que es donde aparece el núcleo de
-dominio y con él la primera migración de Flyway.
+**Siguiente: ítem 8** — el invariante del espécimen rechazado, **por TDD y con el rojo visible en el
+historial de commits**. Es el primer invariante de negocio puro: vive en el núcleo, no en el
+`ResourceProvider`.
 
 > **Estado de la CI.** Subido a `origin/main` por **SSH** (el PAT de HTTPS no tiene *scope* `workflow`
 > y GitHub rechaza el push de `.github/workflows/`). Comprobado ya en ejecuciones reales:
@@ -400,7 +425,17 @@ dominio y con él la primera migración de Flyway.
   *Criterio:* `GET /fhir/metadata` devuelve `200` con `fhirVersion` = **`5.0.0`** y declara los
   perfiles soportados. Test automatizado.
 
-- [ ] **7 — Read-your-writes en una sola transacción. (C4)**
+- [x] **7 — Read-your-writes en una sola transacción. (C4)**
+  *Hecho el 2026-08-05.* Aparece el **núcleo de dominio**: agregado `Paciente` con `Nhc` y
+  `NombrePersona` como objetos de valor, su puerto `RepositorioDePacientes`, y el esquema `dominio`
+  gobernado por Flyway. El camino de escritura es el de §9 — el recurso se traduce a un alta, el
+  agregado valida al construirse, se guarda el dominio y **la proyección se genera desde él**, todo
+  en un `@Transactional`. `./mvnw verify` → **16 tests**.
+  *Lo que sostiene la transacción única:* `JpaTransactionManager.setDataSource(...)`. Sin esa línea
+  el SQL del dominio pediría su propia conexión, **todo compilaría y el camino feliz pasaría igual**.
+  Por eso el test la prueba **por el lado del fallo**: dos altas con el mismo NHC, y el rechazo no
+  puede dejar un `Patient` huérfano. Detalle y las otras cuatro trampas en
+  `docs/adr/adr-0012-una-sola-transaccion-entre-dominio-y-proyeccion.md`.
   *Criterio:* `POST /fhir/Patient` devuelve **`201`** + `Location` + `ETag` **`W/"1"`**, y un `GET`
   **inmediato** al `Location` devuelve el recurso. **Test automatizado**, no comprobación manual.
   Dominio y proyección HAPI JPA se escriben en **un solo `@Transactional`** (§9).
