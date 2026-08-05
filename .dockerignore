@@ -1,0 +1,37 @@
+# Qué NO entra en el contexto de construcción de las imágenes.
+#
+# El contexto es la raíz del repositorio, porque la imagen de la web necesita `ig/` para compilar la
+# terminología con SUSHI (D15). Sin este fichero, cada `docker build` empezaría empaquetando cientos
+# de megas de `node_modules` y `target` para tirarlos después.
+#
+# Y hay una exclusión que además es deliberada: `ig/fsh-generated/` no se copia aunque exista en la
+# máquina de quien construye. Es artefacto generado, y la imagen lo regenera con SUSHI para que
+# construir desde un clon recién hecho y construir aquí den exactamente lo mismo.
+
+.git
+.github
+**/node_modules
+**/target
+**/dist
+**/.angular
+**/build
+**/.venv
+**/__pycache__
+**/*.egg-info
+**/.pytest_cache
+**/.ruff_cache
+
+ig/output
+ig/temp
+ig/input-cache
+ig/fsh-generated
+ig/publisher.jar
+ig/validator_cli.jar
+
+simuladores/corpus
+**/salida-generador
+docs
+app-ciudadano
+integracion
+**/*.md
+!README.md

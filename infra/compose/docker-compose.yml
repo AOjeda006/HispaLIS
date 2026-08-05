@@ -1,0 +1,68 @@
+# La pila del hito 1: PostgreSQL + backend + web profesional.
+#
+#   docker compose -f infra/compose/docker-compose.yml up
+#
+# Todo lo que hace falta para recorrer el circuito de extremo a extremo desde un clon recién hecho.
+# Fuera del hito 1 quedan Kafka, Keycloak y el servidor de terminología (hito 2): sus carpetas están
+# en `infra/` pero vacías a propósito.
+
+name: hispalis
+
+services:
+  postgres:
+    # 14 y no la última: es la versión con la que corren los tests del backend (PostgreSQL embebido),
+    # y las dos tienen que moverse juntas. Con versiones distintas, una migración que use algo de
+    # PG15 pasaría aquí y fallaría en los tests — ya ocurrió una vez, con `NULLS NOT DISTINCT`.
+    image: postgres:14-alpine
+    environment:
+      POSTGRES_DB: hispalis
+      POSTGRES_USER: hispalis
+      # Es una simulación con datos sintéticos y la base no se publica fuera de la red del compose.
+      # En cualquier otro sitio esto sería un secreto, no una línea en un fichero versionado.
+      POSTGRES_PASSWORD: hispalis
+    volumes:
+      - datos-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U hispalis -d hispalis']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build:
+      # El contexto es la raíz del repositorio, compartido con la web.
+      context: ../..
+      dockerfile: backend/Dockerfile
+    environment:
+      HISPALIS_BD_URL: jdbc:postgresql://postgres:5432/hispalis
+      HISPALIS_BD_USUARIO: hispalis
+      HISPALIS_BD_CLAVE: hispalis
+    ports:
+      # Se publica aunque la web no lo necesite —le llega por el proxy—, porque el circuito se
+      # recorre con `curl` y el validador oficial también entra por aquí.
+      - '8080:8080'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # `metadata` es la prueba honesta de que está listo: contesta cuando el servidor FHIR está
+      # levantado de verdad, no cuando el proceso existe.
+      test: ['CMD', 'curl', '-fsS', 'http://localhost:8080/fhir/metadata']
+      interval: 10s
+      timeout: 5s
+      # HAPI JPA tarda en el primer arranque: crea su centenar de tablas y Flyway migra las nuestras.
+      start_period: 120s
+      retries: 30
+
+  web:
+    build:
+      context: ../..
+      dockerfile: web-profesional/Dockerfile
+    ports:
+      - '4200:80'
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  datos-postgres:

@@ -689,7 +689,26 @@ que el usuario instale Docker** — está anotado más abajo.
   *mocks*); los errores se muestran a partir del `OperationOutcome`; los apellidos se muestran sin
   partir por el espacio; el valor se presenta siempre con **unidad y rango de referencia**.
 
-- [ ] **15 — `docker compose up` levanta el circuito. (C12)**
+- [x] **15 — `docker compose up` levanta el circuito. (C12)** — *hecho el 2026-08-05.*
+  Tres servicios encadenados por *healthcheck*: PostgreSQL, el backend y la web tras un nginx que
+  sirve la SPA y hace de proxy de `/fhir`. `docker compose … up` deja la pila en pie y el circuito
+  entero recorrido contra ella —paciente, facultativo, las dos líneas de petición, muestra,
+  resultados e informe—, con `MUÑOZ de la Torre ÁLVAREZ` intacto, los rangos por sexo y el error sin
+  NHC como `400` en `OperationOutcome`.
+  *La terminología se compila dentro de la imagen.* `ig/fsh-generated/` está en el `.dockerignore`
+  **a propósito**, aunque exista en la máquina de quien construye: la imagen de la web ejecuta SUSHI
+  ella misma, y así construir desde un clon recién hecho y construir aquí dan lo mismo. Sin eso, el
+  build funcionaría en este equipo y fallaría en el de cualquier otro, que es el fallo que este
+  criterio existe para cazar.
+  *Y las dos cabeceras de nginx que no son decorativas:* `X-Forwarded-Host` y `X-Forwarded-Proto`.
+  Sin ellas el enlace de la página siguiente saldría apuntando a `http://backend:8080/fhir?…`, un
+  nombre que solo resuelve dentro de la red del compose. Comprobado que sale como
+  `http://localhost:4200/fhir?…` y que la segunda página se alcanza.
+  *PostgreSQL 14 y no la última:* es la versión con la que corren los tests, y las dos tienen que
+  moverse juntas. Con versiones distintas, una migración que use algo de PG15 pasaría en el compose
+  y fallaría en los tests — ya ocurrió una vez, con `NULLS NOT DISTINCT`.
+  **En Windows no hace falta Docker Desktop:** con WSL2 basta `docker.io` + `docker-compose-v2`
+  dentro de la distro. Anotado en el `README.md`.
   *Criterio:* `docker compose -f infra/compose/docker-compose.yml up` arranca **backend + PostgreSQL +
   web** y el circuito del ítem 9 funciona de extremo a extremo contra esa pila, partiendo de un repo
   recién clonado y siguiendo solo el `README.md`.

@@ -78,17 +78,32 @@ cd HispaLIS
 docker compose -f infra/compose/docker-compose.yml up
 ```
 
-Levanta **backend + PostgreSQL + web profesional**. Con la pila arriba:
+Levanta **PostgreSQL + backend + web profesional**, en ese orden y esperando a que cada uno esté
+sano. La primera vez tarda unos minutos: compila el backend con Maven y la web con Angular, y de
+paso **compila la terminología de la guía con SUSHI**, porque el catálogo de pruebas que ofrece la
+pantalla de alta sale del `CodeSystem` que publica la IG y no de una lista aparte (D15).
+
+- **Web profesional:** `http://localhost:4200`
+- **API FHIR:** `http://localhost:8080/fhir` — y también en `http://localhost:4200/fhir`, que es por
+  donde entra la web: mismo origen, sin CORS.
 
 ```bash
 # comprobar que el servidor declara R5
 curl -s http://localhost:8080/fhir/metadata | jq '.fhirVersion'   # → "5.0.0"
 
-# poblar con datos sintéticos
-cd simuladores && python -m generador --seed 42 --pacientes 100
+# empezar de cero (la base se conserva entre arranques en un volumen)
+docker compose -f infra/compose/docker-compose.yml down -v
 ```
 
-La web profesional queda en `http://localhost:4200`.
+**La base arranca vacía.** No es un descuido: la pantalla de alta de petición busca al paciente por
+su número de historia y, si no consta, lo da de alta ahí mismo — que es lo que hace el mostrador de
+un laboratorio privado con quien llega por primera vez. Para un corpus grande está el generador
+(`simuladores/`), que hoy **escribe ficheros y no publica en la API**: cargarlo es trabajo del hito 2,
+cuando exista el motor de integración.
+
+> **En Windows no hace falta Docker Desktop.** Con WSL2 basta instalar Docker dentro de la distro
+> (`sudo apt install docker.io docker-compose-v2`) y ejecutar el `compose` desde ella, con el
+> repositorio en `/mnt/c/...`. Los puertos publicados se ven igual en `localhost` desde Windows.
 
 > Mientras el hito 1 no esté cerrado, algunos de estos comandos aún no existen. El estado real de cada
 > pieza está en [`docs/PLAN.md`](docs/PLAN.md).
