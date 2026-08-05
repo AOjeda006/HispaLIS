@@ -169,6 +169,25 @@ para tipar los *slices* de `identifier` —CIP-SNS `1551000122105`, CIP-AUT `157
   `fsh-generated/`. No son un defecto: la narrativa la genera el IG Publisher después, y lo que valida
   la CI es la entrada. Son avisos, no errores, y no detienen el build.
 
+### Decisiones tomadas con el invariante del espécimen (ítem 8)
+
+- **2026-08-05 — El id lógico FHIR de un recurso es el UUID de su agregado.** Una referencia
+  `Specimen/<uuid>` que llega por la API resuelve al dominio **sin tabla de correspondencias**, que
+  es lo que permite comprobar el invariante sin leer la proyección — y lo que hará trivial el
+  reconciliador del hito 2. Obliga a escribir la proyección con `dao.update(...)` y no `create(...)`,
+  que es como HAPI admite un id asignado por el cliente. Verificado: sigue devolviendo `201` y
+  `ETag W/"1"`.
+- **2026-08-05 — Tercer tipo de error de dominio: `ReglaDeNegocioIncumplida` → 422.** `409` es chocar
+  con algo que ya existe (un NHC repetido); esto es **una acción que no procede** por el estado de
+  las cosas. `422 Unprocessable Entity` es el código que la propia especificación de FHIR reserva
+  para cuando *«el recurso propuesto viola las reglas de negocio del servidor»*.
+- **2026-08-05 — La comprobación del invariante va en la fábrica del agregado, no en el caso de uso.**
+  Un método que devolviera un booleano se puede ignorar; `exigirQuePuedeProducirResultados()` no. La
+  diferencia entre un invariante y una recomendación es que no exista un camino que se la salte.
+- **2026-08-05 — El motivo del rechazo se guarda como texto en el dominio, no como código.** El
+  núcleo no es un servidor de terminología: lo que necesita es poder decir *por qué* se rechazó. La
+  codificación vive en la proyección, que es donde se consume.
+
 ### Decisiones tomadas al abrir el dominio (ítem 7)
 
 - **2026-08-05 — El dominio persiste con SQL explícito, no con Spring Data JPA.** *Desviación
@@ -276,23 +295,23 @@ para tipar los *slices* de `identifier` —CIP-SNS `1551000122105`, CIP-AUT `157
 
 ## Estado actual
 
-**Ítems 0 a 7 cerrados (2026-08-05).** La guía de implementación está terminada y **publicada en
+**Ítems 0 a 8 cerrados (2026-08-05).** La guía de implementación está terminada y **publicada en
 `https://aojeda006.github.io/HispaLIS/`** (las páginas cuelgan de `/es/`; la raíz redirige por
 JavaScript), y el backend ya tiene su primer circuito de escritura completo: un `POST /fhir/Patient`
 entra por la API, pasa por el núcleo de dominio y sale publicado como proyección, todo en una sola
-transacción.
+transacción, y el primer invariante de negocio puro ya rechaza lo que no debe.
 
 | Componente | Estado | Verificado con |
 |---|---|---|
 | `ig/` | 9 perfiles, extensión `codigo-ine`, `CodeSystem` de 21 pruebas, `ConceptMap` a LOINC, 4 `ValueSet` y 18 ejemplos — **publicada** | `npx fsh-sushi .` → **0 errores, 0 warnings**; en CI, IG Publisher y validador oficial **en verde**; sitio desplegado comprobado (19 enlaces de la portada, `lang="es"`, los tres avisos) |
-| `backend/` | Servidor JPA de HAPI empotrado · **núcleo de dominio** (`Paciente`) sobre el esquema `dominio` con Flyway · `GET /fhir/metadata` y `POST /fhir/Patient` | `./mvnw verify` → **BUILD SUCCESS, 16 tests**, contra un PostgreSQL real embebido |
+| `backend/` | Servidor JPA empotrado · dominio con `Paciente`, `Especimen` y `Resultado` sobre el esquema `dominio` con Flyway · `metadata`, `Patient`, `Specimen` y `Observation` | `./mvnw verify` → **BUILD SUCCESS, 26 tests**, contra un PostgreSQL real embebido |
 | `web-profesional/` | Angular 22.1 + vitest + angular-eslint | `npm run lint`, `npm test` (**3 tests**), `npm run build` |
 | `simuladores/` | Paquete `generador` con su CLI, ruff y pytest | `ruff check`/`format`, `pytest` → **7 tests** |
 | `integracion/`, `app-ciudadano/` | **Sin andamiar a propósito** (hito 2) | conservan su guarda de auto-omisión |
 
-**Siguiente: ítem 8** — el invariante del espécimen rechazado, **por TDD y con el rojo visible en el
-historial de commits**. Es el primer invariante de negocio puro: vive en el núcleo, no en el
-`ResourceProvider`.
+**Siguiente: ítem 9** — el circuito completo por API (`Patient` → `ServiceRequest` → `Specimen` →
+`Observation` → `DiagnosticReport`), con todos los recursos validando contra su perfil. Faltan por
+tanto los agregados de **petición** e **informe**.
 
 > **Estado de la CI.** Subido a `origin/main` por **SSH** (el PAT de HTTPS no tiene *scope* `workflow`
 > y GitHub rechaza el push de `.github/workflows/`). Comprobado ya en ejecuciones reales:
@@ -425,7 +444,7 @@ historial de commits**. Es el primer invariante de negocio puro: vive en el núc
   *Criterio:* `GET /fhir/metadata` devuelve `200` con `fhirVersion` = **`5.0.0`** y declara los
   perfiles soportados. Test automatizado.
 
-- [x] **7 — Read-your-writes en una sola transacción. (C4)**
+- [x] **7 — Read-your-writes en una sola transacción, y el primer invariante de negocio puro ya rechaza lo que no debe. (C4)**
   *Hecho el 2026-08-05.* Aparece el **núcleo de dominio**: agregado `Paciente` con `Nhc` y
   `NombrePersona` como objetos de valor, su puerto `RepositorioDePacientes`, y el esquema `dominio`
   gobernado por Flyway. El camino de escritura es el de §9 — el recurso se traduce a un alta, el
@@ -440,7 +459,18 @@ historial de commits**. Es el primer invariante de negocio puro: vive en el núc
   **inmediato** al `Location` devuelve el recurso. **Test automatizado**, no comprobación manual.
   Dominio y proyección HAPI JPA se escriben en **un solo `@Transactional`** (§9).
 
-- [ ] **8 — El invariante del espécimen rechazado, por TDD. (C6)**
+- [x] **8 — El invariante del espécimen rechazado, por TDD. (C6)**
+  *Hecho el 2026-08-05.* **El rojo está en el historial**: `a283f1f` es el test fallando
+  (`expected 422, but was 201` — HAPI acepta encantado un resultado de una muestra rechazada) y
+  `1ba49e9` lo pone en verde. Aparecen los agregados `Especimen` y `Resultado`.
+  El invariante vive en la **fábrica de `Resultado`**, no en quien la llama: no existe un camino que
+  informe un resultado sin pasar por la comprobación. `InformarResultado` **carga la muestra del
+  dominio** en vez de creerse lo que diga el recurso recibido, que puede referenciar una muestra
+  rechazada sin mencionar su estado.
+  *Dos tests que prueban cosas distintas:* el de integración comprueba que la API responde **422**
+  con el motivo dentro; el unitario corre **sin Spring, sin HTTP y sin base de datos**, y es lo que
+  demuestra que el invariante está en el núcleo — si hiciera falta levantar la API para probarlo,
+  estaría en la puerta. `./mvnw verify` → **26 tests**.
   *Criterio:* un `Specimen` con `status = unsatisfactory` **no** puede producir un `Observation`;
   el intento devuelve el error correcto en `OperationOutcome`. **Test escrito en rojo primero** — debe
   verse en el historial de commits. El invariante vive en el **núcleo de dominio**, no en el
