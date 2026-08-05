@@ -3,17 +3,22 @@ package es.hispalis.backend.fhir.resultado;
 import es.hispalis.backend.dominio.DatoInvalido;
 import es.hispalis.backend.dominio.especimen.Especimen;
 import es.hispalis.backend.dominio.resultado.Medicion;
+import es.hispalis.backend.dominio.resultado.RangoDeReferencia;
+import es.hispalis.backend.dominio.resultado.RepositorioDeRangosDeReferencia;
 import es.hispalis.backend.dominio.resultado.Resultado;
 import es.hispalis.backend.fhir.CatalogoDePruebas;
 import es.hispalis.backend.fhir.PerfilesDeLaGuia;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Date;
+import java.util.Map;
 import java.util.UUID;
 import org.hl7.fhir.r5.model.CodeableConcept;
 import org.hl7.fhir.r5.model.Coding;
 import org.hl7.fhir.r5.model.DateTimeType;
 import org.hl7.fhir.r5.model.Enumerations.ObservationStatus;
 import org.hl7.fhir.r5.model.Observation;
+import org.hl7.fhir.r5.model.Observation.ObservationReferenceRangeComponent;
 import org.hl7.fhir.r5.model.Quantity;
 import org.hl7.fhir.r5.model.Reference;
 import org.hl7.fhir.r5.model.StringType;
@@ -24,6 +29,16 @@ import org.springframework.stereotype.Component;
 public class TraductorDeResultado {
 
     private static final String UCUM = "http://unitsofmeasure.org";
+    private static final String SNOMED = "http://snomed.info/sct";
+
+    /** Sexo al que aplica un rango, en SNOMED: los códigos que usa `referenceRange.appliesTo`. */
+    private static final Map<String, String> SEXO_EN_SNOMED = Map.of("male", "248153007", "female", "248152002");
+
+    private final RepositorioDeRangosDeReferencia rangos;
+
+    public TraductorDeResultado(RepositorioDeRangosDeReferencia rangos) {
+        this.rangos = rangos;
+    }
 
     /**
      * Construye el agregado a partir del recurso recibido.
@@ -96,7 +111,31 @@ public class TraductorDeResultado {
                 .realizadaEn()
                 .ifPresent(cuando -> recurso.setEffective(new DateTimeType(Date.from(cuando))));
         resultado.medicion().realizadaPor().ifPresent(quien -> recurso.addPerformer(new Reference(quien)));
+
+        // Sin rango, la cifra es un número suelto: «4,2» es normal para un potasio y alto para una
+        // creatinina. Se publican TODOS los de la prueba, cada uno diciendo a quién aplica, porque
+        // aquí no se conoce al paciente — y porque es para eso para lo que FHIR hizo `appliesTo`.
+        rangos.buscarPorPrueba(resultado.codigoDePrueba()).forEach(rango -> recurso.addReferenceRange(aFhir(rango)));
         return recurso;
+    }
+
+    private static ObservationReferenceRangeComponent aFhir(RangoDeReferencia rango) {
+        ObservationReferenceRangeComponent componente = new ObservationReferenceRangeComponent();
+        componente.setLow(cantidad(rango.bajo(), rango.unidadUcum()));
+        componente.setHigh(cantidad(rango.alto(), rango.unidadUcum()));
+        rango.sexoAlQueAplica()
+                .map(SEXO_EN_SNOMED::get)
+                .ifPresent(codigo -> componente.addAppliesTo(new CodeableConcept()
+                        .addCoding(new Coding().setSystem(SNOMED).setCode(codigo))));
+        return componente;
+    }
+
+    private static Quantity cantidad(BigDecimal valor, String unidadUcum) {
+        return new Quantity()
+                .setValue(valor)
+                .setUnit(unidadUcum)
+                .setSystem(UCUM)
+                .setCode(unidadUcum);
     }
 
     /**

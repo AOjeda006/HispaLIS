@@ -116,6 +116,44 @@ class MedicionDelResultadoTest extends TestDeIntegracion {
     }
 
     @Test
+    void el_resultado_se_publica_con_su_rango_de_referencia() {
+        String paciente = crear(pacienteDePrueba());
+        String muestra = crear(muestraDePrueba(paciente));
+
+        Observation publicado = leer(crear(resultadoDePrueba(paciente, muestra)));
+
+        // «92» a secas no significa nada: es normal para una glucosa y absurdo para un potasio. El
+        // criterio de aceptación 10 exige que el valor se presente siempre con unidad y con rango,
+        // y la web no puede mostrar lo que el servidor no publica.
+        assertThat(publicado.getReferenceRange()).hasSize(1);
+        Observation.ObservationReferenceRangeComponent rango = publicado.getReferenceRangeFirstRep();
+        assertThat(rango.getLow().getValue()).isEqualByComparingTo("70");
+        assertThat(rango.getHigh().getValue()).isEqualByComparingTo("100");
+        assertThat(rango.getLow().getCode()).isEqualTo("mg/dL");
+    }
+
+    @Test
+    void una_prueba_con_rango_por_sexo_publica_los_dos_y_dice_a_quien_aplica() {
+        String paciente = crear(pacienteDePrueba());
+        String muestra = crear(muestraDePrueba(paciente));
+
+        Observation enviado = resultadoDePrueba(paciente, muestra);
+        enviado.setCode(new CodeableConcept()
+                .addCoding(new Coding().setSystem(CatalogoDePruebas.SYSTEM).setCode("HB")));
+        enviado.setValue(
+                new Quantity().setValue(14).setUnit("g/dL").setSystem(UCUM).setCode("g/dL"));
+
+        Observation publicado = leer(crear(enviado));
+
+        // Se publican los dos con `appliesTo` en vez de elegir uno: la proyección no conoce al
+        // paciente, y una hemoglobina de 13 g/dL es normal en una mujer y baja en un hombre, así
+        // que elegir a ciegas sería equivocarse la mitad de las veces.
+        assertThat(publicado.getReferenceRange()).hasSize(2);
+        assertThat(publicado.getReferenceRange())
+                .allSatisfy(rango -> assertThat(rango.getAppliesTo()).isNotEmpty());
+    }
+
+    @Test
     void una_fecha_de_medicion_en_el_futuro_se_rechaza() {
         String paciente = crear(pacienteDePrueba());
         String muestra = crear(muestraDePrueba(paciente));
