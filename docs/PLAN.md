@@ -322,7 +322,7 @@ transacción, y el primer invariante de negocio puro ya rechaza lo que no debe.
 | Componente | Estado | Verificado con |
 |---|---|---|
 | `ig/` | 9 perfiles, extensión `codigo-ine`, `CodeSystem` de 21 pruebas, `ConceptMap` a LOINC, 4 `ValueSet` y 18 ejemplos — **publicada** | `npx fsh-sushi .` → **0 errores, 0 warnings**; en CI, IG Publisher y validador oficial **en verde**; sitio desplegado comprobado (19 enlaces de la portada, `lang="es"`, los tres avisos) |
-| `backend/` | Servidor JPA empotrado · **los cinco agregados del hito 1** sobre el esquema `dominio` con Flyway · circuito completo `Patient` → `ServiceRequest` → `Specimen` → `Observation` → `DiagnosticReport` · concurrencia optimista con `If-Match` → `412` · búsqueda filtrada y paginada por `Bundle.link` · los siete caminos de error, cada uno con su código y su `OperationOutcome` · el resultado conserva cuándo se midió y quién lo hizo | `./mvnw verify` → **BUILD SUCCESS, 46 tests**; validador oficial sobre lo que publica el circuito → **0 errores** |
+| `backend/` | Servidor JPA empotrado · **los cinco agregados del hito 1** sobre el esquema `dominio` con Flyway · circuito completo `Patient` → `ServiceRequest` → `Specimen` → `Observation` → `DiagnosticReport` · concurrencia optimista con `If-Match` → `412` · búsqueda filtrada y paginada por `Bundle.link` · los siete caminos de error, cada uno con su código y su `OperationOutcome` · el resultado conserva cuándo se midió, quién lo hizo y entre qué cifras es normal | `./mvnw verify` → **BUILD SUCCESS, 48 tests**; validador oficial sobre lo que publica el circuito → **0 errores** |
 | `web-profesional/` | Angular 22.1 + vitest + angular-eslint | `npm run lint`, `npm test` (**3 tests**), `npm run build` |
 | `simuladores/` | **Generador de datos sintéticos completo**: terminología leída de la guía, identificadores españoles con dígito de control, paneles correlacionados, reflejas y muestras rechazadas | `ruff check`/`format`, `pytest` → **70 tests**; validador oficial sobre el corpus generado → **0 errores** |
 | `integracion/`, `app-ciudadano/` | **Sin andamiar a propósito** (hito 2) | conservan su guarda de auto-omisión |
@@ -334,9 +334,11 @@ predijeron baratos «porque vienen heredados de HAPI y solo hay que probarlos»;
 dominio atrás—. Lo heredado hay que **probarlo antes de darlo por bueno**, que es distinto de
 implementarlo y distinto de confiar en ello.
 
-**Siguiente: ítem 14** — la web profesional en Angular, contra la API FHIR real y sin *mocks*. Su
-prerrequisito ya está cerrado: el resultado publica `effective[x]` y `performer`, que es lo que la
-web tiene que pintar junto a la unidad y el rango.
+**Siguiente: ítem 14** — la web profesional en Angular, contra la API FHIR real y sin *mocks*. Sus
+**dos prerrequisitos ya están cerrados**, los dos descubiertos al leer el criterio con cuidado en vez
+de al llegar a la pantalla: el resultado publica `effective[x]` y `performer`, y publica también su
+`referenceRange`. El criterio pide que el valor se presente «siempre con unidad y rango de
+referencia», y la web no puede mostrar lo que el servidor no publica.
 
 Después queda **una sola pieza de infraestructura**: el ítem 15 (`docker compose up`), que **necesita
 que el usuario instale Docker** — está anotado más abajo.
@@ -695,6 +697,20 @@ Se detalla al cerrar el hito 1; no se adelanta trabajo.
   propia guía—, pero **no se inventan**: rellenar la fecha con la hora de registro coloca un
   resultado de ayer entre los de hoy. Una fecha en el **futuro** sí se rechaza con `400`: es un
   analizador con el reloj mal puesto, y su efecto es que el resultado se lee como el más reciente.
+- ~~**El resultado se publica sin `referenceRange`**~~ — **cerrado el 2026-08-05**, el otro
+  prerrequisito del ítem 14. Tabla `dominio.rango_de_referencia` sembrada en la migración `V5` y
+  publicada por la proyección. Van en la base de datos y **no en la guía** a propósito: los códigos
+  de prueba son terminología compartida (D15), pero los rangos dependen del método y del analizador
+  de cada laboratorio — dos laboratorios que usan el mismo `CREA` publican rangos distintos sin
+  contradecirse.
+- **Los rangos de referencia están escritos dos veces**, y de momento nada comprueba que coincidan:
+  en `V5__rangos_de_referencia.sql` (lo que el laboratorio **publica**) y en
+  `simuladores/generador/clinica.py` (lo que el generador usa para **sortear valores verosímiles**).
+  Son dos propósitos distintos, pero si divergen, el generador producirá resultados que el
+  laboratorio interpretará de otra manera. Ni el backend puede leer el fichero de Python ni el
+  generador puede alcanzar la base de datos, así que el arreglo es un **fichero de datos común** que
+  consuman los dos —el mismo patrón que la terminología, pero sin sitio en la IG porque esto no es
+  vocabulario compartido—. Pendiente para el cierre del hito.
 - **El invariante completo del informe está a medias.** §10 pide que solo se emita *con todas las
   líneas de la petición resueltas*; ahora se exige que no esté vacío y que no mezcle pacientes.
   Cerrar la versión completa necesita cruzar las líneas de la petición con sus resultados, y el
