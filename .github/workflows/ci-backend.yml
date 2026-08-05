@@ -8,18 +8,16 @@ on:
     paths:
       - 'backend/**'
       - '.github/workflows/ci-backend.yml'
-      # El backend declara en su `CapabilityStatement` los perfiles de la guía, y un test cruza esa
-      # lista contra el FSH para que no diverjan. Sin esta ruta, añadir un perfil a la guía no
-      # dispararía el test que detecta justamente eso.
-      - 'ig/input/fsh/profiles/**'
+      # El backend depende del FSH de la guía por dos vías, y las dos son reales: un test cruza la
+      # lista de perfiles del `CapabilityStatement` contra los `.fsh` para que no diverjan, y el
+      # validador oficial comprueba contra esos mismos perfiles lo que produce el circuito. Sin esta
+      # ruta, cambiar la guía no dispararía ninguna de las dos comprobaciones.
+      - 'ig/input/fsh/**'
   pull_request:
     paths:
       - 'backend/**'
       - '.github/workflows/ci-backend.yml'
-      # El backend declara en su `CapabilityStatement` los perfiles de la guía, y un test cruza esa
-      # lista contra el FSH para que no diverjan. Sin esta ruta, añadir un perfil a la guía no
-      # dispararía el test que detecta justamente eso.
-      - 'ig/input/fsh/profiles/**'
+      - 'ig/input/fsh/**'
   workflow_dispatch:
 
 permissions:
@@ -28,6 +26,10 @@ permissions:
 concurrency:
   group: ci-backend-${{ github.ref }}
   cancel-in-progress: true
+
+env:
+  VERSION_FHIR: 5.0.0
+  PAQUETE_FHIR: hl7.fhir.r5.core#5.0.0
 
 jobs:
   verificar:
@@ -42,11 +44,45 @@ jobs:
           java-version: '21'
           cache: maven
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Los perfiles contra los que se valida el circuito salen del FSH, así que hay que compilarlo.
+      # NO se construye la IG entera —eso es cosa de `ci-ig`, y cuesta minutos—: para validar basta
+      # con los artefactos de conformidad que genera SUSHI en segundos.
+      - name: Compilar los perfiles de la guía
+        working-directory: ig
+        run: npx --yes fsh-sushi .
+
       # `verify` incluye la comprobación de formato de Spotless, enganchada a esa fase en el pom: el
       # formato se exige con el mismo comando que corre los tests, sin una orden aparte que olvidar.
+      # El test del circuito deja en `target/circuito/` lo que el servidor publica, para el paso
+      # siguiente.
       - name: Build y tests
         working-directory: backend
         run: ./mvnw --batch-mode verify
+
+      - name: Descargar el validador oficial de HL7
+        run: |
+          curl -sSL -o validator_cli.jar \
+            https://github.com/hapifhir/org.hl7.fhir.core/releases/latest/download/validator_cli.jar
+
+      # Criterio de aceptación 5, la mitad que el test no puede afirmar por sí solo: que el circuito
+      # funcione y que lo que produce sea CONFORME son dos cosas distintas. Lo segundo solo lo dice
+      # el validador de la especificación.
+      #
+      # Se valida lo que el servidor DEVUELVE, no lo que el cliente envió: lo que tiene que ser
+      # conforme es la proyección que el laboratorio publica.
+      - name: Validar el circuito contra los perfiles de la guía
+        run: |
+          java -jar validator_cli.jar backend/target/circuito \
+            -version "$VERSION_FHIR" \
+            -ig "$PAQUETE_FHIR" \
+            -ig hl7.fhir.uv.tools.r5#1.1.2 \
+            -ig ig/fsh-generated/resources \
+            -recurse \
+            -output-style compact
 
       - name: Publicar los informes de test
         if: always()
@@ -54,5 +90,14 @@ jobs:
         with:
           name: backend-informes-test
           path: backend/target/surefire-reports/
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Publicar los recursos del circuito
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-circuito
+          path: backend/target/circuito/
           retention-days: 7
           if-no-files-found: ignore

@@ -22,6 +22,7 @@ public final class Resultado {
     private final UUID id;
     private final UUID especimenId;
     private final UUID pacienteId;
+    private final UUID peticionId;
     private final String codigoDePrueba;
     private final BigDecimal valor;
     private final String unidadUcum;
@@ -31,6 +32,7 @@ public final class Resultado {
             UUID id,
             UUID especimenId,
             UUID pacienteId,
+            UUID peticionId,
             String codigoDePrueba,
             BigDecimal valor,
             String unidadUcum,
@@ -38,6 +40,7 @@ public final class Resultado {
         this.id = id;
         this.especimenId = especimenId;
         this.pacienteId = pacienteId;
+        this.peticionId = peticionId;
         this.codigoDePrueba = codigoDePrueba;
         this.valor = valor;
         this.unidadUcum = unidadUcum;
@@ -57,7 +60,7 @@ public final class Resultado {
      * @throws DatoInvalido si falta el código de prueba, la cifra o la unidad
      */
     public static Resultado informarCuantitativo(
-            Especimen especimen, String codigoDePrueba, BigDecimal valor, String unidadUcum) {
+            Especimen especimen, UUID peticionId, String codigoDePrueba, BigDecimal valor, String unidadUcum) {
         especimen.exigirQuePuedeProducirResultados();
 
         if (codigoDePrueba == null || codigoDePrueba.isBlank()) {
@@ -74,6 +77,7 @@ public final class Resultado {
                 UUID.randomUUID(),
                 especimen.id(),
                 especimen.pacienteId(),
+                peticionId,
                 codigoDePrueba.strip(),
                 valor,
                 unidadUcum.strip(),
@@ -86,7 +90,7 @@ public final class Resultado {
      * @throws es.hispalis.backend.dominio.ReglaDeNegocioIncumplida si la muestra no puede producir
      *     resultados
      */
-    public static Resultado informarTextual(Especimen especimen, String codigoDePrueba, String texto) {
+    public static Resultado informarTextual(Especimen especimen, UUID peticionId, String codigoDePrueba, String texto) {
         especimen.exigirQuePuedeProducirResultados();
 
         if (codigoDePrueba == null || codigoDePrueba.isBlank()) {
@@ -99,6 +103,7 @@ public final class Resultado {
                 UUID.randomUUID(),
                 especimen.id(),
                 especimen.pacienteId(),
+                peticionId,
                 codigoDePrueba.strip(),
                 null,
                 null,
@@ -110,11 +115,12 @@ public final class Resultado {
             UUID id,
             UUID especimenId,
             UUID pacienteId,
+            UUID peticionId,
             String codigoDePrueba,
             BigDecimal valor,
             String unidadUcum,
             String valorTextual) {
-        return new Resultado(id, especimenId, pacienteId, codigoDePrueba, valor, unidadUcum, valorTextual);
+        return new Resultado(id, especimenId, pacienteId, peticionId, codigoDePrueba, valor, unidadUcum, valorTextual);
     }
 
     public UUID id() {
@@ -127,6 +133,16 @@ public final class Resultado {
 
     public UUID pacienteId() {
         return pacienteId;
+    }
+
+    /**
+     * La línea de petición que lo motivó, si se informó.
+     *
+     * <p>Es opcional porque un resultado puede llegar sin petición previa: una repetición de control
+     * o una determinación añadida en el laboratorio existen aunque nadie las pidiera por volante.
+     */
+    public Optional<UUID> peticionId() {
+        return Optional.ofNullable(peticionId);
     }
 
     public String codigoDePrueba() {

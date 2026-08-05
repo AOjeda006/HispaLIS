@@ -57,7 +57,12 @@ public class InformarResultado {
                 .orElseThrow(() -> new DatoInvalido(
                         "La muestra %s no está registrada en este laboratorio.".formatted(especimenId)));
 
-        Resultado resultado = traductor.aDominio(recibido, especimen);
+        // `basedOn` es opcional: una repetición de control o una determinación añadida en el
+        // laboratorio existen aunque nadie las pidiera por volante.
+        UUID peticionId =
+                recibido.hasBasedOn() ? Referencias.identidadDe(recibido.getBasedOnFirstRep(), "petición") : null;
+
+        Resultado resultado = traductor.aDominio(recibido, especimen, peticionId);
         resultados.guardar(resultado);
 
         return daos.getResourceDao(Observation.class).update(traductor.aFhir(resultado), peticion);

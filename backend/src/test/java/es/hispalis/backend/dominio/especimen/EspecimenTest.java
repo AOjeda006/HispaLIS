@@ -24,6 +24,9 @@ class EspecimenTest {
     private static final UUID UN_PACIENTE = UUID.randomUUID();
     private static final String SANGRE_VENOSA = "122555007";
 
+    /** Un resultado puede existir sin petición previa: una repetición de control, por ejemplo. */
+    private static final UUID SIN_PETICION = null;
+
     @Test
     void una_muestra_rechazada_no_puede_producir_resultados() {
         Especimen rechazada = muestra(EstadoDeEspecimen.RECHAZADA, "Hemolizada");
@@ -54,7 +57,8 @@ class EspecimenTest {
         // entre un invariante y una recomendación: no existe un camino que se la salte.
         Especimen rechazada = muestra(EstadoDeEspecimen.RECHAZADA, "Coagulada");
 
-        assertThatThrownBy(() -> Resultado.informarCuantitativo(rechazada, "GLU", new BigDecimal("92"), "mg/dL"))
+        assertThatThrownBy(() ->
+                        Resultado.informarCuantitativo(rechazada, SIN_PETICION, "GLU", new BigDecimal("92"), "mg/dL"))
                 .isInstanceOf(ReglaDeNegocioIncumplida.class);
     }
 
@@ -78,7 +82,8 @@ class EspecimenTest {
     void el_resultado_hereda_paciente_y_muestra_del_especimen() {
         Especimen disponible = muestra(EstadoDeEspecimen.DISPONIBLE, null);
 
-        Resultado resultado = Resultado.informarCuantitativo(disponible, "GLU", new BigDecimal("92"), "mg/dL");
+        Resultado resultado =
+                Resultado.informarCuantitativo(disponible, SIN_PETICION, "GLU", new BigDecimal("92"), "mg/dL");
 
         assertThat(resultado.especimenId()).isEqualTo(disponible.id());
         assertThat(resultado.pacienteId()).isEqualTo(UN_PACIENTE);
@@ -89,7 +94,8 @@ class EspecimenTest {
     void una_cifra_sin_unidad_no_significa_nada() {
         Especimen disponible = muestra(EstadoDeEspecimen.DISPONIBLE, null);
 
-        assertThatThrownBy(() -> Resultado.informarCuantitativo(disponible, "GLU", new BigDecimal("92"), null))
+        assertThatThrownBy(() ->
+                        Resultado.informarCuantitativo(disponible, SIN_PETICION, "GLU", new BigDecimal("92"), null))
                 .isInstanceOf(DatoInvalido.class)
                 .hasMessageContaining("UCUM");
     }
