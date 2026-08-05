@@ -323,7 +323,7 @@ transacción, y el primer invariante de negocio puro ya rechaza lo que no debe.
 |---|---|---|
 | `ig/` | 9 perfiles, extensión `codigo-ine`, `CodeSystem` de 21 pruebas, `ConceptMap` a LOINC, 4 `ValueSet` y 18 ejemplos — **publicada** | `npx fsh-sushi .` → **0 errores, 0 warnings**; en CI, IG Publisher y validador oficial **en verde**; sitio desplegado comprobado (19 enlaces de la portada, `lang="es"`, los tres avisos) |
 | `backend/` | Servidor JPA empotrado · **los cinco agregados del hito 1** sobre el esquema `dominio` con Flyway · circuito completo `Patient` → `ServiceRequest` → `Specimen` → `Observation` → `DiagnosticReport` · concurrencia optimista con `If-Match` → `412` · búsqueda filtrada y paginada por `Bundle.link` · los siete caminos de error, cada uno con su código y su `OperationOutcome` · el resultado conserva cuándo se midió, quién lo hizo y entre qué cifras es normal | `./mvnw verify` → **BUILD SUCCESS, 48 tests**; validador oficial sobre lo que publica el circuito → **0 errores** |
-| `web-profesional/` | Angular 22.1 + vitest + angular-eslint | `npm run lint`, `npm test` (**3 tests**), `npm run build` |
+| `web-profesional/` | Angular 22.1 + vitest + angular-eslint · **capa de presentación FHIR** (mensaje del `OperationOutcome`, apellidos sin partir, valor con unidad y rango por sexo); **falta la interfaz** | `npm run lint`, `npm test` (**33 tests**), `npm run build` |
 | `simuladores/` | **Generador de datos sintéticos completo**: terminología leída de la guía, identificadores españoles con dígito de control, paneles correlacionados, reflejas y muestras rechazadas | `ruff check`/`format`, `pytest` → **70 tests**; validador oficial sobre el corpus generado → **0 errores** |
 | `integracion/`, `app-ciudadano/` | **Sin andamiar a propósito** (hito 2) | conservan su guarda de auto-omisión |
 
@@ -334,11 +334,11 @@ predijeron baratos «porque vienen heredados de HAPI y solo hay que probarlos»;
 dominio atrás—. Lo heredado hay que **probarlo antes de darlo por bueno**, que es distinto de
 implementarlo y distinto de confiar en ello.
 
-**Siguiente: ítem 14** — la web profesional en Angular, contra la API FHIR real y sin *mocks*. Sus
-**dos prerrequisitos ya están cerrados**, los dos descubiertos al leer el criterio con cuidado en vez
-de al llegar a la pantalla: el resultado publica `effective[x]` y `performer`, y publica también su
-`referenceRange`. El criterio pide que el valor se presente «siempre con unidad y rango de
-referencia», y la web no puede mostrar lo que el servidor no publica.
+**En curso: ítem 14** — la web profesional. Sus **dos prerrequisitos están cerrados**, los dos
+descubiertos al leer el criterio con cuidado en vez de al llegar a la pantalla: el resultado publica
+`effective[x]`, `performer` y `referenceRange`, porque la web no puede mostrar lo que el servidor no
+publica. La **capa de presentación** está escrita y probada; **falta el cliente HTTP y las dos
+pantallas** (alta de petición y consulta de informe), contra la API real y sin *mocks*.
 
 Después queda **una sola pieza de infraestructura**: el ítem 15 (`docker compose up`), que **necesita
 que el usuario instale Docker** — está anotado más abajo.
@@ -609,7 +609,20 @@ que el usuario instale Docker** — está anotado más abajo.
   que la IG, no una lista paralela. Salida **reproducible** con la misma semilla, y todos los recursos
   generados **validan** contra su perfil.
 
-- [ ] **14 — Web profesional en Angular. (C10)**
+- [ ] **14 — Web profesional en Angular. (C10)** — *empezado el 2026-08-05; falta la interfaz.*
+  **Hecho:** los dos prerrequisitos del backend (arriba, en *Notas / riesgos*) y la **capa de
+  presentación** en `web-profesional/src/app/fhir/`: tipos R5 mínimos, `mensajeDeError` a partir del
+  `OperationOutcome`, y `apellidos` / `valorConUnidad` / `rangoDeReferencia`. Son funciones puras,
+  probadas antes de que haya pantalla que las use — **33 tests**, lint y build en verde.
+  *Las tres decisiones que ya están tomadas ahí:* el mensaje de error sale del `OperationOutcome` y
+  no de una tabla de códigos HTTP —el servidor ya explicó qué pasó en términos del negocio—, pero
+  solo si lo recibido **tiene forma** de `OperationOutcome`, porque un proxy de empresa devuelve HTML
+  con la cabecera de la petición original; los apellidos se muestran enteros y su descomposición sale
+  de las extensiones, nunca de partir por el espacio; y el rango que se enseña es el del **sexo** del
+  paciente, elegido aquí porque la proyección no lo conoce — si el sexo no consta no se elige
+  ninguno, que enseñar el de hombre a un paciente sin sexo registrado es inventarse un dato clínico.
+  **Falta:** el cliente HTTP contra la API real (paginación por `Bundle.link[relation=next]`, nunca
+  a mano), la pantalla de alta de petición y la de consulta de informe.
   *Criterio:* alta de petición y consulta de informe funcionando **contra la API FHIR real** (sin
   *mocks*); los errores se muestran a partir del `OperationOutcome`; los apellidos se muestran sin
   partir por el espacio; el valor se presenta siempre con **unidad y rango de referencia**.
