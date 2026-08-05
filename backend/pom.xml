@@ -81,6 +81,17 @@
       <scope>runtime</scope>
     </dependency>
 
+    <!--
+      Flyway gobierna el esquema `dominio`. `flyway-core` llega transitivo desde HAPI, pero desde
+      Flyway 10 el soporte de cada motor va en su propio artefacto: sin este, aborta el arranque con
+      «Unsupported Database: PostgreSQL 14.15», culpando a la base de datos en vez de al módulo.
+    -->
+    <dependency>
+      <groupId>org.flywaydb</groupId>
+      <artifactId>flyway-database-postgresql</artifactId>
+      <scope>runtime</scope>
+    </dependency>
+
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-test</artifactId>

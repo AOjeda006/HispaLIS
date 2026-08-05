@@ -5,6 +5,7 @@ import ca.uhn.fhir.context.FhirContext;
 import ca.uhn.fhir.context.support.IValidationSupport;
 import ca.uhn.fhir.jpa.api.config.JpaStorageSettings;
 import ca.uhn.fhir.jpa.api.config.ThreadPoolFactoryConfig;
+import ca.uhn.fhir.jpa.api.dao.DaoRegistry;
 import ca.uhn.fhir.jpa.api.dao.IFhirSystemDao;
 import ca.uhn.fhir.jpa.batch2.JpaBatch2Config;
 import ca.uhn.fhir.jpa.config.HapiJpaConfig;
@@ -17,13 +18,18 @@ import ca.uhn.fhir.jpa.provider.JpaSystemProvider;
 import ca.uhn.fhir.jpa.search.DatabaseBackedPagingProvider;
 import ca.uhn.fhir.jpa.subscription.channel.config.SubscriptionChannelConfig;
 import ca.uhn.fhir.rest.api.EncodingEnum;
+import ca.uhn.fhir.rest.server.IResourceProvider;
 import ca.uhn.fhir.rest.server.RestfulServer;
 import ca.uhn.fhir.rest.server.provider.ResourceProviderFactory;
 import ca.uhn.fhir.rest.server.util.ISearchParamRegistry;
 import jakarta.persistence.EntityManagerFactory;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 import javax.sql.DataSource;
 import org.hibernate.cfg.AvailableSettings;
 import org.hibernate.search.mapper.orm.cfg.HibernateOrmMapperSettings;
+import org.hl7.fhir.instance.model.api.IBaseResource;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.boot.autoconfigure.orm.jpa.JpaProperties;
 import org.springframework.boot.web.servlet.ServletRegistrationBean;
@@ -124,11 +130,21 @@ public class ConfiguracionServidorFhir {
         return fabrica;
     }
 
+    /**
+     * Gestor de transacciones compartido por el dominio y la proyección.
+     *
+     * <p><strong>Fijar el {@code DataSource} no es opcional ni decorativo:</strong> es lo que hace
+     * que el SQL del repositorio de dominio tome la conexión que la transacción JPA ya tiene abierta
+     * en vez de pedir una suya. Sin esta línea habría dos transacciones, la proyección podría
+     * confirmarse con el dominio revertido, y el <em>read-your-writes</em> de §9 sería mentira. Hay
+     * un test que lo comprueba dando de alta dos veces el mismo NHC.
+     */
     @Bean
     @Primary
-    public JpaTransactionManager transactionManager(EntityManagerFactory fabricaDeEntidades) {
+    public JpaTransactionManager transactionManager(EntityManagerFactory fabricaDeEntidades, DataSource origenDeDatos) {
         JpaTransactionManager gestor = new JpaTransactionManager();
         gestor.setEntityManagerFactory(fabricaDeEntidades);
+        gestor.setDataSource(origenDeDatos);
         return gestor;
     }
 
@@ -137,22 +153,34 @@ public class ConfiguracionServidorFhir {
      *
      * <p>Los proveedores de recurso <strong>no se enumeran</strong>: los fabrica HAPI a partir de
      * los DAO registrados, así que el {@code CapabilityStatement} describe lo que el servidor sabe
-     * hacer de verdad y no lo que alguien escribió una vez en una lista.
+     * hacer de verdad y no lo que alguien escribió una vez en una lista. Las excepciones son los
+     * recursos cuya escritura pasa por el dominio, que traen proveedor propio.
      */
     @Bean
     public RestfulServer servidorFhir(
             FhirContext contexto,
             IFhirSystemDao<?, ?> systemDao,
+            DaoRegistry daos,
             JpaSystemProvider<?, ?> proveedorDeSistema,
             ResourceProviderFactory fabricaDeProveedores,
             JpaStorageSettings ajustes,
             ISearchParamRegistry parametrosDeBusqueda,
             IValidationSupport soporteDeValidacion,
-            DatabaseBackedPagingProvider paginacion) {
+            DatabaseBackedPagingProvider paginacion,
+            List<ProveedorPropio> proveedoresPropios,
+            TraduccionDeErroresDeDominio traduccionDeErrores) {
         RestfulServer servidor = new RestfulServer(contexto);
 
-        servidor.registerProviders(fabricaDeProveedores.createProviders());
+        servidor.registerProviders(sustituyendoLosPropios(fabricaDeProveedores, proveedoresPropios));
+        // Los proveedores propios son beans de Spring, así que HAPI no les ha inyectado su DAO: eso
+        // lo hace su fábrica, y a los nuestros no los fabrica ella. Sin esto, todo lo que hereden de
+        // HAPI —leer, buscar, `_history`— falla con un NullPointerException.
+        proveedoresPropios.forEach(proveedor -> proveedor.enlazarConSuDao(daos));
+        servidor.registerProviders(proveedoresPropios);
         servidor.registerProvider(proveedorDeSistema);
+
+        // Sin esto, un invariante de negocio incumplido saldría como 500.
+        servidor.registerInterceptor(traduccionDeErrores);
         servidor.setServerConformanceProvider(
                 new ConformidadHispaLis(servidor, systemDao, ajustes, parametrosDeBusqueda, soporteDeValidacion));
 
@@ -164,6 +192,25 @@ public class ConfiguracionServidorFhir {
         // que espera todo el ecosistema actual.
         servidor.setDefaultResponseEncoding(EncodingEnum.JSON);
         return servidor;
+    }
+
+    /**
+     * Devuelve los proveedores que fabrica HAPI, menos aquellos cuyo recurso tiene proveedor propio.
+     *
+     * <p>Registrar dos proveedores para el mismo tipo es un error de arranque, así que el nuestro no
+     * se «añade»: sustituye. Se filtra por el tipo de recurso y no por una lista de nombres, para
+     * que dar de alta un proveedor propio nuevo no obligue a acordarse de tocar esto también.
+     */
+    private static List<Object> sustituyendoLosPropios(
+            ResourceProviderFactory fabricaDeProveedores, List<ProveedorPropio> proveedoresPropios) {
+        Set<Class<? extends IBaseResource>> conProveedorPropio = proveedoresPropios.stream()
+                .map(ProveedorPropio::getResourceType)
+                .collect(Collectors.toSet());
+
+        return fabricaDeProveedores.createProviders().stream()
+                .filter(proveedor -> !(proveedor instanceof IResourceProvider deHapi
+                        && conProveedorPropio.contains(deHapi.getResourceType())))
+                .toList();
     }
 
     @Bean

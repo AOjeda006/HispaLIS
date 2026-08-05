@@ -42,12 +42,13 @@ spring:
   thymeleaf:
     check-template-location: false
 
-  # Flyway llega aquí de rebote, como dependencia transitiva de HAPI, y se autoconfigura solo. Se
-  # apaga porque todavía no hay nada que migrar: el esquema de la proyección lo gobierna HAPI y el
-  # del dominio aún no existe. Se enciende en el ítem 7, junto con la primera migración y con
-  # `flyway-database-postgresql`, que es el módulo que falta para que reconozca a PostgreSQL.
+  # Flyway gobierna el esquema `dominio`, que es el nuestro. El de la proyección NO: ese lo define y
+  # lo migra HAPI, y por eso conviven aquí un Flyway y un `hbm2ddl.auto` sin pisarse.
   flyway:
-    enabled: false
+    enabled: true
+    # El esquema hay que crearlo antes de que Flyway intente poner su tabla de control dentro, y lo
+    # hace la propia V1: por eso Flyway se apunta al esquema por defecto y no a `dominio`.
+    locations: classpath:db/migration
 
 server:
   port: 8080
