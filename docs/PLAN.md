@@ -313,7 +313,7 @@ para tipar los *slices* de `identifier` —CIP-SNS `1551000122105`, CIP-AUT `157
 
 ## Estado actual
 
-**Ítems 0 a 9 cerrados (2026-08-05).** La guía de implementación está terminada y **publicada en
+**Ítems 0 a 10 cerrados (2026-08-05).** La guía de implementación está terminada y **publicada en
 `https://aojeda006.github.io/HispaLIS/`** (las páginas cuelgan de `/es/`; la raíz redirige por
 JavaScript), y el backend ya tiene su primer circuito de escritura completo: un `POST /fhir/Patient`
 entra por la API, pasa por el núcleo de dominio y sale publicado como proyección, todo en una sola
@@ -322,14 +322,16 @@ transacción, y el primer invariante de negocio puro ya rechaza lo que no debe.
 | Componente | Estado | Verificado con |
 |---|---|---|
 | `ig/` | 9 perfiles, extensión `codigo-ine`, `CodeSystem` de 21 pruebas, `ConceptMap` a LOINC, 4 `ValueSet` y 18 ejemplos — **publicada** | `npx fsh-sushi .` → **0 errores, 0 warnings**; en CI, IG Publisher y validador oficial **en verde**; sitio desplegado comprobado (19 enlaces de la portada, `lang="es"`, los tres avisos) |
-| `backend/` | Servidor JPA empotrado · **los cinco agregados del hito 1** sobre el esquema `dominio` con Flyway · circuito completo `Patient` → `ServiceRequest` → `Specimen` → `Observation` → `DiagnosticReport` | `./mvnw verify` → **BUILD SUCCESS, 28 tests**; validador oficial sobre lo que publica el circuito → **0 errores** |
+| `backend/` | Servidor JPA empotrado · **los cinco agregados del hito 1** sobre el esquema `dominio` con Flyway · circuito completo `Patient` → `ServiceRequest` → `Specimen` → `Observation` → `DiagnosticReport` · concurrencia optimista con `If-Match` → `412` | `./mvnw verify` → **BUILD SUCCESS, 32 tests**; validador oficial sobre lo que publica el circuito → **0 errores** |
 | `web-profesional/` | Angular 22.1 + vitest + angular-eslint | `npm run lint`, `npm test` (**3 tests**), `npm run build` |
 | `simuladores/` | Paquete `generador` con su CLI, ruff y pytest | `ruff check`/`format`, `pytest` → **7 tests** |
 | `integracion/`, `app-ciudadano/` | **Sin andamiar a propósito** (hito 2) | conservan su guarda de auto-omisión |
 
-**Siguiente: ítem 10** — concurrencia optimista (`If-Match` → `412`). Junto con el 11 (búsqueda y
-paginación) deberían salir baratos: los dos vienen heredados del proveedor de HAPI y lo que falta es
-**probarlos**, no implementarlos.
+**Siguiente: ítem 11** — búsqueda y paginación. Se predijo que el 10 y el 11 saldrían baratos «porque
+vienen heredados de HAPI y solo hay que probarlos», y el 10 **desmintió la mitad**: probar el `PUT`
+destapó que el `update` heredado escribía la proyección y dejaba el dominio atrás. La lección se
+aplica al 11: el criterio no es que el `Bundle` llegue, sino que la paginación se recorra siguiendo
+`Bundle.link[relation=next]` sobre datos que el dominio reconozca como suyos.
 
 > **Estado de la CI.** Subido a `origin/main` por **SSH** (el PAT de HTTPS no tiene *scope* `workflow`
 > y GitHub rechaza el push de `.github/workflows/`). Comprobado ya en ejecuciones reales:
@@ -508,7 +510,21 @@ paginación) deberían salir baratos: los dos vienen heredados del proveedor de 
   → `DiagnosticReport`, **todos conformes a su perfil** (validados con `$validate` o con el validador
   oficial en CI).
 
-- [ ] **10 — Concurrencia optimista. (C7)**
+- [x] **10 — Concurrencia optimista. (C7)** — *hecho el 2026-08-05.*
+  `ConcurrenciaOptimistaTest`, cuatro casos: con la versión vigente, `200` y `ETag: W/"2"`; con una
+  obsoleta, **`412`** y la corrección del primero intacta; el `PUT` llega a `dominio.paciente`
+  (comprobado leyendo la tabla, no la proyección); y el NHC no se puede cambiar → `422`.
+  *Lo que no venía heredado:* se esperaba que el `update` de HAPI bastara, y **no bastaba**. Escribía
+  la proyección FHIR y dejaba el dominio atrás, en silencio y sin un solo error — la forma más barata
+  de que las dos mitades se separen sin que nadie se entere. `Patient` gana su caso de uso
+  `ActualizarPaciente` (corrige la filiación en el núcleo y proyecta en la misma transacción) y los
+  otros cuatro recursos **rechazan el `PUT` explícitamente** (`EscrituraSoloPorAlta`) hasta que su
+  modificación tenga reglas de negocio definidas: entre un fallo visible y una corrupción callada, el
+  fallo visible.
+  *Y un 409 que debía ser 412:* HAPI responde `409` a cualquier choque de versión. Para un choque
+  descubierto sin que nadie preguntara es correcto, pero cuando el cliente **sí preguntó** —mandó
+  `If-Match`— la especificación es explícita: ha fallado una precondición, y son `412`. La diferencia
+  le importa al cliente, que con un `412` sabe que tiene que releer y reintentar.
   *Criterio:* `PUT` con `If-Match` de una versión obsoleta devuelve **`412`**; con la versión vigente,
   `200` y `versionId` incrementado. Test automatizado.
 
