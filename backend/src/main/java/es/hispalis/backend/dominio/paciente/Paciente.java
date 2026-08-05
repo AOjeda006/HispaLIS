@@ -1,5 +1,6 @@
 package es.hispalis.backend.dominio.paciente;
 
+import es.hispalis.backend.dominio.ReglaDeNegocioIncumplida;
 import java.time.LocalDate;
 import java.util.Optional;
 import java.util.UUID;
@@ -84,6 +85,47 @@ public final class Paciente {
         return new Paciente(
                 UUID.randomUUID(),
                 nhc,
+                nombre,
+                enBlancoEsNulo(dniNie),
+                enBlancoEsNulo(cipAutonomico),
+                enBlancoEsNulo(cipSns),
+                enBlancoEsNulo(nass),
+                sexo == null ? Sexo.DESCONOCIDO : sexo,
+                fechaDeNacimiento,
+                activo);
+    }
+
+    /**
+     * Devuelve el mismo paciente con la filiación actualizada.
+     *
+     * <p>La <strong>identidad y el NHC no se tocan</strong>, y no por comodidad: el NHC es lo que une
+     * a este paciente con las muestras que ya circulan por el laboratorio y con los resultados ya
+     * emitidos. Cambiarlo rompería esa cadena en silencio, dejando resultados atribuidos a un
+     * paciente que ya no existe con ese número.
+     *
+     * <p>Corregir la filiación —un apellido mal escrito, un DNI que faltaba, una fecha de nacimiento—
+     * es una operación normal y frecuente: es lo que trae un {@code ADT^A08} en un hospital.
+     *
+     * @throws ReglaDeNegocioIncumplida si se intenta cambiar el NHC
+     */
+    public Paciente actualizarFiliacion(
+            Nhc nhcRecibido,
+            NombrePersona nombre,
+            String dniNie,
+            String cipAutonomico,
+            String cipSns,
+            String nass,
+            Sexo sexo,
+            LocalDate fechaDeNacimiento,
+            boolean activo) {
+        if (!this.nhc.equals(nhcRecibido)) {
+            throw new ReglaDeNegocioIncumplida(
+                    "El número de historia clínica de un paciente no cambia: %s ya está unido a sus muestras y resultados."
+                            .formatted(this.nhc.valor()));
+        }
+        return new Paciente(
+                this.id,
+                this.nhc,
                 nombre,
                 enBlancoEsNulo(dniNie),
                 enBlancoEsNulo(cipAutonomico),

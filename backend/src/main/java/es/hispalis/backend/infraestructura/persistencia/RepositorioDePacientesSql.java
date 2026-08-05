@@ -44,6 +44,24 @@ public class RepositorioDePacientesSql implements RepositorioDePacientes {
                 :dniNie, :cipAutonomico, :cipSns, :nass, :sexo, :fechaNacimiento, :activo)
             """;
 
+    private static final String ACTUALIZAR =
+            """
+            UPDATE dominio.paciente
+               SET apellidos = :apellidos, nombre_de_pila = :nombreDePila,
+                   apellido_padre = :apellidoPadre, apellido_madre = :apellidoMadre,
+                   dni_nie = :dniNie, cip_autonomico = :cipAutonomico, cip_sns = :cipSns, nass = :nass,
+                   sexo = :sexo, fecha_nacimiento = :fechaNacimiento, activo = :activo
+             WHERE id = :id
+            """;
+
+    private static final String BUSCAR_POR_ID =
+            """
+            SELECT id, nhc, apellidos, nombre_de_pila, apellido_padre, apellido_madre,
+                   dni_nie, cip_autonomico, cip_sns, nass, sexo, fecha_nacimiento, activo
+              FROM dominio.paciente
+             WHERE id = :id
+            """;
+
     private static final String BUSCAR_POR_NHC =
             """
             SELECT id, nhc, apellidos, nombre_de_pila, apellido_padre, apellido_madre,
@@ -68,6 +86,19 @@ public class RepositorioDePacientesSql implements RepositorioDePacientes {
             throw new ConflictoDeNegocio(
                     "Ya hay un paciente con el número de historia clínica " + paciente.nhc() + ".");
         }
+    }
+
+    @Override
+    public void actualizar(Paciente paciente) {
+        // El NHC no se toca: el agregado ya impide cambiarlo, y dejarlo fuera del UPDATE hace que
+        // esa garantía no dependa solo de que nadie se salte el agregado.
+        jdbc.update(ACTUALIZAR, parametrosDe(paciente));
+    }
+
+    @Override
+    public Optional<Paciente> buscarPorId(UUID id) {
+        return jdbc.query(BUSCAR_POR_ID, new MapSqlParameterSource("id", id), FILA_A_PACIENTE).stream()
+                .findFirst();
     }
 
     @Override

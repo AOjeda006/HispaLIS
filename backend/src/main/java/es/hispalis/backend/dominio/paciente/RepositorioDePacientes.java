@@ -1,6 +1,7 @@
 package es.hispalis.backend.dominio.paciente;
 
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Puerto de salida del agregado {@link Paciente}.
@@ -19,6 +20,12 @@ public interface RepositorioDePacientes {
      */
     void guardar(Paciente paciente);
 
+    /** Guarda la filiación corregida de un paciente que ya existe. */
+    void actualizar(Paciente paciente);
+
     /** Busca un paciente por el número de historia clínica, que es único en el laboratorio. */
     Optional<Paciente> buscarPorNhc(Nhc nhc);
+
+    /** Recupera un paciente por su identidad. */
+    Optional<Paciente> buscarPorId(UUID id);
 }

@@ -4,9 +4,11 @@ import ca.uhn.fhir.jpa.api.dao.DaoRegistry;
 import ca.uhn.fhir.jpa.rp.r5.PatientResourceProvider;
 import ca.uhn.fhir.rest.api.MethodOutcome;
 import ca.uhn.fhir.rest.api.server.RequestDetails;
+import es.hispalis.backend.aplicacion.paciente.ActualizarPaciente;
 import es.hispalis.backend.aplicacion.paciente.AltaDePaciente;
 import es.hispalis.backend.fhir.ProveedorPropio;
 import jakarta.servlet.http.HttpServletRequest;
+import org.hl7.fhir.instance.model.api.IIdType;
 import org.hl7.fhir.r5.model.Patient;
 import org.springframework.stereotype.Component;
 
@@ -31,9 +33,11 @@ import org.springframework.stereotype.Component;
 public class ProveedorDePaciente extends PatientResourceProvider implements ProveedorPropio {
 
     private final AltaDePaciente altaDePaciente;
+    private final ActualizarPaciente actualizarPaciente;
 
-    public ProveedorDePaciente(AltaDePaciente altaDePaciente) {
+    public ProveedorDePaciente(AltaDePaciente altaDePaciente, ActualizarPaciente actualizarPaciente) {
         this.altaDePaciente = altaDePaciente;
+        this.actualizarPaciente = actualizarPaciente;
     }
 
     @Override
@@ -45,5 +49,21 @@ public class ProveedorDePaciente extends PatientResourceProvider implements Prov
     public MethodOutcome create(
             HttpServletRequest peticionHttp, Patient recibido, String condicional, RequestDetails detalles) {
         return altaDePaciente.ejecutar(recibido, detalles);
+    }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Se desvía igual que la creación, y por la misma razón: el {@code update} heredado escribiría
+     * la proyección dejando el dominio atrás, en silencio.
+     */
+    @Override
+    public MethodOutcome update(
+            HttpServletRequest peticionHttp,
+            Patient recibido,
+            IIdType identidad,
+            String condicional,
+            RequestDetails detalles) {
+        return actualizarPaciente.ejecutar(identidad, recibido, detalles);
     }
 }

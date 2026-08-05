@@ -3,8 +3,11 @@ package es.hispalis.backend.fhir;
 import ca.uhn.fhir.interceptor.api.Hook;
 import ca.uhn.fhir.interceptor.api.Interceptor;
 import ca.uhn.fhir.interceptor.api.Pointcut;
+import ca.uhn.fhir.rest.api.Constants;
+import ca.uhn.fhir.rest.api.server.RequestDetails;
 import ca.uhn.fhir.rest.server.exceptions.BaseServerResponseException;
 import ca.uhn.fhir.rest.server.exceptions.InvalidRequestException;
+import ca.uhn.fhir.rest.server.exceptions.PreconditionFailedException;
 import ca.uhn.fhir.rest.server.exceptions.ResourceVersionConflictException;
 import ca.uhn.fhir.rest.server.exceptions.UnprocessableEntityException;
 import es.hispalis.backend.dominio.ConflictoDeNegocio;
@@ -46,10 +49,10 @@ public class TraduccionDeErroresDeDominio {
      *     dejar que siga su curso — que es lo correcto con todo lo que no sea del dominio
      */
     @Hook(Pointcut.SERVER_PRE_PROCESS_OUTGOING_EXCEPTION)
-    public BaseServerResponseException traducir(Throwable error) {
+    public BaseServerResponseException traducir(Throwable error, RequestDetails peticion) {
         ErrorDeDominio errorDeDominio = buscarErrorDeDominio(error);
         if (errorDeDominio == null) {
-            return null;
+            return fallaLaPrecondicion(error, peticion) ? new PreconditionFailedException(error.getMessage()) : null;
         }
         return switch (errorDeDominio) {
             case DatoInvalido e -> new InvalidRequestException(e.getMessage());
@@ -57,6 +60,21 @@ public class TraduccionDeErroresDeDominio {
             case ReglaDeNegocioIncumplida e -> new UnprocessableEntityException(e.getMessage());
             default -> new InvalidRequestException(errorDeDominio.getMessage());
         };
+    }
+
+    /**
+     * Indica si el error es un choque de versión provocado por un {@code If-Match} que ya no vale.
+     *
+     * <p>HAPI responde {@code 409} a cualquier choque de versión, y para un choque descubierto sin
+     * que nadie preguntara es correcto. Pero cuando el cliente <strong>sí preguntó</strong> —mandó
+     * {@code If-Match}—, la especificación de FHIR es explícita: lo que ha fallado es una
+     * precondición y la respuesta es {@code 412}. La diferencia le importa al cliente, que con un
+     * {@code 412} sabe que tiene que releer y reintentar.
+     */
+    private static boolean fallaLaPrecondicion(Throwable error, RequestDetails peticion) {
+        return error instanceof ResourceVersionConflictException
+                && peticion != null
+                && peticion.getHeader(Constants.HEADER_IF_MATCH) != null;
     }
 
     /**

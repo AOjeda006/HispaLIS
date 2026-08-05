@@ -5,8 +5,10 @@ import ca.uhn.fhir.jpa.rp.r5.ObservationResourceProvider;
 import ca.uhn.fhir.rest.api.MethodOutcome;
 import ca.uhn.fhir.rest.api.server.RequestDetails;
 import es.hispalis.backend.aplicacion.resultado.InformarResultado;
+import es.hispalis.backend.fhir.EscrituraSoloPorAlta;
 import es.hispalis.backend.fhir.ProveedorPropio;
 import jakarta.servlet.http.HttpServletRequest;
+import org.hl7.fhir.instance.model.api.IIdType;
 import org.hl7.fhir.r5.model.Observation;
 import org.springframework.stereotype.Component;
 
@@ -35,5 +37,16 @@ public class ProveedorDeResultado extends ObservationResourceProvider implements
     public MethodOutcome create(
             HttpServletRequest peticionHttp, Observation recibido, String condicional, RequestDetails detalles) {
         return informarResultado.ejecutar(recibido, detalles);
+    }
+
+    /** {@inheritDoc} Ver {@link EscrituraSoloPorAlta}: mejor un fallo visible que media escritura. */
+    @Override
+    public MethodOutcome update(
+            HttpServletRequest peticionHttp,
+            Observation recibido,
+            IIdType identidad,
+            String condicional,
+            RequestDetails detalles) {
+        throw EscrituraSoloPorAlta.rechazar("resultado");
     }
 }

@@ -56,6 +56,31 @@ public class TraductorDePaciente {
                 !recurso.hasActive() || recurso.getActive());
     }
 
+    /**
+     * Aplica sobre un paciente existente la filiación que trae el recurso.
+     *
+     * <p>Se extrae de la misma forma que en un alta —misma función, mismas reglas—, y es el agregado
+     * el que decide qué se puede cambiar y qué no.
+     *
+     * @param existente el paciente tal y como está guardado
+     * @param recurso el {@code Patient} recibido con los datos corregidos
+     * @return el agregado actualizado, conservando identidad y NHC
+     */
+    public Paciente aplicarSobre(Paciente existente, Patient recurso) {
+        return existente.actualizarFiliacion(
+                new Nhc(identificador(recurso, SistemasDeIdentificador.NHC)
+                        .orElseThrow(() -> new DatoInvalido(
+                                "El paciente no trae número de historia clínica, que es obligatorio."))),
+                nombreDe(recurso),
+                identificador(recurso, SistemasDeIdentificador.DNI_NIE).orElse(null),
+                identificador(recurso, SistemasDeIdentificador.CIP_AUTONOMICO).orElse(null),
+                identificador(recurso, SistemasDeIdentificador.CIP_SNS).orElse(null),
+                identificador(recurso, SistemasDeIdentificador.NASS).orElse(null),
+                sexoDe(recurso),
+                fechaDeNacimientoDe(recurso),
+                !recurso.hasActive() || recurso.getActive());
+    }
+
     /** Genera el recurso publicable a partir del agregado. Esta es la proyección. */
     public Patient aFhir(Paciente paciente) {
         Patient recurso = new Patient();
