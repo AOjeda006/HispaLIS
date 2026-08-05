@@ -313,7 +313,7 @@ para tipar los *slices* de `identifier` —CIP-SNS `1551000122105`, CIP-AUT `157
 
 ## Estado actual
 
-**Ítems 0 a 11 cerrados (2026-08-05).** La guía de implementación está terminada y **publicada en
+**Ítems 0 a 12 cerrados (2026-08-05).** La guía de implementación está terminada y **publicada en
 `https://aojeda006.github.io/HispaLIS/`** (las páginas cuelgan de `/es/`; la raíz redirige por
 JavaScript), y el backend ya tiene su primer circuito de escritura completo: un `POST /fhir/Patient`
 entra por la API, pasa por el núcleo de dominio y sale publicado como proyección, todo en una sola
@@ -322,16 +322,22 @@ transacción, y el primer invariante de negocio puro ya rechaza lo que no debe.
 | Componente | Estado | Verificado con |
 |---|---|---|
 | `ig/` | 9 perfiles, extensión `codigo-ine`, `CodeSystem` de 21 pruebas, `ConceptMap` a LOINC, 4 `ValueSet` y 18 ejemplos — **publicada** | `npx fsh-sushi .` → **0 errores, 0 warnings**; en CI, IG Publisher y validador oficial **en verde**; sitio desplegado comprobado (19 enlaces de la portada, `lang="es"`, los tres avisos) |
-| `backend/` | Servidor JPA empotrado · **los cinco agregados del hito 1** sobre el esquema `dominio` con Flyway · circuito completo `Patient` → `ServiceRequest` → `Specimen` → `Observation` → `DiagnosticReport` · concurrencia optimista con `If-Match` → `412` · búsqueda filtrada y paginada por `Bundle.link` | `./mvnw verify` → **BUILD SUCCESS, 35 tests**; validador oficial sobre lo que publica el circuito → **0 errores** |
+| `backend/` | Servidor JPA empotrado · **los cinco agregados del hito 1** sobre el esquema `dominio` con Flyway · circuito completo `Patient` → `ServiceRequest` → `Specimen` → `Observation` → `DiagnosticReport` · concurrencia optimista con `If-Match` → `412` · búsqueda filtrada y paginada por `Bundle.link` · los siete caminos de error, cada uno con su código y su `OperationOutcome` | `./mvnw verify` → **BUILD SUCCESS, 42 tests**; validador oficial sobre lo que publica el circuito → **0 errores** |
 | `web-profesional/` | Angular 22.1 + vitest + angular-eslint | `npm run lint`, `npm test` (**3 tests**), `npm run build` |
 | `simuladores/` | Paquete `generador` con su CLI, ruff y pytest | `ruff check`/`format`, `pytest` → **7 tests** |
 | `integracion/`, `app-ciudadano/` | **Sin andamiar a propósito** (hito 2) | conservan su guarda de auto-omisión |
 
-**Siguiente: ítem 12** — errores en `OperationOutcome`. Se predijo que el 10 y el 11 saldrían baratos
-«porque vienen heredados de HAPI y solo hay que probarlos»: el 11 lo confirmó, el 10 lo desmintió
-—probar el `PUT` destapó que el `update` heredado escribía la proyección y dejaba el dominio atrás—.
-El 12 recoge lo que ya existe disperso (la traducción de errores del borde, el `412` del ítem 10) y
-lo somete a un test por caso, que es donde se ve si algún camino se escapa devolviendo un `500`.
+**Con el 12 cerrado, la API del hito 1 está completa**: escribe por el núcleo, lee por la proyección,
+pagina siguiendo sus propios enlaces y falla con el código que toca. Los ítems 10, 11 y 12 se
+predijeron baratos «porque vienen heredados de HAPI y solo hay que probarlos»; el 11 lo confirmó y el
+10 lo desmintió —probar el `PUT` destapó que el `update` heredado escribía la proyección y dejaba el
+dominio atrás—. Lo heredado hay que **probarlo antes de darlo por bueno**, que es distinto de
+implementarlo y distinto de confiar en ello.
+
+**Siguiente: ítem 13** — el generador de datos sintéticos en Python. Es el primero que sale del
+backend y **consume el mismo `CodeSystem` y el mismo `ConceptMap` que la guía publica** (D15): nada
+de una lista paralela de códigos. Antes del ítem 14 hay que cerrar además la carencia anotada abajo
+(`Observation` sin `effective[x]` ni `performer`), porque la web profesional los va a pintar.
 
 > **Estado de la CI.** Subido a `origin/main` por **SSH** (el PAT de HTTPS no tiene *scope* `workflow`
 > y GitHub rechaza el push de `.github/workflows/`). Comprobado ya en ejecuciones reales:
@@ -546,7 +552,19 @@ lo somete a un test por caso, que es donde se ve si algún camino se escapa devo
   *Criterio:* `GET /fhir/Observation?patient=…&code=…` devuelve un `Bundle` paginado y el test
   recorre las páginas **siguiendo `Bundle.link[relation=next]`**, nunca construyendo la URL a mano.
 
-- [ ] **12 — Errores en `OperationOutcome`. (C9)**
+- [x] **12 — Errores en `OperationOutcome`. (C9)** — *hecho el 2026-08-05.*
+  `ErroresEnOperationOutcomeTest`, siete casos por la API: JSON truncado → `400`; paciente sin NHC
+  → `400`; recurso inexistente → `404`; NHC repetido → `409`; `If-Match` de una versión que no es la
+  vigente → `412`; informe vacío → `422`; y `PUT` sobre una muestra ya registrada → `422`.
+  *Cada caso comprueba tres cosas, no una:* el código exacto, que el cuerpo sea un
+  `OperationOutcome` con `severity = error`, y que el `Content-Type` sea `application/fhir+json`
+  —un error en texto plano obliga al cliente a leerlo con los ojos—. Y antes que nada, **que no sea
+  `2xx`**: parece redundante teniendo el código exacto justo debajo, pero es exactamente el fallo que
+  persigue el criterio, porque un `200` con errores dentro tiene toda la apariencia de haber
+  funcionado.
+  *El séptimo caso no lo pedía el criterio:* es el rechazo del `PUT` que introdujo el ítem 10 en los
+  cuatro recursos sin reglas de modificación. Era el único camino de escritura que no recorría ningún
+  test, y si la traducción de errores no lo alcanzase saldría un `500` sin que nadie se enterara.
   *Criterio:* recurso mal formado → `400`; no encontrado → `404`; conflicto de versión → `412`;
   violación de invariante → el código que corresponda; **siempre** con cuerpo `OperationOutcome` y
   **nunca** un `200` con el error dentro. Test por cada caso.
