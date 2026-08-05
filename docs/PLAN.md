@@ -313,7 +313,7 @@ para tipar los *slices* de `identifier` —CIP-SNS `1551000122105`, CIP-AUT `157
 
 ## Estado actual
 
-**Ítems 0 a 10 cerrados (2026-08-05).** La guía de implementación está terminada y **publicada en
+**Ítems 0 a 11 cerrados (2026-08-05).** La guía de implementación está terminada y **publicada en
 `https://aojeda006.github.io/HispaLIS/`** (las páginas cuelgan de `/es/`; la raíz redirige por
 JavaScript), y el backend ya tiene su primer circuito de escritura completo: un `POST /fhir/Patient`
 entra por la API, pasa por el núcleo de dominio y sale publicado como proyección, todo en una sola
@@ -322,16 +322,16 @@ transacción, y el primer invariante de negocio puro ya rechaza lo que no debe.
 | Componente | Estado | Verificado con |
 |---|---|---|
 | `ig/` | 9 perfiles, extensión `codigo-ine`, `CodeSystem` de 21 pruebas, `ConceptMap` a LOINC, 4 `ValueSet` y 18 ejemplos — **publicada** | `npx fsh-sushi .` → **0 errores, 0 warnings**; en CI, IG Publisher y validador oficial **en verde**; sitio desplegado comprobado (19 enlaces de la portada, `lang="es"`, los tres avisos) |
-| `backend/` | Servidor JPA empotrado · **los cinco agregados del hito 1** sobre el esquema `dominio` con Flyway · circuito completo `Patient` → `ServiceRequest` → `Specimen` → `Observation` → `DiagnosticReport` · concurrencia optimista con `If-Match` → `412` | `./mvnw verify` → **BUILD SUCCESS, 32 tests**; validador oficial sobre lo que publica el circuito → **0 errores** |
+| `backend/` | Servidor JPA empotrado · **los cinco agregados del hito 1** sobre el esquema `dominio` con Flyway · circuito completo `Patient` → `ServiceRequest` → `Specimen` → `Observation` → `DiagnosticReport` · concurrencia optimista con `If-Match` → `412` · búsqueda filtrada y paginada por `Bundle.link` | `./mvnw verify` → **BUILD SUCCESS, 35 tests**; validador oficial sobre lo que publica el circuito → **0 errores** |
 | `web-profesional/` | Angular 22.1 + vitest + angular-eslint | `npm run lint`, `npm test` (**3 tests**), `npm run build` |
 | `simuladores/` | Paquete `generador` con su CLI, ruff y pytest | `ruff check`/`format`, `pytest` → **7 tests** |
 | `integracion/`, `app-ciudadano/` | **Sin andamiar a propósito** (hito 2) | conservan su guarda de auto-omisión |
 
-**Siguiente: ítem 11** — búsqueda y paginación. Se predijo que el 10 y el 11 saldrían baratos «porque
-vienen heredados de HAPI y solo hay que probarlos», y el 10 **desmintió la mitad**: probar el `PUT`
-destapó que el `update` heredado escribía la proyección y dejaba el dominio atrás. La lección se
-aplica al 11: el criterio no es que el `Bundle` llegue, sino que la paginación se recorra siguiendo
-`Bundle.link[relation=next]` sobre datos que el dominio reconozca como suyos.
+**Siguiente: ítem 12** — errores en `OperationOutcome`. Se predijo que el 10 y el 11 saldrían baratos
+«porque vienen heredados de HAPI y solo hay que probarlos»: el 11 lo confirmó, el 10 lo desmintió
+—probar el `PUT` destapó que el `update` heredado escribía la proyección y dejaba el dominio atrás—.
+El 12 recoge lo que ya existe disperso (la traducción de errores del borde, el `412` del ítem 10) y
+lo somete a un test por caso, que es donde se ve si algún camino se escapa devolviendo un `500`.
 
 > **Estado de la CI.** Subido a `origin/main` por **SSH** (el PAT de HTTPS no tiene *scope* `workflow`
 > y GitHub rechaza el push de `.github/workflows/`). Comprobado ya en ejecuciones reales:
@@ -528,7 +528,21 @@ aplica al 11: el criterio no es que el `Bundle` llegue, sino que la paginación 
   *Criterio:* `PUT` con `If-Match` de una versión obsoleta devuelve **`412`**; con la versión vigente,
   `200` y `versionId` incrementado. Test automatizado.
 
-- [ ] **11 — Búsqueda y paginación. (C8)**
+- [x] **11 — Búsqueda y paginación. (C8)** — *hecho el 2026-08-05.*
+  `BusquedaPaginadaTest`: doce glucemias de un paciente, pedidas de cinco en cinco, se recorren en
+  **tres páginas siguiendo `Bundle.link[relation=next]`** sin duplicados ni faltantes, y el `total`
+  que declara el servidor coincide. Alrededor hay ruido —creatininas del mismo paciente y glucemias
+  de otro— que el filtro tiene que descartar: **si `patient` o `code` no filtrasen, el total sería 21
+  o 17 y el primer test caería**, así que ese ruido es lo que impide que la prueba se apruebe sola.
+  *Este sí vino heredado*, y el proveedor de paginación contra base de datos ya estaba cableado
+  desde el ítem 6. Lo que había que decidir es qué se prueba: no que el `Bundle` llegue, sino que la
+  URL de la página siguiente se trate como **opaca**. Lleva el identificador de la búsqueda cacheada,
+  no un desplazamiento calculable; un cliente que se invente `&_getpagesoffset=…` funciona hasta que
+  el servidor cambia de estrategia y entonces se salta resultados en silencio.
+  *Y una comprobación que no pide el criterio:* el número de resultados paginados se contrasta con
+  `SELECT count(*) FROM dominio.resultado`. La búsqueda se sirve de la proyección —es su sitio, §9,
+  cero mapeo en lectura—, pero la proyección solo vale lo que valga su acuerdo con el núcleo. Es la
+  lección del ítem 10 aplicada aquí: lo que se separa en silencio hay que atarlo con un test.
   *Criterio:* `GET /fhir/Observation?patient=…&code=…` devuelve un `Bundle` paginado y el test
   recorre las páginas **siguiendo `Bundle.link[relation=next]`**, nunca construyendo la URL a mano.
 
