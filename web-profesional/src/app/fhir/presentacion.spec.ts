@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   apellidos,
   apellidosPorSeparado,
+  fechaLegible,
+  identificador,
   nombreCompleto,
   rangoDeReferencia,
   SIN_VALOR,
@@ -71,8 +73,41 @@ describe('los apellidos', () => {
   });
 
   it('un paciente sin filiar no revienta la pantalla', () => {
-    expect(apellidos({ resourceType: 'Patient' })).toBe('');
-    expect(nombreCompleto({ resourceType: 'Patient' })).toBe('');
+    const sinFiliar: Patient = { resourceType: 'Patient' };
+
+    expect(apellidos(sinFiliar)).toBe('');
+    expect(nombreCompleto(sinFiliar)).toBe('');
+  });
+});
+
+describe('los identificadores', () => {
+  const conDos: Patient = {
+    resourceType: 'Patient',
+    identifier: [
+      { system: 'urn:oid:1.3.6.1.4.1.19126.3', value: '12345678Z' },
+      { system: 'https://aojeda006.github.io/HispaLIS/sid/nhc', value: '00000042' },
+    ],
+  };
+
+  it('se eligen por su system y no por el orden', () => {
+    // El DNI y el NHC son dos cadenas de dígitos indistinguibles a ojo. Coger «el primero» pone uno
+    // donde iba el otro, y nada falla: simplemente deja de encontrar al paciente.
+    expect(identificador(conDos, 'https://aojeda006.github.io/HispaLIS/sid/nhc')).toBe('00000042');
+  });
+
+  it('el que no consta se devuelve vacío, no se inventa', () => {
+    expect(identificador(conDos, 'https://aojeda006.github.io/HispaLIS/sid/nuhsa')).toBe('');
+  });
+});
+
+describe('las fechas', () => {
+  it('llevan la hora, porque dos informes del mismo día son lo normal', () => {
+    expect(fechaLegible('2026-08-05T09:30:00Z')).toMatch(/5\/8\/26.+\d{1,2}:\d{2}/);
+  });
+
+  it('lo que no se puede interpretar se muestra tal cual, no como «Invalid Date»', () => {
+    expect(fechaLegible('vete a saber')).toBe('vete a saber');
+    expect(fechaLegible(undefined)).toBe('');
   });
 });
 

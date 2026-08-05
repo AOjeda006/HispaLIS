@@ -30,6 +30,9 @@ ig/generated_output/
 ig/publisher.jar
 ig/validator_cli.jar
 **/*.tgz
+# Copia que la web toma de `ig/fsh-generated/` para ofrecer el catálogo de pruebas (D15). Es la
+# misma terminología de la guía, traída por `scripts/traer-terminologia.mjs`: generada, no fuente.
+web-profesional/public/terminologia/
 
 # ─── Java / Maven / Gradle ────────────────────────────────────────────────────
 target/

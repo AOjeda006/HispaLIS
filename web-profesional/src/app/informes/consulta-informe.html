@@ -1,0 +1,92 @@
+<h2>Consulta de informe</h2>
+
+<form [formGroup]="busqueda" (ngSubmit)="buscar()">
+  <div class="campo">
+    <label for="nhc-consulta">Número de historia clínica</label>
+    <input
+      id="nhc-consulta"
+      formControlName="nhc"
+      inputmode="numeric"
+      autocomplete="off"
+      placeholder="8 dígitos"
+    />
+  </div>
+  <button type="submit" [disabled]="busqueda.invalid || vm.trabajando()">Buscar</button>
+</form>
+
+@if (vm.error()) {
+  <p class="error" role="alert">{{ vm.error() }}</p>
+}
+@if (vm.aviso()) {
+  <p class="aviso-inline" role="status">{{ vm.aviso() }}</p>
+}
+
+@if (vm.paciente(); as paciente) {
+  <section class="paciente">
+    <h3>{{ nombreDe(paciente) }}</h3>
+    <p class="secundario">
+      Nº de historia {{ nhcDe(paciente) }}
+      @if (vm.total() !== undefined) {
+        · {{ vm.total() }} informe(s)
+      }
+    </p>
+  </section>
+}
+
+@if (vm.informes().length > 0) {
+  <ul class="informes">
+    @for (informe of vm.informes(); track informe.id) {
+      <li>
+        <button type="button" class="enlace" (click)="vm.abrir(informe)">
+          <span class="fecha">{{ fechaLegible(informe.issued ?? informe.effectiveDateTime) }}</span>
+          <span class="secundario">{{ informe.result?.length ?? 0 }} resultado(s)</span>
+        </button>
+      </li>
+    }
+  </ul>
+
+  @if (vm.hayMas()) {
+    <!-- Se pide por el enlace que dio el servidor, nunca calculando el desplazamiento. -->
+    <button type="button" [disabled]="vm.trabajando()" (click)="vm.verMas()">
+      Ver informes anteriores
+    </button>
+  }
+}
+
+@if (vm.abierto(); as informe) {
+  <section class="detalle">
+    <h3>Informe del {{ fechaLegible(informe.issued ?? informe.effectiveDateTime) }}</h3>
+
+    @if (informe.conclusion) {
+      <p class="conclusion">{{ informe.conclusion }}</p>
+    }
+
+    <table>
+      <caption class="secundario">
+        El valor va siempre con su unidad y con el rango que le corresponde a este paciente.
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">Prueba</th>
+          <th scope="col">Resultado</th>
+          <th scope="col">Rango de referencia</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (resultado of vm.resultados(); track resultado.id) {
+          <tr>
+            <td>{{ vm.nombreDePrueba(resultado) }}</td>
+            <td class="valor">{{ valorConUnidad(resultado) }}</td>
+            <td class="secundario">{{ rangoDe(resultado) || '—' }}</td>
+          </tr>
+        } @empty {
+          <tr>
+            <td colspan="3" class="secundario">Cargando los resultados…</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+
+    <button type="button" (click)="vm.cerrar()">Cerrar</button>
+  </section>
+}

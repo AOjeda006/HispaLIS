@@ -1,4 +1,4 @@
-import { Observation, Patient, RangoDeReferencia, SEXO_EN_SNOMED } from './tipos';
+import { HumanName, Identificador, Observation, RangoDeReferencia, SEXO_EN_SNOMED } from './tipos';
 
 /**
  * Cómo se enseñan en pantalla un nombre y un resultado.
@@ -13,6 +13,17 @@ const APELLIDO_PADRE = 'http://hl7.org/fhir/StructureDefinition/humanname-father
 const APELLIDO_MADRE = 'http://hl7.org/fhir/StructureDefinition/humanname-mothers-family';
 
 /**
+ * Cualquier recurso con nombre de persona: un paciente, un facultativo.
+ *
+ * Se escribe por su forma y no por el tipo de recurso porque las reglas del nombre español —el
+ * apellido entero, sin partir— valen igual para los dos, y no hay ninguna razón para tener dos
+ * funciones idénticas que se diferencien solo en su declaración.
+ */
+interface ConNombre {
+  readonly name?: readonly HumanName[];
+}
+
+/**
  * Los apellidos del paciente, **completos y sin partir**.
  *
  * `HumanName.family` ya trae el nombre familiar entero, así que esto solo lo devuelve. Parece que no
@@ -20,13 +31,13 @@ const APELLIDO_MADRE = 'http://hl7.org/fhir/StructureDefinition/humanname-mother
  * dos apellidos», y con «de la Torre Gómez» eso produce «de» y «la Torre Gómez». En un laboratorio,
  * confundir apellidos es confundir pacientes.
  */
-export function apellidos(paciente: Patient): string {
-  return paciente.name?.[0]?.family ?? '';
+export function apellidos(persona: ConNombre): string {
+  return persona.name?.[0]?.family ?? '';
 }
 
 /** El nombre de pila y los apellidos, como se escribe en España. */
-export function nombreCompleto(paciente: Patient): string {
-  const nombre = paciente.name?.[0];
+export function nombreCompleto(persona: ConNombre): string {
+  const nombre = persona.name?.[0];
   const pila = nombre?.given?.join(' ') ?? '';
   return [pila, nombre?.family ?? ''].filter((parte) => parte.length > 0).join(' ');
 }
@@ -37,12 +48,44 @@ export function nombreCompleto(paciente: Patient): string {
  * Salen de las extensiones y **nunca** de partir `family`. Si el recurso no las trae, se devuelve
  * vacío: es información que no consta, y eso es distinto de adivinarla.
  */
-export function apellidosPorSeparado(paciente: Patient): { padre?: string; madre?: string } {
-  const extensiones = paciente.name?.[0]?._family?.extension ?? [];
+export function apellidosPorSeparado(persona: ConNombre): { padre?: string; madre?: string } {
+  const extensiones = persona.name?.[0]?._family?.extension ?? [];
   return {
     padre: extensiones.find((extension) => extension.url === APELLIDO_PADRE)?.valueString,
     madre: extensiones.find((extension) => extension.url === APELLIDO_MADRE)?.valueString,
   };
+}
+
+/**
+ * El valor de un identificador concreto, elegido por su `system`.
+ *
+ * Coger «el primero» encontraría el DNI donde se esperaba el número de historia, y los dos son
+ * cadenas de dígitos indistinguibles a ojo.
+ */
+export function identificador(
+  recurso: { readonly identifier?: readonly Identificador[] },
+  system: string,
+): string {
+  return (recurso.identifier ?? []).find((suyo) => suyo.system === system)?.value ?? '';
+}
+
+/**
+ * Una marca de tiempo de FHIR, escrita como se lee en España.
+ *
+ * Se muestra con la hora y no solo con el día: en un laboratorio, dos informes del mismo paciente
+ * el mismo día son lo normal, y sin la hora no se distinguen.
+ */
+export function fechaLegible(marca?: string): string {
+  if (!marca) {
+    return '';
+  }
+  const momento = new Date(marca);
+  if (Number.isNaN(momento.getTime())) {
+    return marca;
+  }
+  return new Intl.DateTimeFormat('es-ES', { dateStyle: 'short', timeStyle: 'short' }).format(
+    momento,
+  );
 }
 
 /** Lo que se muestra cuando el resultado no trae valor. Nunca se deja el hueco en blanco. */

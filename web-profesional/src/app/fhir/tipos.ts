@@ -76,6 +76,13 @@ export interface Patient {
   readonly birthDate?: string;
 }
 
+export interface Practitioner {
+  readonly resourceType: 'Practitioner';
+  readonly id?: string;
+  readonly identifier?: readonly Identificador[];
+  readonly name?: readonly HumanName[];
+}
+
 export interface ServiceRequest {
   readonly resourceType: 'ServiceRequest';
   readonly id?: string;
@@ -85,6 +92,9 @@ export interface ServiceRequest {
   readonly code?: CodeableReference;
   readonly requisition?: Identificador;
   readonly subject: Referencia;
+  /** Quién firma el volante. El dominio lo exige: sin él no se sabe a quién devolver el informe. */
+  readonly requester?: Referencia;
+  readonly authoredOn?: string;
   readonly specimen?: readonly Referencia[];
 }
 

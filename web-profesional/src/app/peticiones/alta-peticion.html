@@ -1,0 +1,160 @@
+<h2>Alta de petición</h2>
+
+@if (vm.error()) {
+  <p class="error" role="alert">{{ vm.error() }}</p>
+}
+@if (vm.aviso()) {
+  <p class="aviso-inline" role="status">{{ vm.aviso() }}</p>
+}
+
+@if (vm.registrada(); as hecha) {
+  <section class="hecho" role="status">
+    <h3>Petición {{ hecha.numero }} registrada</h3>
+    <p>
+      {{ hecha.lineas }} {{ hecha.lineas === 1 ? 'prueba solicitada' : 'pruebas solicitadas' }}.
+      Anota el número en el volante: es lo que agrupa todas sus líneas.
+    </p>
+    <button type="button" (click)="empezarDeNuevo()">Registrar otra petición</button>
+  </section>
+} @else {
+  <section class="paso">
+    <h3>1 · Paciente</h3>
+
+    @if (vm.paciente(); as encontrado) {
+      <p class="identificado">
+        <strong>{{ nombreDe(encontrado) }}</strong>
+        <span class="secundario">Nº de historia {{ nhcDe(encontrado) }}</span>
+      </p>
+    } @else {
+      <form [formGroup]="busqueda" (ngSubmit)="buscarPaciente()">
+        <div class="campo">
+          <label for="nhc">Número de historia clínica</label>
+          <input
+            id="nhc"
+            formControlName="nhc"
+            inputmode="numeric"
+            autocomplete="off"
+            placeholder="8 dígitos"
+          />
+        </div>
+        <button type="submit" [disabled]="busqueda.invalid || vm.trabajando()">Buscar</button>
+      </form>
+
+      @if (altaDePaciente()) {
+        <form class="alta" [formGroup]="filiacion" (ngSubmit)="registrarPaciente()">
+          <h4>Dar de alta al paciente</h4>
+          <div class="campo">
+            <label for="alta-nhc">Número de historia clínica</label>
+            <input id="alta-nhc" formControlName="nhc" inputmode="numeric" autocomplete="off" />
+          </div>
+          <div class="campo">
+            <label for="alta-apellidos">Apellidos</label>
+            <input id="alta-apellidos" formControlName="apellidos" autocomplete="off" />
+            <small>Los dos, completos y en un solo campo: «de la Torre Gómez».</small>
+          </div>
+          <div class="campo">
+            <label for="alta-nombre">Nombre</label>
+            <input id="alta-nombre" formControlName="nombre" autocomplete="off" />
+          </div>
+          <div class="campo">
+            <label for="alta-sexo">Sexo</label>
+            <select id="alta-sexo" formControlName="sexo">
+              <option value="female">Mujer</option>
+              <option value="male">Hombre</option>
+              <option value="other">Otro</option>
+              <option value="unknown">No consta</option>
+            </select>
+            <small>Decide qué rango de referencia se aplica en la serie roja.</small>
+          </div>
+          <div class="campo">
+            <label for="alta-nacimiento">Fecha de nacimiento</label>
+            <input id="alta-nacimiento" type="date" formControlName="fechaDeNacimiento" />
+          </div>
+          <div class="campo">
+            <label for="alta-dni">DNI o NIE</label>
+            <input id="alta-dni" formControlName="dniNie" autocomplete="off" />
+            <small>Opcional: el laboratorio no lo emite y no lo exige.</small>
+          </div>
+          <button type="submit" [disabled]="filiacion.invalid || vm.trabajando()">
+            Dar de alta
+          </button>
+        </form>
+      }
+    }
+  </section>
+
+  <section class="paso">
+    <h3>2 · Facultativo peticionario</h3>
+
+    @if (vm.facultativo(); as firmante) {
+      <p class="identificado">
+        <strong>{{ nombreDe(firmante) }}</strong>
+        <span class="secundario">Colegiado {{ colegiadoDe(firmante) }}</span>
+      </p>
+    } @else {
+      <form [formGroup]="busquedaDeFacultativo" (ngSubmit)="buscarFacultativo()">
+        <div class="campo">
+          <label for="colegiado">Número de colegiado</label>
+          <input id="colegiado" formControlName="colegiado" autocomplete="off" />
+        </div>
+        <button type="submit" [disabled]="busquedaDeFacultativo.invalid || vm.trabajando()">
+          Buscar
+        </button>
+      </form>
+
+      @if (altaDeFacultativo()) {
+        <form class="alta" [formGroup]="nuevoFacultativo" (ngSubmit)="registrarFacultativo()">
+          <h4>Dar de alta al facultativo</h4>
+          <div class="campo">
+            <label for="nuevo-colegiado">Número de colegiado</label>
+            <input id="nuevo-colegiado" formControlName="colegiado" autocomplete="off" />
+          </div>
+          <div class="campo">
+            <label for="nuevo-apellidos">Apellidos</label>
+            <input id="nuevo-apellidos" formControlName="apellidos" autocomplete="off" />
+          </div>
+          <div class="campo">
+            <label for="nuevo-nombre">Nombre</label>
+            <input id="nuevo-nombre" formControlName="nombre" autocomplete="off" />
+          </div>
+          <button type="submit" [disabled]="nuevoFacultativo.invalid || vm.trabajando()">
+            Dar de alta
+          </button>
+        </form>
+      }
+    }
+  </section>
+
+  <section class="paso">
+    <h3>3 · Pruebas</h3>
+    <p class="secundario">
+      Las que oferta el laboratorio, tal y como las publica su catálogo. Cada una es una línea de la
+      petición y avanza a su ritmo.
+    </p>
+
+    <ul class="catalogo">
+      @for (prueba of vm.pruebas(); track prueba.codigo) {
+        <li>
+          <label [for]="'prueba-' + prueba.codigo">
+            <input
+              type="checkbox"
+              [id]="'prueba-' + prueba.codigo"
+              [checked]="vm.seleccionadas().includes(prueba.codigo)"
+              (change)="vm.alternar(prueba.codigo)"
+            />
+            <span class="codigo">{{ prueba.codigo }}</span>
+            {{ prueba.display }}
+          </label>
+        </li>
+      } @empty {
+        <li class="secundario">Cargando el catálogo del laboratorio…</li>
+      }
+    </ul>
+  </section>
+
+  <div class="acciones">
+    <button type="button" [disabled]="!vm.puedePedir() || vm.trabajando()" (click)="vm.pedir()">
+      Registrar la petición ({{ vm.seleccionadas().length }})
+    </button>
+  </div>
+}

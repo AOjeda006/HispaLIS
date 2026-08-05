@@ -110,6 +110,11 @@ Notas de las cadenas de construcción, por si sorprenden:
   `verify`, así que no hay una orden de *lint* aparte que haya que acordarse de ejecutar.
 - **`web-profesional/`** — los tests corren con **vitest sobre jsdom**, el ejecutor por defecto de
   Angular 22. **No es Karma**: `--browsers=ChromeHeadless` no es una opción válida aquí.
+  `npm start` y `npm run build` traen antes el catálogo de pruebas de `ig/fsh-generated/` (D15), así
+  que hay que haber ejecutado `npx fsh-sushi .` dentro de `ig/` al menos una vez; si falta, la orden
+  para y lo dice. Y `npm start` levanta el servidor de desarrollo con un **proxy de `/fhir` a
+  `localhost:8080`**: la web y la API se sirven del mismo origen, así que hay que tener el backend
+  arrancado en otra terminal.
 - **`simuladores/`** — antes de nada, `python -m pip install -e ".[dev]"` dentro de `simuladores/`.
 
 ## Integración continua

@@ -322,8 +322,8 @@ transacción, y el primer invariante de negocio puro ya rechaza lo que no debe.
 | Componente | Estado | Verificado con |
 |---|---|---|
 | `ig/` | 9 perfiles, extensión `codigo-ine`, `CodeSystem` de 21 pruebas, `ConceptMap` a LOINC, 4 `ValueSet` y 18 ejemplos — **publicada** | `npx fsh-sushi .` → **0 errores, 0 warnings**; en CI, IG Publisher y validador oficial **en verde**; sitio desplegado comprobado (19 enlaces de la portada, `lang="es"`, los tres avisos) |
-| `backend/` | Servidor JPA empotrado · **los cinco agregados del hito 1** sobre el esquema `dominio` con Flyway · circuito completo `Patient` → `ServiceRequest` → `Specimen` → `Observation` → `DiagnosticReport` · concurrencia optimista con `If-Match` → `412` · búsqueda filtrada y paginada por `Bundle.link` · los siete caminos de error, cada uno con su código y su `OperationOutcome` · el resultado conserva cuándo se midió, quién lo hizo y entre qué cifras es normal | `./mvnw verify` → **BUILD SUCCESS, 48 tests**; validador oficial sobre lo que publica el circuito → **0 errores** |
-| `web-profesional/` | Angular 22.1 + vitest + angular-eslint · **capa de presentación FHIR** (mensaje del `OperationOutcome`, apellidos sin partir, valor con unidad y rango por sexo); **falta la interfaz** | `npm run lint`, `npm test` (**33 tests**), `npm run build` |
+| `backend/` | Servidor JPA empotrado · **los cinco agregados del hito 1** sobre el esquema `dominio` con Flyway · circuito completo `Patient` → `ServiceRequest` → `Specimen` → `Observation` → `DiagnosticReport` · concurrencia optimista con `If-Match` → `412` · búsqueda filtrada y paginada por `Bundle.link` · los siete caminos de error, cada uno con su código y su `OperationOutcome` · el resultado conserva cuándo se midió, quién lo hizo y entre qué cifras es normal · **búsqueda por `POST _search` sin datos del paciente en la URL** y enlace de paginación válido detrás de un proxy | `./mvnw verify` → **BUILD SUCCESS, 52 tests**; validador oficial sobre lo que publica el circuito → **0 errores** |
+| `web-profesional/` | Angular 22.1 + vitest + angular-eslint · capa de presentación FHIR · **cliente HTTP** (búsqueda por `POST _search`, paginación por el enlace del servidor, errores traducidos del `OperationOutcome`) · **las dos pantallas** con sus ViewModels; **sin ejercitar aún contra un backend en marcha** | `npm run lint`, `npm test` (**66 tests**), `npm run build` |
 | `simuladores/` | **Generador de datos sintéticos completo**: terminología leída de la guía, identificadores españoles con dígito de control, paneles correlacionados, reflejas y muestras rechazadas | `ruff check`/`format`, `pytest` → **70 tests**; validador oficial sobre el corpus generado → **0 errores** |
 | `integracion/`, `app-ciudadano/` | **Sin andamiar a propósito** (hito 2) | conservan su guarda de auto-omisión |
 
@@ -334,11 +334,21 @@ predijeron baratos «porque vienen heredados de HAPI y solo hay que probarlos»;
 dominio atrás—. Lo heredado hay que **probarlo antes de darlo por bueno**, que es distinto de
 implementarlo y distinto de confiar en ello.
 
-**En curso: ítem 14** — la web profesional. Sus **dos prerrequisitos están cerrados**, los dos
-descubiertos al leer el criterio con cuidado en vez de al llegar a la pantalla: el resultado publica
-`effective[x]`, `performer` y `referenceRange`, porque la web no puede mostrar lo que el servidor no
-publica. La **capa de presentación** está escrita y probada; **falta el cliente HTTP y las dos
-pantallas** (alta de petición y consulta de informe), contra la API real y sin *mocks*.
+**En curso: ítem 14** — la web profesional, **escrita entera**: capa de presentación, cliente HTTP y
+las dos pantallas con sus ViewModels. Sus dos prerrequisitos se cerraron antes, al leer el criterio
+con cuidado en vez de al llegar a la pantalla: el resultado publica `effective[x]`, `performer` y
+`referenceRange`, porque la web no puede mostrar lo que el servidor no publica.
+
+Lo que la web obligó a cambiar en el backend son dos cosas que **solo se ven desde el navegador**, y
+ninguna se habría notado escribiendo más tests del servidor: que buscar por número de historia con
+`GET ?identifier=…` escribe un dato del paciente en cuatro sitios de los que no se borra —se pasa a
+`POST [tipo]/_search`—, y que el enlace de la página siguiente lo firma el servidor con la dirección
+por la que le llegó la petición, que detrás de un proxy no es la del cliente. Las dos tienen ya su
+test en `backend/`.
+
+**Falta ejercitarla de verdad**, y no por dejadez: el backend **no arranca en este equipo** —su
+PostgreSQL embebido es de alcance `test`— y la web sin API no enseña nada. Eso es exactamente lo que
+pide el ítem 15, así que se cierra allí.
 
 Después queda **una sola pieza de infraestructura**: el ítem 15 (`docker compose up`), que **necesita
 que el usuario instale Docker** — está anotado más abajo.
@@ -609,20 +619,43 @@ que el usuario instale Docker** — está anotado más abajo.
   que la IG, no una lista paralela. Salida **reproducible** con la misma semilla, y todos los recursos
   generados **validan** contra su perfil.
 
-- [ ] **14 — Web profesional en Angular. (C10)** — *empezado el 2026-08-05; falta la interfaz.*
-  **Hecho:** los dos prerrequisitos del backend (arriba, en *Notas / riesgos*) y la **capa de
-  presentación** en `web-profesional/src/app/fhir/`: tipos R5 mínimos, `mensajeDeError` a partir del
-  `OperationOutcome`, y `apellidos` / `valorConUnidad` / `rangoDeReferencia`. Son funciones puras,
-  probadas antes de que haya pantalla que las use — **33 tests**, lint y build en verde.
-  *Las tres decisiones que ya están tomadas ahí:* el mensaje de error sale del `OperationOutcome` y
-  no de una tabla de códigos HTTP —el servidor ya explicó qué pasó en términos del negocio—, pero
-  solo si lo recibido **tiene forma** de `OperationOutcome`, porque un proxy de empresa devuelve HTML
-  con la cabecera de la petición original; los apellidos se muestran enteros y su descomposición sale
-  de las extensiones, nunca de partir por el espacio; y el rango que se enseña es el del **sexo** del
-  paciente, elegido aquí porque la proyección no lo conoce — si el sexo no consta no se elige
+- [ ] **14 — Web profesional en Angular. (C10)** — *escrita el 2026-08-05; **falta ejercitarla contra
+  un backend en marcha**, que necesita Docker (ítem 15).*
+  **Hecho:** los dos prerrequisitos del backend, la **capa de presentación**, el **cliente HTTP** y
+  **las dos pantallas**, con sus ViewModels. `web-profesional`: **66 tests**, lint y build en verde;
+  cada pantalla es un *chunk* aparte. La web **no tiene datos propios**: todo sale de la API o del
+  catálogo de la guía — no hay ningún *mock* en el código de la aplicación.
+  *La capa de presentación* (`src/app/fhir/`): tipos R5 mínimos, `mensajeDeError` a partir del
+  `OperationOutcome`, y `apellidos` / `valorConUnidad` / `rangoDeReferencia`. El mensaje de error
+  sale del `OperationOutcome` y no de una tabla de códigos HTTP —el servidor ya explicó qué pasó en
+  términos del negocio—, pero solo si lo recibido **tiene forma** de `OperationOutcome`, porque un
+  proxy de empresa devuelve HTML con la cabecera de la petición original. Los apellidos se muestran
+  enteros y su descomposición sale de las extensiones. Y el rango que se enseña es el del **sexo**
+  del paciente, elegido aquí porque la proyección no lo conoce: si el sexo no consta no se elige
   ninguno, que enseñar el de hombre a un paciente sin sexo registrado es inventarse un dato clínico.
-  **Falta:** el cliente HTTP contra la API real (paginación por `Bundle.link[relation=next]`, nunca
-  a mano), la pantalla de alta de petición y la de consulta de informe.
+  *El cliente HTTP y las tres decisiones que lleva dentro:*
+  **(1) se busca con `POST [tipo]/_search`, no con `GET [tipo]?…`.** Los criterios llevan el número
+  de historia, y una URL con eso dentro se queda en la barra del navegador, en su historial, en el
+  log del proxy y en la traza del servidor — los cuatro sitios que el invariante 6 del proyecto
+  prohíbe, y de los que no se borra. FHIR previó el caso y admite los criterios en el cuerpo; el
+  backend gana `BusquedaSinPhiEnLaUrlTest`, que comprueba que lo acepta **y que el enlace de
+  paginación que devuelve tampoco reintroduce el identificador**.
+  **(2) la página siguiente se pide con la URL del servidor, tal cual**, y el alta devuelve lo que el
+  servidor publicó y no lo que se le mandó: si contesta sin cuerpo, se lee del `Location`, que es el
+  *read-your-writes* del §9 ejercitado de verdad.
+  **(3) el catálogo de pruebas se lee, no se escribe (D15).** La pantalla de alta ofrece las pruebas
+  del **mismo** `CodeSystem` que publica la guía, traído por `scripts/traer-terminologia.mjs`; hasta
+  el `system` sale del fichero. Y los `Identifier.system`, que sí hay que repetir porque un navegador
+  no lee FSH, los cruza un test contra `aliases.fsh`.
+  *Y una trampa que no se ve hasta la segunda página:* el servidor firma
+  `Bundle.link[relation=next]` con la dirección por la que le llegó la petición, así que detrás de un
+  proxy —que es como lo alcanza el navegador, siempre— apuntaría a una máquina que el navegador no
+  resuelve. El cliente **no puede corregirlo**, porque para él esa URL es opaca. Se cierra por los
+  dos lados: `ApacheProxyAddressStrategy` en el backend y `"xfwd": true` en `proxy.conf.json`.
+  **Falta:** verlo funcionar de extremo a extremo. Los tests prueban el cableado con el servidor de
+  pruebas de Angular, no contra el servidor real, y **el backend no arranca en este equipo** —su
+  PostgreSQL embebido es de alcance `test`—. Se cierra en el ítem 15, que es donde el criterio pide
+  justamente eso.
   *Criterio:* alta de petición y consulta de informe funcionando **contra la API FHIR real** (sin
   *mocks*); los errores se muestran a partir del `OperationOutcome`; los apellidos se muestran sin
   partir por el espacio; el valor se presenta siempre con **unidad y rango de referencia**.
@@ -724,6 +757,25 @@ Se detalla al cerrar el hito 1; no se adelanta trabajo.
   generador puede alcanzar la base de datos, así que el arreglo es un **fichero de datos común** que
   consuman los dos —el mismo patrón que la terminología, pero sin sitio en la IG porque esto no es
   vocabulario compartido—. Pendiente para el cierre del hito.
+- **⚠️ Un `Bundle` de tipo `transaction` se salta el dominio.** El `JpaSystemProvider` de HAPI está
+  registrado —lo pide el servidor JPA— y su procesador de transacciones escribe **llamando a las DAO
+  directamente**, no a los `ResourceProvider`. O sea que un `POST /fhir` con un `Bundle` que
+  contenga un `ServiceRequest` lo mete en la proyección **sin pasar por el núcleo**: sin agregado, sin
+  invariantes y sin fila en el esquema `dominio`. Contradice el invariante 3 del proyecto («un solo
+  camino de escritura») y **hoy nada lo impide**. No lo usa ningún cliente nuestro, así que no rompe
+  nada en marcha, pero la puerta está abierta. El arreglo es un interceptor que rechace `transaction`
+  y `batch` cuando toquen los cinco recursos con agregado. **Pendiente para el cierre del hito**, y
+  con test en rojo primero: es un invariante, no una mejora.
+- **El número que agrupa las líneas de la petición lo inventa el cliente.** La API lo exige dentro
+  del recurso (`ServiceRequest.requisition`) y el servidor no lo emite, así que la web genera
+  `P<fecha>-<sufijo al azar>`. En un SIL real lo daría un contador del laboratorio; aquí el sufijo
+  solo hace improbable —no imposible— que dos mostradores mezclen dos volantes en uno. Si el hito 2
+  trae un emisor de números, esto se retira.
+- **El catálogo de pruebas llega al navegador empaquetado en el build.** Es el mismo `CodeSystem` de
+  la guía (D15), no una lista paralela, pero se congela al construir la web: añadir una prueba al
+  catálogo obliga a reconstruirla. En el hito 2, con el servidor de terminología, pasa a pedirse con
+  `$expand` y el problema desaparece; hasta entonces es lo más cercano a la fuente que puede hacer un
+  cliente que no tiene servidor de terminología al que preguntar.
 - **El invariante completo del informe está a medias.** §10 pide que solo se emita *con todas las
   líneas de la petición resueltas*; ahora se exige que no esté vacío y que no mezcle pacientes.
   Cerrar la versión completa necesita cruzar las líneas de la petición con sus resultados, y el

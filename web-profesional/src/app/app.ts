@@ -1,17 +1,13 @@
-import { Component, signal } from '@angular/core';
-import { RouterOutlet } from '@angular/router';
+import { ChangeDetectionStrategy, Component, signal } from '@angular/core';
+import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
-/**
- * Componente raíz de la web del profesional del laboratorio.
- *
- * Las pantallas de alta de petición y consulta de informe llegan con el ítem 14 del plan; aquí solo
- * vive el armazón de la aplicación.
- */
+/** Componente raíz de la web del profesional del laboratorio: cabecera, navegación y poco más. */
 @Component({
   selector: 'lab-root',
-  imports: [RouterOutlet],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive],
   templateUrl: './app.html',
   styleUrl: './app.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class App {
   protected readonly titulo = signal('HispaLIS · Laboratorio');

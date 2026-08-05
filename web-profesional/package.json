@@ -5,7 +5,9 @@
   "private": true,
   "scripts": {
     "ng": "ng",
+    "prestart": "node scripts/traer-terminologia.mjs",
     "start": "ng serve",
+    "prebuild": "node scripts/traer-terminologia.mjs",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
@@ -27,6 +29,7 @@
     "@angular/cli": "^22.1.2",
     "@angular/compiler-cli": "^22.1.0",
     "@eslint/js": "^9.0.0",
+    "@types/node": "^26.1.2",
     "angular-eslint": "^22.0.0",
     "eslint": "^9.0.0",
     "jsdom": "^28.0.0",

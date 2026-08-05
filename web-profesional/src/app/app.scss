@@ -1,7 +1,7 @@
 .cabecera {
-  border-bottom: 1px solid #d0d7de;
-  margin-bottom: 1.5rem;
-  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--borde);
+  margin-bottom: var(--espacio);
+  padding-bottom: 0.75rem;
 
   h1 {
     font-size: 1.5rem;
@@ -10,7 +10,29 @@
 }
 
 .aviso {
-  color: #57606a;
+  color: var(--texto-secundario);
   font-size: 0.875rem;
   margin: 0.25rem 0 0;
+}
+
+.navegacion {
+  display: flex;
+  gap: var(--espacio);
+  margin: var(--espacio) 0;
+
+  a {
+    border-bottom: 2px solid transparent;
+    color: var(--texto);
+    padding-bottom: 0.2rem;
+    text-decoration: none;
+  }
+
+  a.activo {
+    border-bottom-color: var(--acento);
+    font-weight: 600;
+  }
+}
+
+main {
+  max-width: 56rem;
 }

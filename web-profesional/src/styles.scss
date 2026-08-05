@@ -1,8 +1,49 @@
+/**
+ * Tokens de diseño y estilos base.
+ *
+ * Es una herramienta de trabajo clínico: lo que se busca es que un dato se lea sin esfuerzo y no se
+ * confunda con otro, no lucimiento. Los colores se declaran en los dos esquemas porque el mostrador
+ * de un laboratorio puede estar a contraluz o en penumbra, y el sistema operativo ya sabe cuál toca.
+ */
+
 :root {
   color-scheme: light dark;
+
+  --texto: #1f2328;
+  --texto-secundario: #57606a;
+  --fondo: #ffffff;
+  --fondo-suave: #f6f8fa;
+  --borde: #d0d7de;
+  --acento: #0b5fa5;
+  --acento-texto: #ffffff;
+  --error: #a40e26;
+  --error-fondo: #fff0f2;
+  --exito: #1a6b3c;
+  --exito-fondo: #eefbf3;
+
+  --espacio: 1rem;
+  --radio: 6px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --texto: #e6edf3;
+    --texto-secundario: #9198a1;
+    --fondo: #0d1117;
+    --fondo-suave: #161b22;
+    --borde: #3d444d;
+    --acento: #4493f8;
+    --acento-texto: #0d1117;
+    --error: #ff8fa3;
+    --error-fondo: #2b1418;
+    --exito: #56d364;
+    --exito-fondo: #10251a;
+  }
 }
 
 body {
+  background: var(--fondo);
+  color: var(--texto);
   font-family:
     system-ui,
     -apple-system,
@@ -12,4 +53,38 @@ body {
   line-height: 1.5;
   margin: 0;
   padding: 1.5rem;
+}
+
+input,
+select,
+button {
+  font: inherit;
+}
+
+input,
+select {
+  background: var(--fondo);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  color: var(--texto);
+  padding: 0.4rem 0.5rem;
+}
+
+button {
+  background: var(--acento);
+  border: 1px solid transparent;
+  border-radius: var(--radio);
+  color: var(--acento-texto);
+  cursor: pointer;
+  padding: 0.45rem 0.9rem;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+:focus-visible {
+  outline: 2px solid var(--acento);
+  outline-offset: 2px;
 }

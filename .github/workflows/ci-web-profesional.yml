@@ -8,10 +8,15 @@ on:
     paths:
       - 'web-profesional/**'
       - '.github/workflows/ci-web-profesional.yml'
+      # La web ofrece las pruebas del MISMO `CodeSystem` que publica la guía (D15) y cruza sus
+      # `Identifier.system` contra `aliases.fsh`. Sin esta ruta, añadir una prueba al catálogo o
+      # cambiar un `system` no dispararía los tests que detectan justamente eso.
+      - 'ig/input/fsh/**'
   pull_request:
     paths:
       - 'web-profesional/**'
       - '.github/workflows/ci-web-profesional.yml'
+      - 'ig/input/fsh/**'
   workflow_dispatch:
 
 permissions:
@@ -35,6 +40,14 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: web-profesional/package-lock.json
+
+      # El catálogo de pruebas que ofrece la pantalla de alta no está versionado: lo produce SUSHI a
+      # partir del FSH, y `npm run build` lo trae con `scripts/traer-terminologia.mjs`. NO se
+      # construye la IG entera —eso es cosa de `ci-ig` y cuesta minutos—: los artefactos de
+      # conformidad salen en segundos.
+      - name: Compilar la terminología de la guía
+        working-directory: ig
+        run: npx --yes fsh-sushi .
 
       - name: Instalar dependencias
         working-directory: web-profesional
