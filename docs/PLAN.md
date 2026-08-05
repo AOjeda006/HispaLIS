@@ -4,8 +4,9 @@
 > resumabilidad: el agente lo lee al arrancar y tras cada `/compact`, y lo actualiza al avanzar.
 > Mantenlo siempre coherente con la realidad del repo.
 >
-> El **porqué** de todo lo de aquí está en `docs/diseno.md` (documento de diseño v1.0, autosuficiente).
-> Este PLAN es su bajada a ejecución: no lo dupliques, cítalo por sección (§4.8, §6.5…).
+> El **porqué** de todo lo de aquí está en `docs/diseno.md` (documento de diseño **v1.1**,
+> autosuficiente). Este PLAN es su bajada a ejecución: no lo dupliques, cítalo por sección
+> (§4.8, §6.5…).
 
 ## Objetivo
 
@@ -15,19 +16,26 @@ hitos: un sistema que atraviesa los ejes reales de interoperabilidad sanitaria �
 terminología, API FHIR conforme, puente HL7 v2, eventos, SMART on FHIR y una obligación legal
 española implementada (notificación EDO)— sin degenerar en una HCE en miniatura.
 
-**Objetivo de este encargo: cerrar el hito 1** — el circuito básico end-to-end
-(petición → espécimen → resultado → informe), **sin Kafka, sin HL7 v2 y sin Keycloak**. Al terminarlo
-ya hay un proyecto FHIR presentable.
+**Hito 1: cerrado el 2026-08-06.** El circuito básico end-to-end (petición → espécimen → resultado →
+informe), sin Kafka, sin HL7 v2 y sin Keycloak. Ya hay un proyecto FHIR presentable.
+
+**Objetivo del encargo en curso: el hito 2** — la interoperabilidad de verdad: puente HL7 V2.5.1,
+bus de eventos con outbox transaccional, servidor de terminología y SMART on FHIR. Antes del puente
+van **los tres huecos de dominio** que hoy no existen y que el puente usa (ítems 17–19).
 
 ## Alcance / No-objetivos
 
-- **Dentro (hito 1):** IG FHIR R5 con los 9 perfiles y la terminología · backend Java 21 + Spring Boot
+- **Hecho (hito 1):** IG FHIR R5 con los 9 perfiles y la terminología · backend Java 21 + Spring Boot
   + HAPI FHIR R5 (dominio propio + proyección HAPI JPA en la misma transacción) · web Angular de alta
   de petición y consulta de informe · generador de datos sintéticos en Python · `docker compose` con
   backend + PostgreSQL + web · CI con filtrado por `paths:` y validación FHIR.
-- **Fuera del hito 1** (hitos 2 y 3, esbozados al final): motor HL7 v2, Kafka + outbox, servidor de
-  terminología con `ConceptMap` del catálogo, Keycloak/SMART, app Flutter, `SubscriptionTopic`,
-  reflejas, notificador EDO, Bulk Data `$export`, `AuditEvent`.
+- **Dentro (hito 2):** anulación de línea, validación facultativa con `Provenance` y esquema `outbox`
+  · motor de integración HL7 V2.5.1 sobre MLLP/TLS con almacén de mensajes, DLQ y reproceso
+  idempotente · Kafka + Schema Registry alimentado por el outbox · reconciliador dominio → proyección
+  · servidor de terminología con `$expand`/`$validate-code`/`$translate` · Keycloak con SMART on FHIR
+  · app del ciudadano en Flutter con SMART standalone + PKCE.
+- **Fuera del hito 2** (hito 3, esbozado al final): `SubscriptionTopic`/`Subscription`, notificador
+  EDO, Bulk Data `$export` + `Group`, `AuditEvent` completo.
 - **Fuera del proyecto entero:** ISO 15189 como requisito —solo como justificación de diseño (D17)—,
   conexión al MPA de Diraya (D8), HCDSNS/Nodo SNS, Receta XXI, CMBD/RAE-CMBD y ENS (§4.6).
 
@@ -114,6 +122,48 @@ para tipar los *slices* de `identifier` —CIP-SNS `1551000122105`, CIP-AUT `157
 
 **La tabla definitiva vive en `ig/input/fsh/aliases.fsh`**, que es donde la consume el FSH: ningún
 `.fsh` escribe una URI a mano.
+
+### D22 — la puerta transaccional sigue cerrada; la atomicidad la pone el reproceso
+
+**Fecha:** 2026-08-06. **Decidido por el usuario** tras plantearle las tres opciones. Es la decisión
+que bloqueaba el hito 2 y por eso se toma **antes** de escribir la primera línea del motor.
+
+**El problema.** `ADR-0014` cerró el procesador de transacciones de HAPI para los recursos con
+agregado, y está bien cerrado: ese camino llama a las DAO directamente y **no pasa por el núcleo**.
+Pero **D5** dice que el motor de integración escribe contra la propia API FHIR como cliente
+`system/`, y §11 dice que un `OML^O21` produce **`ServiceRequest` + `Specimen`** — un par que quiere
+escribirse junto, porque si el segundo falla queda un volante sin muestra. Con la puerta cerrada, el
+motor no tiene hoy forma de escribir ese par atómicamente.
+
+**Las tres salidas planteadas:**
+
+| | Salida | Coste | Lo que se paga |
+|---|---|---|---|
+| (a) | La transacción **pasa por el núcleo**: el interceptor deja de rechazar y entrega el bundle a un servicio de aplicación que lo descompone en comandos de dominio dentro de un solo `@Transactional` | Alto | Resolver referencias internas `urn:uuid:`, decidir el orden de aplicación y mapear cada error a su `Bundle.entry.response` |
+| **(b)** | **El motor escribe recurso a recurso** y la atomicidad vive en el motor: mensaje guardado íntegro, DLQ ante el fallo y **reproceso idempotente** que vuelve a aplicarlo entero | **Cero trabajo nuevo** | El servidor sigue rechazando un verbo estándar de FHIR, y entre el fallo y el reproceso puede haber un `ServiceRequest` sin `Specimen` visible por la API |
+| (c) | Una **operación propia** `$aceptar-peticion` que reciba el par y lo escriba por el núcleo en una transacción | Medio | Inventa contrato donde el estándar ya tiene uno, y abre la puerta de las operaciones `$…` que `ADR-0014` dejó anotada como pendiente de revisar |
+
+**Elegida: (b).** El reproceso idempotente hay que construirlo igualmente —§7 lo exige y es lo que se
+pierde al no usar Mirth (D11)—, así que (b) no añade trabajo; y la ventana de huérfano es
+**exactamente el fallo que la DLQ existe para cerrar**, no un agujero sin dueño. (a) es la salida más
+conforme y queda **anotada como objetivo**, no como ítem de este hito: paga por adelantado un
+mecanismo genérico —resolución de `urn:uuid:`, orden de aplicación, mapeo de errores por entrada—
+para un único caso de uso conocido.
+
+**Lo que vale en las tres, y no se negocia:** **la puerta no se abre sin que lo que entre por ella
+pase por el núcleo.** Que un `Bundle transaction` escriba saltándose el dominio no vuelve a ser
+aceptable bajo ninguna de las tres opciones. Si algún día se implementa (a), el interceptor de
+`ADR-0014` no se retira: se sustituye por el desvío al servicio de aplicación.
+
+**Consecuencias operativas de haber elegido (b):**
+
+- El **almacén de mensajes, la DLQ y el reproceso pasan a ser prerrequisito del `OML^O21`**, no una
+  red de seguridad que se añade después. Se ordenan así en el checklist (ítems 22 y 25 antes del 26).
+- **El reproceso tiene que ser idempotente de verdad**, y eso se prueba: reaplicar el mismo mensaje
+  dos veces no puede producir dos volantes. Es lo que sostiene la atomicidad, así que su test es un
+  test de la decisión, no de una utilidad.
+- **La ventana de huérfano se documenta en la IG**, no se esconde: un `ServiceRequest` sin `Specimen`
+  es un estado transitorio legítimo del sistema mientras el reproceso no ha corrido.
 
 ### Decisiones triviales resueltas al andamiar (ítem 1)
 
@@ -368,6 +418,8 @@ para tipar los *slices* de `identifier` —CIP-SNS `1551000122105`, CIP-AUT `157
 
 ## Estado actual
 
+### De dónde se parte — hito 1 cerrado
+
 **HITO 1 CERRADO (2026-08-06). Los 17 ítems, del 0 al 16.** Los 12 criterios de aceptación de §14
 están verificados —los diez que se pueden automatizar, con test; los otros dos, contra la pila del
 `compose`—, los seis *workflows* de CI han corrido y están en verde, y las dos deudas que quedaban
@@ -383,54 +435,31 @@ cinco invariantes de §10 que el hito 1 alcanza viven en el núcleo de dominio, 
 | `web-profesional/` | Angular 22.1 + vitest + angular-eslint · capa de presentación FHIR · **cliente HTTP** (búsqueda por `POST _search`, paginación por el enlace del servidor, errores traducidos del `OperationOutcome`) · **alta de petición y consulta de informe** con sus ViewModels | `npm run lint`, `npm test` (**66 tests**), `npm run build`; API recorrida en vivo por el proxy, primero con `-Parranque-local` y después contra el `compose` |
 | `simuladores/` | **Generador de datos sintéticos completo**: terminología leída de la guía, **rangos de referencia leídos del fichero que publica el laboratorio**, identificadores españoles con dígito de control, paneles correlacionados, reflejas y muestras rechazadas | `ruff check`/`format`, `pytest` → **77 tests**; validador oficial sobre el corpus generado → **0 errores** |
 | `infra/` | **`compose` del hito 1**: PostgreSQL 14 + backend + web tras nginx, encadenados por *healthcheck* | `docker compose … up` desde una copia limpia del árbol commiteado, y el circuito recorrido de extremo a extremo contra la pila |
-| `integracion/`, `app-ciudadano/` | **Sin andamiar a propósito** (hito 2) | conservan su guarda de auto-omisión |
+| `integracion/`, `app-ciudadano/` | **Sin andamiar a propósito** — se andamian en los ítems 20 y 38 | conservan su guarda de auto-omisión, y es lo único que su CI ejercita |
 
-**Con el 12 cerrado, la API del hito 1 está completa**: escribe por el núcleo, lee por la proyección,
-pagina siguiendo sus propios enlaces y falla con el código que toca. Los ítems 10, 11 y 12 se
-predijeron baratos «porque vienen heredados de HAPI y solo hay que probarlos»; el 11 lo confirmó y el
-10 lo desmintió —probar el `PUT` destapó que el `update` heredado escribía la proyección y dejaba el
-dominio atrás—. Lo heredado hay que **probarlo antes de darlo por bueno**, que es distinto de
-implementarlo y distinto de confiar en ello.
+> **La CI está en verde en los seis workflows** y el filtrado por ruta está comprobado en los dos
+> sentidos. `integracion` y `app-ciudadano` **solo han corrido a mano** (`workflow_dispatch`) y lo que
+> ejercitan es su **guarda de auto-omisión**: sin `pom.xml` ni `pubspec.yaml` avisan y no construyen
+> nada. **Retirar esa guarda es lo primero al andamiarlos** (ítems 20 y 38). Se empuja a `origin/main`
+> por **SSH**: el PAT de HTTPS no tiene *scope* `workflow` y GitHub rechaza el push de
+> `.github/workflows/`.
 
-**La pila entera se levanta con un comando** (ítem 15) y el circuito se recorre contra ella. Se
-comprobó además **desde una copia limpia del árbol commiteado**, sin `fsh-generated`, sin
-`node_modules` y sin `target`: `docker compose … up --build` construye las dos imágenes —compilando
-de paso la terminología con SUSHI— y deja los tres servicios sanos.
+### Dónde estamos ahora — hito 2, ítem 17
 
-Lo que la web obligó a cambiar en el backend son dos cosas que **solo se ven desde el navegador**, y
-ninguna se habría notado escribiendo más tests del servidor: que buscar por número de historia con
-`GET ?identifier=…` escribe un dato del paciente en cuatro sitios de los que no se borra —se pasa a
-`POST [tipo]/_search`—, y que el enlace de la página siguiente lo firma el servidor con la dirección
-por la que le llegó la petición, que detrás de un proxy no es la del cliente. Las dos tienen ya su
-test en `backend/`.
+El hito 2 está **planificado y sin empezar**: 25 ítems, del 17 al 41, con la sección de
+*Prerrequisitos operativos* justo antes del checklist. La decisión que lo bloqueaba ya está tomada
+—**D22**, la puerta transaccional sigue cerrada y la atomicidad la pone el reproceso idempotente— y
+`docs/diseno.md` está en **v1.1**, con las dos correcciones factuales del hito 1 marcadas como
+añadidos.
 
-Y por el camino apareció **una segunda puerta de escritura abierta**, que no se buscaba: un `Bundle`
-de tipo `transaction` no pasa por los `ResourceProvider` propios —el procesador de HAPI llama a las
-DAO directamente—, así que colaba un `Patient` en la proyección sin agregado, sin NHC validado y sin
-fila en `dominio.paciente`, devolviendo `201`. Es el mismo fallo del ítem 10 en otra puerta. Cerrado
-con test en rojo primero.
+**El primer ítem no completado es el 17 — anulación de línea de petición**, y no es casualidad que
+sea ese: al completar el invariante del informe, el hito 1 dejó un volante con una muestra rechazada
+**bloqueado para siempre**, porque `Peticion` no tiene estado. Los tres huecos de dominio (17, 18 y
+19) van **antes del puente** porque el puente los usa: el `OML^O21` necesita poder anular, el
+`ORU^R01` saliente cuelga del resultado validado, y el bus no puede publicar nada sin el `outbox`.
 
-**Las dos deudas que quedaban están saldadas** (ítem 16): el invariante completo del informe de §10 y
-los rangos de referencia escritos dos veces. Las dos con su rojo o su comprobación cruzada, y las dos
-anotadas abajo, en *Notas / riesgos*, con lo que se descubrió al cerrarlas.
-
-> **Estado de la CI.** Subido a `origin/main` por **SSH** (el PAT de HTTPS no tiene *scope* `workflow`
-> y GitHub rechaza el push de `.github/workflows/`). **Los seis workflows han corrido y están en
-> verde.** Comprobado en ejecuciones reales:
->
-> - **El filtrado por ruta funciona**, con evidencia en los dos sentidos: un push que tocó `ig/**` y
->   `backend/**` disparó exactamente esos dos workflows y ninguno de los otros cuatro.
-> - **`backend`, `ig`, `web-profesional` y `simuladores` han corrido por `push`**, disparados por sus
->   propias rutas. El IG Publisher construye la guía —Ruby + Jekyll y plantilla `fhir2` incluidos—, la
->   comprobación de «un ejemplo por perfil» pasa, el **validador oficial de HL7 valida los 18
->   ejemplos** contra sus perfiles, y el job de publicación despliega a Pages.
-> - **`integracion` y `app-ciudadano` se lanzaron a mano** (`workflow_dispatch`) para cerrar el hito:
->   nunca se habían ejecutado porque su ruta no se ha tocado desde la primera subida, que es el
->   comportamiento correcto. Los dos pasan **ejercitando su guarda de auto-omisión**, que hasta ahora
->   solo se había leído: sin `pom.xml` ni `pubspec.yaml`, el job avisa y no construye nada. Retirar la
->   guarda es lo primero que hay que hacer al andamiarlos en el hito 2.
-> - **La salvaguarda de C2 se ha visto fallar de verdad**: con los nueve perfiles escritos y sin
->   ejemplos, la CI detuvo el build. No es una comprobación teórica.
+**Nada de esto se ha adelantado.** `integracion/` y `app-ciudadano/` siguen sin andamiar, y el
+`compose` sigue siendo el de tres servicios.
 
 ---
 
@@ -800,24 +829,305 @@ anotadas abajo, en *Notas / riesgos*, con lo que se descubrió al cerrarlas.
 
 ---
 
-## Hito 2 — la interoperabilidad de verdad (esbozo)
+## Prerrequisitos operativos del hito 2
 
-Se detalla al cerrar el hito 1; no se adelanta trabajo.
+> Lo que se sabe que va a doler, escrito antes de tropezar. **No son ítems**: son condiciones que hay
+> que cumplir dentro del ítem que las toca.
 
-- Puente **V2.5.1**: `ADT^A01`/`A08`, `OML^O21`, `ORU^R01`, con **charset español** (`MSH-18`) y
-  `MUÑOZ`/`ÁLVAREZ`/`PEÑA` como casos obligatorios. ⚠️ Cruzar la **tabla 0354** entre V2.5 y V2.5.1
-  antes de generar código: su contenido difiere.
-- Motor con el **mensaje original guardado íntegro**, DLQ y **reproceso idempotente** (lo que se pierde
-  al no usar Mirth). Deduplicación por `MSH-10` **antes** de escribir.
-- **Kafka** con hechos clínicos (`lab.peticiones.v1`, `lab.especimenes.v1`, `lab.resultados.v1`,
-  `lab.informes.v1`), clave de partición = paciente, Schema Registry con compatibilidad hacia atrás y
-  **outbox transaccional**. Hechos con referencias, **nunca PHI**.
-- **Servidor de terminología** con el `ConceptMap` del catálogo local y los contratos `$expand`,
-  `$validate-code`, `$translate`.
-- **Keycloak** con SMART on FHIR (scopes `patient/`, `user/`, `system/`, contexto de lanzamiento,
-  `.well-known/smart-configuration`).
-- **App del ciudadano** en Flutter con SMART standalone + PKCE.
-- Imports a añadir entonces: `interoperabilidad/smart-on-fhir/convenciones.md` en `backend/CLAUDE.md`.
+- **Al andamiar `integracion/` y `app-ciudadano/`, retirar su guarda de auto-omisión en el mismo
+  commit**, y **comprobar el bit de ejecución en el índice** de todo script del repositorio que
+  ejecute la CI: `integracion/mvnw` y, si el andamiaje de Flutter lo trae,
+  `app-ciudadano/android/gradlew`. Es literalmente la trampa de `adr-0008`: NTFS no sostiene el
+  atributo, el fichero se commitea como `100644` y el runner de Linux muere con `Permission denied`.
+  Se corrige con `git update-index --chmod=+x <ruta>` **antes** del primer empujón, no después de ver
+  la CI en rojo. Y un componente andamiado con la guarda puesta es **peor** que uno sin andamiar: la
+  CI pasa en verde sin construir nada.
+- **Imports de `CLAUDE.md` que faltan**, cada uno cuando llegue su ítem y no antes (importarlos ahora
+  es contexto que nadie usa):
+  - `interoperabilidad/smart-on-fhir/convenciones.md` y `herramientas/autenticacion.md` en
+    **`backend/CLAUDE.md`** al empezar Keycloak (ítem 34). **`app-ciudadano/CLAUDE.md` necesita el
+    primero también** — hoy solo importa Dart, Flutter, almacenamiento local, MVVM y UX.
+  - `interoperabilidad/terminologia/convenciones.md` en **`backend/CLAUDE.md`** al montar el servidor
+    de terminología (ítem 32).
+  - **`integracion/CLAUDE.md` ya está completo** —verificado—: importa `hl7-v2`, `integracion`,
+    `datos-distribuidos`, Java y Spring. No hay que tocarlo al andamiar.
+- ⚠️ **Cruzar la tabla 0354 entre V2.5 y V2.5.1 ANTES de generar código** (ítem 21). Su contenido
+  difiere entre las dos versiones y **las dos están archivadas en `_fuente/` de la biblioteca**, así
+  que el cruce se hace en local y no se asume equivalencia. Es lo único de §17 que este hito convierte
+  en bloqueante.
+- **SNOMED CT Edición Española no se redistribuye y no entra en el repositorio.** Requiere registro
+  ante el Ministerio de Sanidad (§5). El servidor de terminología se carga con lo archivado en la
+  biblioteca (LOINC 2.82, THO 7.3.0) más subconjuntos curados que se traen fuera de banda.
+- **El `compose` pasa de tres servicios a ocho** (PostgreSQL, backend, web, motor, Kafka, Schema
+  Registry, terminología, Keycloak). Lo que hoy funciona encadenado por *healthcheck* con tres se
+  vuelve frágil con ocho, y la máquina de desarrollo tiene un límite. Si no cabe todo a la vez, se
+  reparte en **perfiles de compose**; no se quita el *healthcheck*.
+- **Verificar contra el `compose` en WSL exige una sola sesión** (ver *Notas / riesgos*): levantar en
+  una invocación de `wsl` y comprobar en otra hace que conteste un contenedor de la sesión anterior.
+  Con ocho servicios el riesgo crece, no baja.
+- **Las decenas de millón de los contadores de NHC de los tests están agotadas** (ver *Decisiones*,
+  ítem 16). Toda clase de test de integración nueva tiene que repartirse **dentro** de una decena, no
+  detrás: el NHC son exactamente ocho dígitos y `100_000_000` lo rechaza el propio dominio.
+
+---
+
+## Checklist — Hito 2
+
+> Mismo estándar que el hito 1: un ítem = una unidad de trabajo pequeña con **criterio de aceptación
+> verificable**, ordenados para que cada uno deje algo demostrable.
+> `[ ]` pendiente · `[x]` hecho (cumple criterio + verificado + commiteado).
+
+### Los huecos de dominio — van antes del puente, porque el puente los usa
+
+- [ ] **17 — Anulación de línea de petición.**
+  `Peticion` no tiene estado, así que desde que el ítem 16 completó el invariante del informe, **un
+  volante con una muestra rechazada queda bloqueado para siempre**. La salida ya está identificada:
+  anular la línea, que es lo que hace un laboratorio de verdad.
+  *Criterio:* `Peticion` gana estado (`activa | anulada`) con motivo y fecha; el caso de uso
+  `AnularLinea` lo cambia **por el núcleo** y la proyección publica `ServiceRequest.status = revoked`
+  en la misma transacción. **Test en rojo primero:** volante con dos líneas, una muestra rechazada,
+  la línea anulada, y el informe de la otra **se emite** — hoy devuelve `422`. Una línea que **ya
+  tiene resultado** no se puede anular → `422` con su `OperationOutcome`. Una línea anulada **no
+  cuenta** para el invariante del informe y **no admite** un espécimen nuevo.
+  *Trampa:* anular no es borrar. El `ServiceRequest` revocado se sigue publicando y se sigue leyendo;
+  lo único que cambia es que deja de bloquear. Borrar la línea dejaría el volante sin rastro de lo
+  que se pidió, que es justo lo que el peticionario necesita ver.
+
+- [ ] **18 — Validación facultativa del resultado, con su `Provenance`.**
+  *Criterio:* `Resultado` gana estado (`preliminar | validado`) y el caso de uso `ValidarResultado`,
+  que exige un facultativo y sella la fecha; la proyección publica `Observation.status`
+  `preliminary` → `final` **y un `Provenance`** con `.target` → `Observation`, `.agent.who` →
+  `Practitioner` y `.recorded`, escrito en la misma transacción — §6.1 lo mapea así, sin extensión.
+  **El informe solo publica resultados validados:** test en rojo con un resultado preliminar dentro
+  del alcance → `422`. Validar dos veces el mismo resultado → `422`; corregir uno ya validado es una
+  versión nueva, no una revalidación.
+  *Por qué aquí y no en el hito 3:* de «resultado validado» cuelgan el `ORU^R01` saliente de este
+  hito (ítem 28) y **todo** el notificador EDO del hito 3. Si no entra aquí, el hito 3 empieza
+  retocando el núcleo, que es el peor sitio donde empezar un hito.
+  *Consecuencia que hay que asumir:* el circuito del hito 1 gana un paso. `CircuitoCompletoTest` y el
+  guion de verificación del `compose` se actualizan **en el mismo commit**, o el informe deja de
+  emitirse.
+  *Nota:* `Provenance` no está entre los nueve perfiles de §6.5 y **no se le escribe uno** salvo que
+  aparezca una restricción de negocio que justifique el décimo; §6.1 lo lista como recurso aparte.
+
+- [ ] **19 — Esquema `outbox`, escrito en la misma transacción.**
+  *Criterio:* migración que crea el esquema `outbox` y su tabla de hechos (`id`, `tipo`,
+  `clave_de_particion`, `carga`, `creado_en`, `publicado_en`); las escrituras del dominio dejan su
+  hecho **dentro del mismo `@Transactional`** de §9. Test **por el lado del fallo**, como el del ítem
+  7: un alta que el dominio rechaza **no deja fila en `outbox`** — uno del camino feliz pasaría igual
+  con dos transacciones.
+  *Y lo que de verdad hay que comprobar:* que **el hecho no lleva PHI**. Test que recorre la carga de
+  cada tipo de hecho y falla si aparece un NHC, un nombre, un DNI o un NUHSA. El invariante 6 del
+  proyecto prohíbe PHI en el bus, y **el sitio donde se incumple es aquí**, construyendo la carga —
+  no en Kafka.
+
+### El motor de integración
+
+- [ ] **20 — Andamiar `integracion/` y dejar su CI construyendo de verdad.**
+  *Criterio:* `integracion/pom.xml` con Spring Boot 3.5.16 (la misma que el backend, por lo que dice
+  la decisión del ítem 1) y HAPI HL7v2 (`ca.uhn.hl7v2`), Spotless enganchado a `verify`, y **la
+  guarda de auto-omisión de `ci-integracion.yml` retirada en el mismo commit**. `integracion/mvnw`
+  con bit de ejecución en el índice (`git ls-files -s integracion/mvnw` → `100755`). El workflow
+  corre **por `push`**, no por `workflow_dispatch`, y **construye**: un `::notice::` de omisión en el
+  log es un fallo del ítem.
+
+- [ ] **21 — ⚠️ Cruzar la tabla 0354 entre V2.5 y V2.5.1.**
+  *Criterio:* documento corto en `docs/` —ADR si el hallazgo sirve fuera del proyecto— con el **diff
+  medido** de la tabla 0354 entre las dos versiones archivadas en `_fuente/`, y la lista de las
+  estructuras que este proyecto usa (`ADT_A01`, `ADT_A08`, `OML_O21`, `ORU_R01`) con su código en
+  **V2.5.1**, que es la versión que fija D12. Se hace **antes** del primer parser: es una
+  comprobación de un rato que evita generar código contra la tabla equivocada.
+
+- [ ] **22 — Almacén de mensajes: el original íntegro y la deduplicación.**
+  *Criterio:* todo mensaje que entra se guarda **antes de tocarlo**, tal y como llegó, con metadatos
+  indexables (emisor `MSH-3`/`MSH-4`, tipo `MSH-9`, control `MSH-10`, versión `MSH-12`, fecha, estado
+  de proceso). Reenviar el mismo mensaje **no produce una segunda escritura**, y la deduplicación
+  ocurre **en el motor y antes** de llamar a la API FHIR.
+  *La trampa que decide el diseño de la clave:* **`MSH-10` solo es único por emisor.** La clave es
+  `MSH-3` + `MSH-4` + `MSH-10`, no `MSH-10` a secas: con dos analizadores que reinician su contador,
+  `MSH-10` solo descarta mensajes buenos **en silencio**, que es peor que duplicarlos.
+
+- [ ] **23 — Listener MLLP sobre TLS, con acuses y charset.**
+  *Criterio:* el motor escucha MLLP (`0x0B` … `0x1C 0x0D`, que implementa HAPI — nunca se escribe a
+  mano) **sobre TLS**, y responde `ACK` con el `MSA-1` que toca: `AA` al aceptar, `AE` ante error de
+  aplicación, `AR` al rechazar. Un mensaje que no se puede procesar **produce `AE`/`AR`, nunca
+  silencio**: un emisor v2 sin acuse o reintenta indefinidamente o lo da por entregado, y las dos
+  cosas son peores que un rechazo. El charset se toma de **`MSH-18`** y se respeta: `MUÑOZ`,
+  `ÁLVAREZ` y `PEÑA` **de ida y vuelta**, en `8859/1` y en `UNICODE UTF-8`, son casos obligatorios.
+  *Trampa:* leer como UTF-8 un mensaje `8859/1` **no lanza ninguna excepción** — produce `MU?OZ` y
+  sigue. El test tiene que comparar la cadena, no comprobar que no hubo error.
+
+- [ ] **24 — `ADT^A01` / `A08` → `Patient`.**
+  *Criterio:* un `ADT^A01` da de alta al paciente **por la API FHIR** y un `A08` corrige su
+  filiación; los dos aterrizan en `dominio.paciente`, comprobado con SQL y no leyendo la proyección
+  —la lección del ítem 10—. Los apellidos llegan **enteros** desde `PID-5` y no se parten por el
+  espacio. Un `A08` de un paciente que no existe **no lo crea**: se rechaza con `AE` y queda en el
+  almacén con su motivo.
+  *Se elige el primero a propósito:* es el único mapeo de un solo recurso, así que estrena el canal
+  sin arrastrar el problema de atomicidad de D22.
+
+- [ ] **25 — DLQ y reproceso idempotente.**
+  *Criterio:* un mensaje cuyo proceso falla va a la **DLQ** con el error y el original intactos; el
+  punto de reproceso lo vuelve a aplicar **entero** y, aplicado dos veces, **no produce dos altas** —
+  test explícito, reprocesando el mismo mensaje y contando con `SELECT count(*)` sobre el dominio. La
+  DLQ es consultable y el reproceso es una operación del motor, no un script suelto (D11: es lo que
+  se pierde al no usar Mirth).
+  *Es lo que sostiene D22*, así que va **antes** del `OML^O21`: la atomicidad del par
+  `ServiceRequest` + `Specimen` la pone este ítem, no el siguiente.
+
+- [ ] **26 — `OML^O21` → `ServiceRequest` + `Specimen`, recurso a recurso (D22).**
+  *Criterio:* un `OML^O21` con varias pruebas produce las **líneas del volante** —que comparten
+  `requisition` y avanzan por separado— y su `Specimen`, escritos **uno a uno** contra la API FHIR.
+  **Test del fallo intermedio:** si la escritura del `Specimen` falla, el mensaje acaba en la DLQ y el
+  reproceso deja el estado completo **sin duplicar** el `ServiceRequest` que sí se había escrito. La
+  ventana de huérfano se comprueba y se documenta: es un estado transitorio legítimo, no un fallo.
+  *Y el `CapabilityStatement` deja de prometer lo que no cumple:* comprobar qué declara hoy
+  `rest.interaction`; si dice `transaction` —que es el valor por defecto de HAPI— el documento del
+  que se fía un cliente está prometiendo un verbo que el interceptor de `ADR-0014` rechaza. Con D22
+  tomada, eso pasa a ser parte del contrato publicado.
+  *Y el número de volante:* aquí lo trae `ORC-4`, así que el apaño de la web —`P<fecha>-<sufijo al
+  azar>`, ver *Notas / riesgos*— **no aplica a este camino**: si el HIS emite el número, manda el suyo.
+
+- [ ] **27 — `ORU^R01` entrante → `Observation`.**
+  *Criterio:* un `ORU^R01` del analizador produce resultados en el dominio con **valor, unidad UCUM y
+  `effective[x]`** desde `OBX-5`/`OBX-6`/`OBX-14`, y respeta el tipo declarado en **`OBX-2`** (`NM`
+  numérico, `ST` texto, `CE` codificado) en vez de dar por hecho que es un número. Un `ORU^R01` sobre
+  una **muestra rechazada** se rechaza con `AE` y **no crea el resultado**: el invariante C6 vive en
+  el núcleo y el motor entra por la API, así que lo tiene que ver igual que la web. Los resultados
+  entran como **preliminares** (ítem 18) — el analizador mide, no valida.
+  *Trampa:* `OBX-11` no es `Observation.status` sin traducir, y **el catálogo del analizador no es el
+  catálogo del laboratorio**. El puente entre los dos es un `ConceptMap` servido por el servidor de
+  terminología (ítem 33), nunca una tabla escrita a mano dentro del motor — invariante 4.
+
+- [ ] **28 — `ORU^R01` saliente al HIS cuando el informe se valida.**
+  *Criterio:* al emitirse un informe, el motor construye y envía un `ORU^R01` al HIS con los
+  resultados validados, y **el envío se dispara desde el hecho del `outbox`**, no desde un `if`
+  dentro del caso de uso: con el HIS caído el hecho sigue ahí y se reintenta. Charset y acuse del
+  lado emisor comprobados con los tres apellidos de siempre.
+
+### El bus de eventos
+
+- [ ] **29 — Kafka y Schema Registry en el `compose`, con los cuatro tópicos.**
+  *Criterio:* `lab.peticiones.v1`, `lab.especimenes.v1`, `lab.resultados.v1` y `lab.informes.v1`
+  creados, con su esquema **registrado** y la compatibilidad fijada **hacia atrás** (§11). La
+  compatibilidad se **prueba**, no se declara: registrar una versión que la rompe tiene que ser
+  **rechazada por el registro**, y hay un test que lo comprueba.
+
+- [ ] **30 — El relay publica el `outbox` en Kafka.**
+  *Criterio:* el relay drena la tabla del ítem 19 y publica con **clave de partición = paciente**, de
+  modo que los hechos de un mismo paciente **mantienen el orden**; test con dos pacientes
+  intercalados. La entrega es **al menos una vez**, así que el consumidor de prueba es idempotente y
+  eso se prueba reentregando. **Ningún hecho lleva PHI:** solo referencias
+  (`{ pacienteId, peticionId, observationRef }`), y el test del ítem 19 se ejecuta también sobre lo
+  que sale del *topic*.
+  *Y el caso que de verdad importa:* con el broker **parado**, la escritura FHIR sigue devolviendo
+  `201` y el hecho queda en el `outbox`; al arrancar el broker se publica. Si un `POST` falla porque
+  Kafka está caído, el outbox no está haciendo su trabajo — que es exactamente para lo que está.
+
+### Recuperación
+
+- [ ] **31 — Reconciliador dominio → proyección, como vía oficial.**
+  *Criterio:* una operación que recorre el dominio y **regenera la proyección**, con su test: se
+  corrompe la proyección a propósito —se borra un `Observation` y se altera otro— y al reconciliar,
+  dominio y proyección vuelven a coincidir. Detecta **las dos** divergencias, no una: lo que falta en
+  la proyección **y lo que sobra en ella sin agregado detrás**, que es la forma que tenía el
+  incidente del `Bundle transaction`. Es idempotente: reconciliar dos veces no cambia nada. §15 lo
+  pide como **vía de recuperación oficial**, no como script de emergencia, así que va con su prueba y
+  su documentación.
+  *La decisión que hay que tomar y escribir:* reescribir por la DAO **incrementa `versionId`** y deja
+  obsoletos los `ETag` de todos los clientes. O se preservan las versiones, o se acepta el salto y se
+  documenta — una vía oficial que rompe la concurrencia optimista sin avisar no es una vía oficial.
+
+### Terminología
+
+- [ ] **32 — Servidor de terminología en el `compose` (D14).**
+  *Criterio:* servidor de terminología de HAPI como **servicio aparte**, cargado con LOINC 2.82 y THO
+  7.3.0 (archivados en la biblioteca), subconjuntos curados de SNOMED español y **el `CodeSystem` y
+  el `ConceptMap` del catálogo local**. El backend lo consulta **por URL configurable**, y cambiarla
+  por la de otro servidor es el único cambio necesario: es el argumento con el que se tomó D14 y hay
+  que poder demostrarlo, no solo afirmarlo. Ningún fichero de terminología licenciada en el repo.
+
+- [ ] **33 — Los tres contratos, y la web deja de empaquetar el catálogo.**
+  *Criterio:* `$expand`, `$validate-code` y `$translate` funcionando, con test por cada uno:
+  `$expand` del `ValueSet` de pruebas del catálogo, `$validate-code` **rechazando** un código que no
+  está, y `$translate` devolviendo el LOINC de un código local por el `ConceptMap` publicado —
+  incluidas las cinco correspondencias que **no** son equivalencia (`source-is-broader-than-target`),
+  que son las que un mapeo ingenuo aplana. La web profesional pide el catálogo con `$expand` en vez
+  de congelarlo en el build, lo que **cierra la deuda** anotada en *Notas / riesgos*. Y se recuperan
+  los **códigos SNOMED del SNS en `identifier.type`** (`1551000122105`, `1571000122102`,
+  `22851000122109`) que el ítem 3 tuvo que dejar fuera porque `tx.fhir.org` no los sirve.
+  *Trampa:* los parámetros de `$translate` **cambian de nombre en R5**, en la misma línea que el
+  renombrado de `ConceptMap` que registra §2.1 ➕. Verificar contra el paquete canónico antes de
+  escribir el cliente: cualquier ejemplo de R4 que se copie va a fallar.
+
+### Seguridad
+
+- [ ] **34 — Keycloak en el `compose` y `.well-known/smart-configuration`.**
+  *Criterio:* Keycloak levantado con su *realm* **como código** —no configurado a mano en la
+  consola—, y el backend publicando `/.well-known/smart-configuration` con los *endpoints* de
+  autorización y token, las `capabilities` que soporta y los métodos de autenticación de cliente. El
+  `CapabilityStatement` declara la seguridad con sus `oauth-uris`. Comprobado **desde fuera**, con
+  `curl`, no leyendo la configuración.
+  *Trampa registrada por adelantado:* **Keycloak no habla SMART de fábrica.** El contexto de
+  lanzamiento —el `patient` que acompaña al token— no es OIDC estándar y necesita un *mapper*; y el
+  parámetro `aud`, que SMART exige que apunte a la base FHIR, Keycloak no lo valida por su cuenta.
+  Las dos cosas hay que construirlas y probarlas.
+
+- [ ] **35 — Los scopes SMART gobiernan de verdad.**
+  *Criterio:* los tres tipos de §7 se aplican: `user/*.rs` para la web del profesional, `patient/*.rs`
+  **acotado al paciente del contexto**, y `system/*.r` para los clientes no humanos. **Test por el
+  lado de la negativa**, que es el único que prueba algo: un token `patient/` de un paciente **no**
+  alcanza los resultados de otro → `403` con su `OperationOutcome`, y un token de solo lectura no
+  escribe. Sin token, la API deja de responder a lo que hoy responde.
+
+- [ ] **36 — El motor se autentica como cliente `system/` — D5, cerrada del todo.**
+  *Criterio:* el motor obtiene su token por **SMART Backend Services** (`client_credentials` con JWT
+  firmado) y todas sus escrituras llevan `Authorization`.
+  *Deuda declarada dentro del hito:* hasta este ítem **el motor escribe sin token**. Está dicho aquí
+  para que no se olvide — D5 no está cumplida del todo mientras este ítem siga abierto.
+
+- [ ] **37 — La web profesional pasa a EHR launch.**
+  *Criterio:* la web deja de hablar con la API a pecho descubierto y arranca por el flujo de
+  lanzamiento SMART, con su token y su contexto; la sesión caduca y se renueva **sin que el usuario
+  pierda lo que estaba haciendo**. Los tests de la web siguen en verde y el `compose` sigue
+  levantando el circuito entero.
+
+### La app del ciudadano
+
+- [ ] **38 — Andamiar `app-ciudadano/`.**
+  *Criterio:* `app-ciudadano/pubspec.yaml` con el proyecto Flutter, `flutter analyze` y `flutter test`
+  en verde, **guarda de auto-omisión de `ci-app-ciudadano.yml` retirada en el mismo commit**, y el
+  bit de ejecución comprobado en cualquier script que la CI ejecute (`android/gradlew` si el
+  andamiaje lo trae). Igual que el ítem 20: un `::notice::` de omisión en el log es un fallo del ítem.
+
+- [ ] **39 — SMART standalone + PKCE.**
+  *Criterio:* el ciudadano se autentica desde la app —cliente **público**, sin secreto, PKCE con
+  `S256`— y obtiene un token con contexto de paciente. El token **no se guarda en claro**:
+  almacenamiento seguro de la plataforma. Probado contra el Keycloak del `compose`, no contra un doble.
+  *Trampa de entorno:* en el emulador de Android `localhost` es el emulador, no la máquina —el host
+  es `10.0.2.2`—, así que un `redirect_uri` o un `aud` apuntando a `localhost` falla ahí y funciona
+  en todas partes. Y el retorno de la autorización necesita esquema propio o *app link* declarado en
+  la plataforma.
+
+- [ ] **40 — La pantalla de informes del ciudadano, contra la API real.**
+  *Criterio:* el paciente ve **sus** informes, con los resultados presentados con **unidad y rango de
+  referencia** y los apellidos enteros —`MUÑOZ`, `ÁLVAREZ` y `PEÑA` legibles en el dispositivo—. Sin
+  *mocks* en el código de la aplicación: todo sale de la API. Y **solo los suyos**: el mismo test
+  negativo del ítem 35, ahora desde el cliente.
+
+### Cierre del hito
+
+- [ ] **41 — Hito 2 cerrado.**
+  *Criterio:* el circuito v2 recorrido de extremo a extremo contra el `compose` —`ADT` → `OML` →
+  `ORU` → validación facultativa → informe → `ORU` saliente—, con los hechos apareciendo en Kafka y
+  **sin PHI en ellos**; los ocho servicios levantados con un solo comando; **los seis workflows en
+  verde y los seis construyendo de verdad**, sin auto-omisiones; `PLAN.md`, `README.md` y
+  `docs/diseno.md` coherentes con la realidad del repo; y los aprendizajes transversales anotados
+  como **ADR nuevos** — la biblioteca no se toca a mitad de proyecto. Repasar además, uno a uno: que
+  **D5 esté cumplida** (ítem 36), que la puerta de `ADR-0014` siga cerrada y que el invariante 6
+  —nunca PHI en el bus— tenga su test.
+
+---
 
 ## Hito 3 — lo que solo existe en R5, lo masivo y lo legal (esbozo)
 
@@ -826,7 +1136,8 @@ Se detalla al cerrar el hito 1; no se adelanta trabajo.
 - **Notificador EDO** a SVEA/Redalerta: resultado validado cuyo código está en el catálogo EDO ⇒
   notificación obligatoria (`Task`). Obligación legal real, también para privados.
 - **Bulk Data** `$export` + `Group` para vigilancia epidemiológica, vía SMART Backend Services.
-- `AuditEvent` y `Provenance` completos (justificación de trazabilidad de D17).
+- `AuditEvent` completo (justificación de trazabilidad de D17). El `Provenance` de **quién validó el
+  resultado** ya no espera aquí: entra en el hito 2, ítem 18, porque de él cuelga el notificador EDO.
 - Imports a añadir entonces: `interoperabilidad/bulk-data/convenciones.md`.
 
 ---
@@ -846,7 +1157,8 @@ Se detalla al cerrar el hito 1; no se adelanta trabajo.
   actualización de HAPI.
 - **Doble escritura del mismo hecho.** Dominio y proyección pueden divergir por un bug de mapeo. Hace
   falta un **reconciliador** que recorra el dominio y regenere la proyección, como **vía de recuperación
-  oficial**, no como script de emergencia. Se planifica en el hito 2.
+  oficial**, no como script de emergencia. **Planificado: ítem 31**, con su prueba y con la decisión
+  pendiente de qué hacer con el `versionId` al reescribir.
 - **Se desarrolla en Windows y se construye en Linux**, y hay **dos** atributos de fichero que solo
   fallan en el runner. El de los finales de línea se previó (`.gitattributes`); el del **bit de
   ejecución no**, y tumbó la CI del backend en su primera ejecución: `backend/mvnw` estaba
@@ -903,13 +1215,14 @@ Se detalla al cerrar el hito 1; no se adelanta trabajo.
 - **El número que agrupa las líneas de la petición lo inventa el cliente.** La API lo exige dentro
   del recurso (`ServiceRequest.requisition`) y el servidor no lo emite, así que la web genera
   `P<fecha>-<sufijo al azar>`. En un SIL real lo daría un contador del laboratorio; aquí el sufijo
-  solo hace improbable —no imposible— que dos mostradores mezclen dos volantes en uno. Si el hito 2
-  trae un emisor de números, esto se retira.
+  solo hace improbable —no imposible— que dos mostradores mezclen dos volantes en uno. **El camino v2
+  no lo usa** (ítem 26): allí el número viene en `ORC-4` y manda el del HIS. Si aparece un emisor de
+  números propio, el apaño de la web se retira.
 - **El catálogo de pruebas llega al navegador empaquetado en el build.** Es el mismo `CodeSystem` de
   la guía (D15), no una lista paralela, pero se congela al construir la web: añadir una prueba al
   catálogo obliga a reconstruirla. En el hito 2, con el servidor de terminología, pasa a pedirse con
   `$expand` y el problema desaparece; hasta entonces es lo más cercano a la fuente que puede hacer un
-  cliente que no tiene servidor de terminología al que preguntar.
+  cliente que no tiene servidor de terminología al que preguntar. **Se cierra en el ítem 33.**
 - ~~**El invariante completo del informe está a medias.**~~ — **cerrado el 2026-08-06** (ítem 16), y
   el rojo está en el historial (`3a9bd7a`): un volante con glucosa y creatinina, solo la glucosa
   informada, y el `DiagnosticReport` con esa sola glucosa devolvía `201`. Es el más dañino de los tres
@@ -945,14 +1258,22 @@ Se detalla al cerrar el hito 1; no se adelanta trabajo.
 - **La IG propia es trabajo real:** nueve perfiles más terminología, sin US Core ni IPS de donde tirar.
   Es el ítem que más fácilmente se subestima.
 - **Sin la red de seguridad de Mirth** (D11): almacén de mensajes, reintentos y consola de reproceso
-  hay que construirlos (hito 2).
+  hay que construirlos — **ítems 22 y 25**, y con D22 tomada dejan de ser una red de seguridad
+  opcional: son lo que sostiene la atomicidad del `OML^O21`.
+- **El `CapabilityStatement` puede estar prometiendo un verbo que el servidor rechaza.** El ítem 16
+  cerró el `Bundle transaction` para los recursos con agregado, pero `ConformidadHispaLis` solo recorta
+  `supportedProfile`: **no toca `rest.interaction`**, que HAPI rellena por su cuenta. Hay que mirar qué
+  declara hoy `GET /fhir/metadata`; si dice `transaction`, el único documento del que un cliente se
+  fía está anunciando algo que el interceptor de `ADR-0014` deniega. No se rehace aquí —el hito 1 está
+  cerrado— y se comprueba y corrige en el **ítem 26**, que es donde D22 aterriza.
 - **Simular normativa real tiene un límite.** El catálogo EDO y el formato de Redalerta se modelan de
   forma **verosímil, no fiel**, y así queda escrito en la IG.
 - **CI de monorepo multi-*toolchain*:** filtrado por `paths:` desde el primer día, o cada cambio en
   Flutter recompila el backend.
 - **No verificado contra fuente primaria** (§17, nada de esto bloquea el hito 1): estructura interna del
   CIP-SNS (irrelevante por D16), especificación MLLP (sin impacto en código: lo implementa HAPI), y la
-  **tabla 0354** de V2.5.1 (cruzar en el hito 2, ambas versiones están archivadas en la biblioteca).
+  **tabla 0354** de V2.5.1 — que deja de ser una anotación y pasa a ser **bloqueante: ítem 21**, antes
+  de generar código. Las dos versiones están archivadas, así que el cruce se hace en local.
 - **Aportaciones pendientes a la biblioteca** al terminar el proyecto (§17.2): las capas 2 y 3 de la
   trampa documental de MLLP —que el documento normativo es un estándar de **V3** y que está **retirado
   desde mayo de 2025 sin sustituto**— van a `interoperabilidad/hl7-v2/`.
