@@ -8,11 +8,15 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.Date;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.hl7.fhir.instance.model.api.IBaseResource;
 import org.hl7.fhir.r5.model.CodeableConcept;
 import org.hl7.fhir.r5.model.CodeableReference;
 import org.hl7.fhir.r5.model.Coding;
+import org.hl7.fhir.r5.model.DateTimeType;
 import org.hl7.fhir.r5.model.DiagnosticReport;
 import org.hl7.fhir.r5.model.Enumerations;
 import org.hl7.fhir.r5.model.HumanName;
@@ -70,7 +74,7 @@ class CircuitoCompletoTest extends TestDeIntegracion {
         String paciente = crear(pacienteDePrueba(), "1-paciente");
         String peticion = crear(peticionDePrueba(paciente, laboratorio), "2-peticion");
         String especimen = crear(especimenDePrueba(paciente), "3-especimen");
-        String resultado = crear(resultadoDePrueba(paciente, especimen, peticion), "4-resultado");
+        String resultado = crear(resultadoDePrueba(paciente, especimen, peticion, laboratorio), "4-resultado");
         String informe = crear(informeDePrueba(paciente, resultado, laboratorio), "5-informe");
 
         // Que cada recurso exista es la mitad; la otra es que las referencias estén bien puestas.
@@ -194,7 +198,8 @@ class CircuitoCompletoTest extends TestDeIntegracion {
         return especimen;
     }
 
-    private static Observation resultadoDePrueba(String paciente, String especimen, String peticion) {
+    private static Observation resultadoDePrueba(
+            String paciente, String especimen, String peticion, String laboratorio) {
         Observation resultado = new Observation();
         resultado.setStatus(Enumerations.ObservationStatus.FINAL);
         resultado.setCode(new CodeableConcept()
@@ -204,6 +209,12 @@ class CircuitoCompletoTest extends TestDeIntegracion {
         resultado.addBasedOn(new Reference(peticion));
         resultado.setValue(
                 new Quantity().setValue(92).setUnit("mg/dL").setSystem(UCUM).setCode("mg/dL"));
+
+        // Cuándo se midió y quién lo hizo. Van aquí y no en un test aparte porque lo que se vuelca
+        // de este circuito es lo que revisa el validador oficial: si el resultado que publica el
+        // laboratorio no los lleva, no están publicados aunque el servidor sepa guardarlos.
+        resultado.setEffective(new DateTimeType(Date.from(Instant.now().minus(2, ChronoUnit.HOURS))));
+        resultado.addPerformer(new Reference(laboratorio));
         return resultado;
     }
 

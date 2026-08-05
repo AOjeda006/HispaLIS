@@ -27,6 +27,7 @@ public final class Resultado {
     private final BigDecimal valor;
     private final String unidadUcum;
     private final String valorTextual;
+    private final Medicion medicion;
 
     private Resultado(
             UUID id,
@@ -36,7 +37,8 @@ public final class Resultado {
             String codigoDePrueba,
             BigDecimal valor,
             String unidadUcum,
-            String valorTextual) {
+            String valorTextual,
+            Medicion medicion) {
         this.id = id;
         this.especimenId = especimenId;
         this.pacienteId = pacienteId;
@@ -45,6 +47,7 @@ public final class Resultado {
         this.valor = valor;
         this.unidadUcum = unidadUcum;
         this.valorTextual = valorTextual;
+        this.medicion = medicion == null ? Medicion.sinConstancia() : medicion;
     }
 
     /**
@@ -55,12 +58,18 @@ public final class Resultado {
      * @param codigoDePrueba código del catálogo del laboratorio (p. ej. {@code GLU})
      * @param valor la cifra medida
      * @param unidadUcum unidad UCUM en la que está la cifra
+     * @param medicion cuándo se midió y quién lo hizo; {@link Medicion#sinConstancia()} si no consta
      * @throws es.hispalis.backend.dominio.ReglaDeNegocioIncumplida si la muestra fue rechazada o no
      *     está disponible
      * @throws DatoInvalido si falta el código de prueba, la cifra o la unidad
      */
     public static Resultado informarCuantitativo(
-            Especimen especimen, UUID peticionId, String codigoDePrueba, BigDecimal valor, String unidadUcum) {
+            Especimen especimen,
+            UUID peticionId,
+            String codigoDePrueba,
+            BigDecimal valor,
+            String unidadUcum,
+            Medicion medicion) {
         especimen.exigirQuePuedeProducirResultados();
 
         if (codigoDePrueba == null || codigoDePrueba.isBlank()) {
@@ -81,7 +90,8 @@ public final class Resultado {
                 codigoDePrueba.strip(),
                 valor,
                 unidadUcum.strip(),
-                null);
+                null,
+                medicion);
     }
 
     /**
@@ -90,7 +100,8 @@ public final class Resultado {
      * @throws es.hispalis.backend.dominio.ReglaDeNegocioIncumplida si la muestra no puede producir
      *     resultados
      */
-    public static Resultado informarTextual(Especimen especimen, UUID peticionId, String codigoDePrueba, String texto) {
+    public static Resultado informarTextual(
+            Especimen especimen, UUID peticionId, String codigoDePrueba, String texto, Medicion medicion) {
         especimen.exigirQuePuedeProducirResultados();
 
         if (codigoDePrueba == null || codigoDePrueba.isBlank()) {
@@ -107,7 +118,8 @@ public final class Resultado {
                 codigoDePrueba.strip(),
                 null,
                 null,
-                texto.strip());
+                texto.strip(),
+                medicion);
     }
 
     /** Reconstruye un resultado ya almacenado. Lo usa el repositorio, nunca un caso de uso. */
@@ -119,8 +131,10 @@ public final class Resultado {
             String codigoDePrueba,
             BigDecimal valor,
             String unidadUcum,
-            String valorTextual) {
-        return new Resultado(id, especimenId, pacienteId, peticionId, codigoDePrueba, valor, unidadUcum, valorTextual);
+            String valorTextual,
+            Medicion medicion) {
+        return new Resultado(
+                id, especimenId, pacienteId, peticionId, codigoDePrueba, valor, unidadUcum, valorTextual, medicion);
     }
 
     public UUID id() {
@@ -159,5 +173,10 @@ public final class Resultado {
 
     public Optional<String> valorTextual() {
         return Optional.ofNullable(valorTextual);
+    }
+
+    /** Cuándo se hizo la determinación y quién la hizo. Nunca {@code null}; puede no constar. */
+    public Medicion medicion() {
+        return medicion;
     }
 }

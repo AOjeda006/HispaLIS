@@ -1,9 +1,11 @@
 package es.hispalis.backend.infraestructura.persistencia;
 
+import es.hispalis.backend.dominio.resultado.Medicion;
 import es.hispalis.backend.dominio.resultado.RepositorioDeResultados;
 import es.hispalis.backend.dominio.resultado.Resultado;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.jdbc.core.RowMapper;
@@ -18,14 +20,17 @@ public class RepositorioDeResultadosSql implements RepositorioDeResultados {
     private static final String INSERTAR =
             """
             INSERT INTO dominio.resultado (
-                id, especimen_id, paciente_id, peticion_id, codigo_de_prueba, valor, unidad_ucum, valor_textual)
+                id, especimen_id, paciente_id, peticion_id, codigo_de_prueba, valor, unidad_ucum, valor_textual,
+                medido_en, realizado_por)
             VALUES (
-                :id, :especimenId, :pacienteId, :peticionId, :codigoDePrueba, :valor, :unidadUcum, :valorTextual)
+                :id, :especimenId, :pacienteId, :peticionId, :codigoDePrueba, :valor, :unidadUcum, :valorTextual,
+                :medidoEn, :realizadoPor)
             """;
 
     private static final String BUSCAR_POR_ID =
             """
-            SELECT id, especimen_id, paciente_id, peticion_id, codigo_de_prueba, valor, unidad_ucum, valor_textual
+            SELECT id, especimen_id, paciente_id, peticion_id, codigo_de_prueba, valor, unidad_ucum, valor_textual,
+                   medido_en, realizado_por
               FROM dominio.resultado
              WHERE id = :id
             """;
@@ -50,7 +55,17 @@ public class RepositorioDeResultadosSql implements RepositorioDeResultados {
                         .addValue("codigoDePrueba", resultado.codigoDePrueba())
                         .addValue("valor", resultado.valor().orElse(null))
                         .addValue("unidadUcum", resultado.unidadUcum().orElse(null))
-                        .addValue("valorTextual", resultado.valorTextual().orElse(null)));
+                        .addValue("valorTextual", resultado.valorTextual().orElse(null))
+                        .addValue(
+                                "medidoEn",
+                                resultado
+                                        .medicion()
+                                        .realizadaEn()
+                                        .map(Timestamp::from)
+                                        .orElse(null))
+                        .addValue(
+                                "realizadoPor",
+                                resultado.medicion().realizadaPor().orElse(null)));
     }
 
     @Override
@@ -61,6 +76,7 @@ public class RepositorioDeResultadosSql implements RepositorioDeResultados {
 
     private static Resultado aResultado(ResultSet fila, int numeroDeFila) throws SQLException {
         String peticionId = fila.getString("peticion_id");
+        Timestamp medidoEn = fila.getTimestamp("medido_en");
         return Resultado.reconstruir(
                 UUID.fromString(fila.getString("id")),
                 UUID.fromString(fila.getString("especimen_id")),
@@ -69,6 +85,7 @@ public class RepositorioDeResultadosSql implements RepositorioDeResultados {
                 fila.getString("codigo_de_prueba"),
                 fila.getBigDecimal("valor"),
                 fila.getString("unidad_ucum"),
-                fila.getString("valor_textual"));
+                fila.getString("valor_textual"),
+                Medicion.de(medidoEn == null ? null : medidoEn.toInstant(), fila.getString("realizado_por")));
     }
 }
