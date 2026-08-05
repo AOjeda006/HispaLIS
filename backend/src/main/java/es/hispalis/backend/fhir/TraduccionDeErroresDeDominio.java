@@ -6,9 +6,11 @@ import ca.uhn.fhir.interceptor.api.Pointcut;
 import ca.uhn.fhir.rest.server.exceptions.BaseServerResponseException;
 import ca.uhn.fhir.rest.server.exceptions.InvalidRequestException;
 import ca.uhn.fhir.rest.server.exceptions.ResourceVersionConflictException;
+import ca.uhn.fhir.rest.server.exceptions.UnprocessableEntityException;
 import es.hispalis.backend.dominio.ConflictoDeNegocio;
 import es.hispalis.backend.dominio.DatoInvalido;
 import es.hispalis.backend.dominio.ErrorDeDominio;
+import es.hispalis.backend.dominio.ReglaDeNegocioIncumplida;
 import org.springframework.stereotype.Component;
 
 /**
@@ -27,7 +29,8 @@ import org.springframework.stereotype.Component;
  *   <caption>Correspondencia</caption>
  *   <tr><th>Error de dominio</th><th>HTTP</th><th>Por qué</th></tr>
  *   <tr><td>{@link DatoInvalido}</td><td>400</td><td>lo que llegó está mal formado</td></tr>
- *   <tr><td>{@link ConflictoDeNegocio}</td><td>409</td><td>está bien formado pero choca con el estado actual</td></tr>
+ *   <tr><td>{@link ConflictoDeNegocio}</td><td>409</td><td>está bien formado pero choca con algo que ya existe</td></tr>
+ *   <tr><td>{@link ReglaDeNegocioIncumplida}</td><td>422</td><td>la acción no procede — el código que FHIR reserva para sus reglas de negocio</td></tr>
  * </table>
  */
 @Interceptor
@@ -51,6 +54,7 @@ public class TraduccionDeErroresDeDominio {
         return switch (errorDeDominio) {
             case DatoInvalido e -> new InvalidRequestException(e.getMessage());
             case ConflictoDeNegocio e -> new ResourceVersionConflictException(e.getMessage());
+            case ReglaDeNegocioIncumplida e -> new UnprocessableEntityException(e.getMessage());
             default -> new InvalidRequestException(errorDeDominio.getMessage());
         };
     }

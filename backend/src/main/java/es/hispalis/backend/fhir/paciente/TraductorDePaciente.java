@@ -59,6 +59,9 @@ public class TraductorDePaciente {
     /** Genera el recurso publicable a partir del agregado. Esta es la proyección. */
     public Patient aFhir(Paciente paciente) {
         Patient recurso = new Patient();
+        // El id logico del recurso ES la identidad del agregado: asi una referencia `Patient/<uuid>`
+        // que llega por la API resuelve al dominio sin tabla de correspondencias.
+        recurso.setId(paciente.id().toString());
         recurso.getMeta().addProfile(PerfilesDeLaGuia.PACIENTE_LAB_ES.canonica());
 
         anadirIdentificador(recurso, SistemasDeIdentificador.NHC, paciente.nhc().valor());

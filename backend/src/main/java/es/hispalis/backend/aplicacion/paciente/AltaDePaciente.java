@@ -60,6 +60,6 @@ public class AltaDePaciente {
         Paciente paciente = traductor.aDominio(recibido);
         repositorio.guardar(paciente);
 
-        return daos.getResourceDao(Patient.class).create(traductor.aFhir(paciente), peticion);
+        return daos.getResourceDao(Patient.class).update(traductor.aFhir(paciente), peticion);
     }
 }
