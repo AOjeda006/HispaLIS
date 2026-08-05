@@ -169,6 +169,23 @@ para tipar los *slices* de `identifier` —CIP-SNS `1551000122105`, CIP-AUT `157
   `fsh-generated/`. No son un defecto: la narrativa la genera el IG Publisher después, y lo que valida
   la CI es la entrada. Son avisos, no errores, y no detienen el build.
 
+### Decisiones tomadas al escribir la web profesional (ítem 14)
+
+- **2026-08-05 — La web busca con `POST [tipo]/_search`, no con `GET [tipo]?…`.** Los criterios
+  llevan el número de historia del paciente, y una URL con eso dentro se queda en cuatro sitios de
+  los que no se borra. El servidor admite las dos formas —el criterio C8 pide la de `GET` y sigue
+  probada—; la web usa la que no expone el dato.
+- **2026-08-05 — El backend respeta las cabeceras `X-Forwarded-*` (`ApacheProxyAddressStrategy`).**
+  Firmaba el enlace de la página siguiente con la dirección por la que le llegó la petición, que
+  detrás de un proxy no es la del cliente. El cliente no puede corregirlo porque para él esa URL es
+  opaca, así que el fallo aparecería **solo al pasar de la primera página**.
+- **2026-08-05 — El backend arranca en local sin Docker con el PostgreSQL de los tests**
+  (`./mvnw spring-boot:run -Parranque-local`). Registrado como
+  `docs/adr/adr-0013-arrancar-en-local-sin-docker-con-el-postgres-de-los-tests.md`, con la trampa
+  del `useTestClasspath` que no añade las clases de `src/test`. Esperar al `docker compose` del ítem
+  15 para ejercitar la web era el plan y estaba mal: habría dejado toda la interfaz escrita y sin
+  probar hasta el final del hito.
+
 ### Decisiones tomadas al cerrar el circuito (ítem 9)
 
 - **2026-08-05 — La conformidad la afirma el validador oficial, no un test propio.** `ci-backend`
@@ -346,9 +363,13 @@ ninguna se habría notado escribiendo más tests del servidor: que buscar por n�
 por la que le llegó la petición, que detrás de un proxy no es la del cliente. Las dos tienen ya su
 test en `backend/`.
 
-**Falta ejercitarla de verdad**, y no por dejadez: el backend **no arranca en este equipo** —su
-PostgreSQL embebido es de alcance `test`— y la web sin API no enseña nada. Eso es exactamente lo que
-pide el ítem 15, así que se cierra allí.
+Y se ha ejercitado contra el servidor de verdad, que parecía imposible sin Docker: el perfil
+`arranque-local` levanta el backend con **el mismo PostgreSQL embebido que usan los tests**. Con eso
+se recorrió la API por el proxy del servidor de desarrollo tal y como la recorre la web —altas,
+conflicto de NHC, búsqueda con el identificador en el cuerpo, apellidos con `Ñ` y tildes intactos,
+las líneas de petición en R5, los rangos por sexo, el error en `OperationOutcome`— y, sobre todo,
+**el enlace de la página siguiente vuelve apuntando a donde el navegador puede ir**. Falta solo
+pulsar la interfaz en un navegador, que aquí no se puede automatizar.
 
 Después queda **una sola pieza de infraestructura**: el ítem 15 (`docker compose up`), que **necesita
 que el usuario instale Docker** — está anotado más abajo.
@@ -652,10 +673,18 @@ que el usuario instale Docker** — está anotado más abajo.
   proxy —que es como lo alcanza el navegador, siempre— apuntaría a una máquina que el navegador no
   resuelve. El cliente **no puede corregirlo**, porque para él esa URL es opaca. Se cierra por los
   dos lados: `ApacheProxyAddressStrategy` en el backend y `"xfwd": true` en `proxy.conf.json`.
-  **Falta:** verlo funcionar de extremo a extremo. Los tests prueban el cableado con el servidor de
-  pruebas de Angular, no contra el servidor real, y **el backend no arranca en este equipo** —su
-  PostgreSQL embebido es de alcance `test`—. Se cierra en el ítem 15, que es donde el criterio pide
-  justamente eso.
+  *Y sí se ha ejercitado contra el servidor de verdad*, que era lo que parecía imposible sin Docker:
+  `./mvnw spring-boot:run -Parranque-local` levanta el backend con el **mismo PostgreSQL embebido de
+  los tests**, y con `npm start` delante se recorre la API por el proxy tal y como la recorre la web.
+  Comprobado así: alta de paciente (`201` + `Location`), NHC repetido (`409`), búsqueda por
+  `POST _search` con el NHC en el cuerpo, **`MUÑOZ de la Torre ÁLVAREZ` intacto de ida y vuelta**,
+  las dos líneas de petición con `code.concept` de R5, el informe con `_sort=-issued`, los rangos de
+  referencia —uno común para la glucosa y **dos por sexo** para la hemoglobina, que es justo la
+  elección que hace la pantalla—, el error sin NHC como `400` con su `OperationOutcome` en
+  `application/fhir+json`, y **el enlace `next` devuelto como `http://localhost:4200/fhir?…`**, que
+  es la comprobación que de verdad importaba: el navegador puede seguirlo.
+  **Falta solo pulsar la interfaz en un navegador**, que aquí no hay forma de automatizar. Se cierra
+  en el ítem 15, con la pila completa levantada.
   *Criterio:* alta de petición y consulta de informe funcionando **contra la API FHIR real** (sin
   *mocks*); los errores se muestran a partir del `OperationOutcome`; los apellidos se muestran sin
   partir por el espacio; el valor se presenta siempre con **unidad y rango de referencia**.

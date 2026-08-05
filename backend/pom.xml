@@ -151,4 +151,45 @@
       </plugin>
     </plugins>
   </build>
+
+  <profiles>
+    <!--
+      Arranca el backend en local con su propio PostgreSQL, sin Docker y sin instalar nada:
+
+          ./mvnw spring-boot:run -Parranque-local
+
+      Existe porque en este equipo no hay Docker y el servidor JPA de HAPI no levanta el contexto
+      sin base de datos, así que sin esto la web del profesional no se puede ejercitar contra la API
+      hasta el `docker compose` del ítem 15. La clase que lo hace vive en `src/test`, que es donde
+      está el PostgreSQL embebido: NO es un modo de despliegue, y la base de datos se crea vacía en
+      un temporal y desaparece al parar el proceso.
+
+      Va como perfil y no como `-D` en la orden porque `useTestClasspath` se ignora al pasarlo por
+      línea de órdenes; en la configuración del plugin sí se aplica.
+    -->
+    <profile>
+      <id>arranque-local</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-maven-plugin</artifactId>
+            <configuration>
+              <mainClass>es.hispalis.backend.ArranqueLocal</mainClass>
+              <useTestClasspath>true</useTestClasspath>
+              <!--
+                `useTestClasspath` trae las dependencias de alcance `test` —el PostgreSQL
+                embebido—, pero no las clases compiladas de `src/test`, así que la clase de arranque
+                hay que añadirla aparte. Sin esta línea el fallo es un `ClassNotFoundException` de
+                esa misma clase, que no apunta a su causa.
+              -->
+              <additionalClasspathElements>
+                <additionalClasspathElement>${project.build.testOutputDirectory}</additionalClasspathElement>
+              </additionalClasspathElements>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
 </project>

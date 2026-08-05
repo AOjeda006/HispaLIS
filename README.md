@@ -98,7 +98,7 @@ La web profesional queda en `http://localhost:4200`.
 | Componente | Build | Tests | Lint / formato | Arranque |
 |---|---|---|---|---|
 | `ig/` | `npx fsh-sushi .` · `java -jar publisher.jar -ig . -no-sushi` | validador oficial sobre `fsh-generated/resources/` | `npx fsh-sushi .` con **0 warnings** | salida en `ig/output/` |
-| `backend/` | `./mvnw -q package` | `./mvnw verify` | `./mvnw spotless:check` · `./mvnw spotless:apply` | `./mvnw spring-boot:run` |
+| `backend/` | `./mvnw -q package` | `./mvnw verify` | `./mvnw spotless:check` · `./mvnw spotless:apply` | `./mvnw spring-boot:run` · sin base de datos propia: `-Parranque-local` |
 | `integracion/` | *(sin andamiar — hito 2)* | | | |
 | `web-profesional/` | `npm run build` | `npm test` | `npm run lint` · `npm run format` | `npm start` |
 | `app-ciudadano/` | *(sin andamiar — hito 2)* | | | |
@@ -108,6 +108,10 @@ Notas de las cadenas de construcción, por si sorprenden:
 
 - **`backend/`** — `./mvnw verify` **ya comprueba el formato**: Spotless está enganchado a la fase
   `verify`, así que no hay una orden de *lint* aparte que haya que acordarse de ejecutar.
+  `./mvnw spring-boot:run` necesita un PostgreSQL en `localhost:5432`; si no tienes uno,
+  **`./mvnw spring-boot:run -Parranque-local` levanta el suyo propio** —el mismo binario embebido que
+  usan los tests, sin Docker y sin instalar nada—. La base de datos se crea vacía y desaparece al
+  parar el proceso, así que cada arranque empieza sin pacientes.
 - **`web-profesional/`** — los tests corren con **vitest sobre jsdom**, el ejecutor por defecto de
   Angular 22. **No es Karma**: `--browsers=ChromeHeadless` no es una opción válida aquí.
   `npm start` y `npm run build` traen antes el catálogo de pruebas de `ig/fsh-generated/` (D15), así
