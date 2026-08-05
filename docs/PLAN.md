@@ -169,6 +169,24 @@ para tipar los *slices* de `identifier` —CIP-SNS `1551000122105`, CIP-AUT `157
   `fsh-generated/`. No son un defecto: la narrativa la genera el IG Publisher después, y lo que valida
   la CI es la entrada. Son avisos, no errores, y no detienen el build.
 
+### Decisiones tomadas al cerrar el circuito (ítem 9)
+
+- **2026-08-05 — La conformidad la afirma el validador oficial, no un test propio.** `ci-backend`
+  compila el FSH con SUSHI —**no** construye la IG entera, que es cosa de `ci-ig` y cuesta minutos— y
+  pasa el validador de HL7 sobre lo que el circuito produce. Por eso su `paths:` vigila ahora
+  `ig/input/fsh/**` entero.
+- **2026-08-05 — Se valida lo que el servidor devuelve, no lo que el cliente envió.** Lo que tiene
+  que ser conforme es la **proyección que el laboratorio publica**; validar la entrada solo diría que
+  el cliente escribe bien.
+- **2026-08-05 — `Organization` y `Practitioner` entran por el proveedor estándar de HAPI.** Son
+  datos maestros del laboratorio, no agregados con invariantes propios: §10 solo lista petición,
+  espécimen, resultado, informe y notificación EDO. Modelarlos como agregados sería inventar
+  complejidad que el negocio no pide. Siguen entrando por la API FHIR, que es lo que exige el
+  invariante 3 del proyecto.
+- **2026-08-05 — La petición se modela como LÍNEAS que comparten número, no como una petición con
+  líneas dentro.** Es lo que permite que cada prueba del mismo volante avance a su ritmo: unas se
+  informan hoy y otras tardan tres días. `numero_de_peticion` **no es único** a propósito.
+
 ### Decisiones tomadas con el invariante del espécimen (ítem 8)
 
 - **2026-08-05 — El id lógico FHIR de un recurso es el UUID de su agregado.** Una referencia
@@ -295,7 +313,7 @@ para tipar los *slices* de `identifier` —CIP-SNS `1551000122105`, CIP-AUT `157
 
 ## Estado actual
 
-**Ítems 0 a 8 cerrados (2026-08-05).** La guía de implementación está terminada y **publicada en
+**Ítems 0 a 9 cerrados (2026-08-05).** La guía de implementación está terminada y **publicada en
 `https://aojeda006.github.io/HispaLIS/`** (las páginas cuelgan de `/es/`; la raíz redirige por
 JavaScript), y el backend ya tiene su primer circuito de escritura completo: un `POST /fhir/Patient`
 entra por la API, pasa por el núcleo de dominio y sale publicado como proyección, todo en una sola
@@ -304,14 +322,14 @@ transacción, y el primer invariante de negocio puro ya rechaza lo que no debe.
 | Componente | Estado | Verificado con |
 |---|---|---|
 | `ig/` | 9 perfiles, extensión `codigo-ine`, `CodeSystem` de 21 pruebas, `ConceptMap` a LOINC, 4 `ValueSet` y 18 ejemplos — **publicada** | `npx fsh-sushi .` → **0 errores, 0 warnings**; en CI, IG Publisher y validador oficial **en verde**; sitio desplegado comprobado (19 enlaces de la portada, `lang="es"`, los tres avisos) |
-| `backend/` | Servidor JPA empotrado · dominio con `Paciente`, `Especimen` y `Resultado` sobre el esquema `dominio` con Flyway · `metadata`, `Patient`, `Specimen` y `Observation` | `./mvnw verify` → **BUILD SUCCESS, 26 tests**, contra un PostgreSQL real embebido |
+| `backend/` | Servidor JPA empotrado · **los cinco agregados del hito 1** sobre el esquema `dominio` con Flyway · circuito completo `Patient` → `ServiceRequest` → `Specimen` → `Observation` → `DiagnosticReport` | `./mvnw verify` → **BUILD SUCCESS, 28 tests**; validador oficial sobre lo que publica el circuito → **0 errores** |
 | `web-profesional/` | Angular 22.1 + vitest + angular-eslint | `npm run lint`, `npm test` (**3 tests**), `npm run build` |
 | `simuladores/` | Paquete `generador` con su CLI, ruff y pytest | `ruff check`/`format`, `pytest` → **7 tests** |
 | `integracion/`, `app-ciudadano/` | **Sin andamiar a propósito** (hito 2) | conservan su guarda de auto-omisión |
 
-**Siguiente: ítem 9** — el circuito completo por API (`Patient` → `ServiceRequest` → `Specimen` →
-`Observation` → `DiagnosticReport`), con todos los recursos validando contra su perfil. Faltan por
-tanto los agregados de **petición** e **informe**.
+**Siguiente: ítem 10** — concurrencia optimista (`If-Match` → `412`). Junto con el 11 (búsqueda y
+paginación) deberían salir baratos: los dos vienen heredados del proveedor de HAPI y lo que falta es
+**probarlos**, no implementarlos.
 
 > **Estado de la CI.** Subido a `origin/main` por **SSH** (el PAT de HTTPS no tiene *scope* `workflow`
 > y GitHub rechaza el push de `.github/workflows/`). Comprobado ya en ejecuciones reales:
@@ -476,7 +494,16 @@ tanto los agregados de **petición** e **informe**.
   verse en el historial de commits. El invariante vive en el **núcleo de dominio**, no en el
   `ResourceProvider`.
 
-- [ ] **9 — El circuito completo por API. (C5)**
+- [x] **9 — El circuito completo por API. (C5)**
+  *Hecho el 2026-08-05.* Aparecen `Peticion` e `Informe`, con lo que **el dominio del hito 1 queda
+  completo**. El test recorre el circuito usando el `Location` de cada paso —si un eslabón no publica
+  lo que dice, el siguiente no encuentra a qué apuntar— y vuelca los cinco recursos, que la CI valida
+  con el **validador oficial** contra los perfiles de la guía. `./mvnw verify` → **28 tests**;
+  validador en local → **0 errores** sobre los seis recursos.
+  *Por qué el validador y no solo el test:* que el circuito funcione y que lo que produce sea
+  conforme son dos cosas distintas, y la segunda solo la puede afirmar el validador de la
+  especificación. Se valida **lo que el servidor devuelve**, no lo que el cliente envió: lo que tiene
+  que ser conforme es la proyección que el laboratorio publica.
   *Criterio:* test de integración que crea `Patient` → `ServiceRequest` → `Specimen` → `Observation`
   → `DiagnosticReport`, **todos conformes a su perfil** (validados con `$validate` o con el validador
   oficial en CI).
@@ -585,6 +612,15 @@ Se detalla al cerrar el hito 1; no se adelanta trabajo.
   - **§4.3 pide un *slice* por colegio emisor en `Practitioner.identifier` y eso no es realizable:**
     el discriminador por `system` exige un valor fijo por *slice* y ese `system` es paramétrico. Se
     modela con `identifier.assigner` (ver *Decisiones*, ítem 2).
+- **El resultado se publica sin `effective[x]` ni `performer`.** El validador oficial lo avisa —son
+  *warnings*, no errores, y el circuito es conforme— pero un resultado sin fecha de medición y sin
+  quién lo hizo está clínicamente incompleto, y los dos elementos son `Must Support` en el perfil.
+  Añadirlos toca el agregado `Resultado` y una migración. **Se cierra antes del ítem 14**, que es
+  donde la web tiene que mostrarlos.
+- **El invariante completo del informe está a medias.** §10 pide que solo se emita *con todas las
+  líneas de la petición resueltas*; ahora se exige que no esté vacío y que no mezcle pacientes.
+  Cerrar la versión completa necesita cruzar las líneas de la petición con sus resultados, y el
+  enlace ya existe (`Resultado.peticionId`). Pendiente para el cierre del hito.
 - **La IG propia es trabajo real:** nueve perfiles más terminología, sin US Core ni IPS de donde tirar.
   Es el ítem que más fácilmente se subestima.
 - **Sin la red de seguridad de Mirth** (D11): almacén de mensajes, reintentos y consola de reproceso
