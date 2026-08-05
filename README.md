@@ -33,8 +33,12 @@ degenerar en una historia clínica electrónica en miniatura.
   contexto legal español. Es la fuente de verdad.
 - **Estado del trabajo:** [`docs/PLAN.md`](docs/PLAN.md) — checklist, decisiones y estado actual.
 - **Decisiones de arquitectura:** [`docs/adr/`](docs/adr/).
-- **Guía de implementación publicada:** `https://aojeda006.github.io/HispaLIS/` (cuando el hito 1
-  esté cerrado).
+- **Guía de implementación publicada:** <https://aojeda006.github.io/HispaLIS/>.
+
+> **Hito 1 cerrado.** El circuito básico —petición → espécimen → resultado → informe— funciona de
+> extremo a extremo con un `docker compose up`, con la guía FHIR propia publicada, la web del
+> profesional y el generador de datos sintéticos. **Sin Kafka, sin HL7 v2 y sin Keycloak**, que son
+> el hito 2.
 
 ## Arquitectura en tres frases
 
@@ -104,9 +108,14 @@ cuando exista el motor de integración.
 > **En Windows no hace falta Docker Desktop.** Con WSL2 basta instalar Docker dentro de la distro
 > (`sudo apt install docker.io docker-compose-v2`) y ejecutar el `compose` desde ella, con el
 > repositorio en `/mnt/c/...`. Los puertos publicados se ven igual en `localhost` desde Windows.
+>
+> Con una salvedad que engaña: **WSL apaga la distro cuando no queda ninguna sesión abierta, y con
+> ella se van los contenedores.** Si levantas la pila y cierras la terminal, se para sola; y si la
+> vuelves a levantar sin comprobar qué había en pie, puedes acabar hablando con un contenedor de una
+> sesión anterior —imagen vieja incluida— escuchando en el mismo puerto. Deja una sesión de WSL
+> abierta mientras uses la pila, y ante cualquier resultado raro mira primero `docker compose ps`.
 
-> Mientras el hito 1 no esté cerrado, algunos de estos comandos aún no existen. El estado real de cada
-> pieza está en [`docs/PLAN.md`](docs/PLAN.md).
+El estado real de cada pieza está en [`docs/PLAN.md`](docs/PLAN.md).
 
 ## Comandos por componente
 

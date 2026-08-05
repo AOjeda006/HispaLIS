@@ -8,10 +8,11 @@ on:
     paths:
       - 'backend/**'
       - '.github/workflows/ci-backend.yml'
-      # El backend depende del FSH de la guía por dos vías, y las dos son reales: un test cruza la
-      # lista de perfiles del `CapabilityStatement` contra los `.fsh` para que no diverjan, y el
-      # validador oficial comprueba contra esos mismos perfiles lo que produce el circuito. Sin esta
-      # ruta, cambiar la guía no dispararía ninguna de las dos comprobaciones.
+      # El backend depende del FSH de la guía por tres vías, y las tres son reales: un test cruza la
+      # lista de perfiles del `CapabilityStatement` contra los `.fsh` para que no diverjan; otro
+      # exige que cada rango de referencia esté en la misma unidad en la que el catálogo dice que se
+      # emite esa prueba; y el validador oficial comprueba contra esos mismos perfiles lo que produce
+      # el circuito. Sin esta ruta, cambiar la guía no dispararía ninguna de las tres.
       - 'ig/input/fsh/**'
   pull_request:
     paths:

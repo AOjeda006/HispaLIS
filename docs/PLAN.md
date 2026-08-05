@@ -169,6 +169,39 @@ para tipar los *slices* de `identifier` —CIP-SNS `1551000122105`, CIP-AUT `157
   `fsh-generated/`. No son un defecto: la narrativa la genera el IG Publisher después, y lo que valida
   la CI es la entrada. Son avisos, no errores, y no detienen el build.
 
+### Decisiones tomadas al cerrar el hito (ítem 16)
+
+- **2026-08-06 — Un volante con una muestra rechazada no se puede informar, y se asume.** El
+  invariante completo de §10 bloquea la emisión mientras quede una línea sin resultado, y una muestra
+  rechazada no produce ninguno (C6). La salida sería **anular la línea**, que es lo que hace un
+  laboratorio de verdad, y el dominio todavía no sabe: `Peticion` no tiene estado. Se deja bloqueado a
+  propósito —esperar la nueva extracción es lo que corresponde clínicamente— y la anulación
+  (`ServiceRequest.status = revoked`) se planifica en el hito 2. Bloquear es el lado seguro: el
+  peligro que persigue el invariante es emitir de más, no de menos.
+- **2026-08-06 — Los rangos de referencia dejan de ser una tabla.** No basta con sacarlos a un fichero
+  común y seguir sembrando la tabla desde él: una tabla cuyo único escritor es una migración es un
+  fichero de configuración con pasos de más. El puerto pasa a llamarse `CatalogoDeRangosDeReferencia`
+  —no es un repositorio, porque nada del sistema escribe ahí— y `V6` borra la tabla. Las dos garantías
+  que daba PostgreSQL (límites ordenados, un solo rango por prueba y sexo) se comprueban al leer, en
+  los dos lenguajes: validar la propia entrada no es duplicar lógica.
+- **2026-08-06 — El fichero compartido vive en el árbol del backend, no en una carpeta neutra.** El
+  laboratorio es la autoridad sobre sus propios rangos y el generador es un consumidor, igual que la
+  guía publica el catálogo y el generador lo lee. Una carpeta neutra dejaría el fichero sin dueño y su
+  ruta fuera del `paths:` de cualquier *workflow*. Con esta decisión hay que **declarar el
+  acoplamiento en la CI**: `ci-simuladores` vigila también
+  `backend/src/main/resources/laboratorio/**`, porque un fichero compartido cuyo cambio no ejecuta
+  ninguna prueba es peor que dos copias.
+- **2026-08-06 — Los rangos numéricos del fichero se escriben con la precisión con la que se informa
+  la prueba.** Al unificar las dos copias había que elegir entre `4`–`11` (lo que decía Python) y
+  `4.0`–`11.0` (lo que decía el SQL). LEU, HB y HTO se informan con un decimal, así que el rango
+  publicado también lo lleva: un rango con menos precisión que el valor que acota se lee como si el
+  laboratorio midiera peor de lo que mide.
+- **2026-08-06 — Las decenas de millón de los contadores de test se han agotado.** Cada clase de test
+  de integración arranca en su propia decena para no chocar de NHC, y las nueve están usadas. El NHC
+  son **exactamente ocho dígitos**, así que seguir la serie con `100_000_000` lo rechaza el propio
+  dominio — que es como se descubrió. La clase nueva arranca en `95_000_000`; a partir de aquí hay que
+  repartir dentro de las decenas, no detrás de ellas.
+
 ### Decisiones tomadas al escribir la web profesional (ítem 14)
 
 - **2026-08-05 — La web busca con `POST [tipo]/_search`, no con `GET [tipo]?…`.** Los criterios
@@ -335,19 +368,20 @@ para tipar los *slices* de `identifier` —CIP-SNS `1551000122105`, CIP-AUT `157
 
 ## Estado actual
 
-**Ítems 0 a 15 cerrados (2026-08-05). Queda solo el 16, el cierre del hito.** La guía de
-implementación está terminada y **publicada en
+**HITO 1 CERRADO (2026-08-06). Los 17 ítems, del 0 al 16.** Los 12 criterios de aceptación de §14
+están verificados —los diez que se pueden automatizar, con test; los otros dos, contra la pila del
+`compose`—, los seis *workflows* de CI han corrido y están en verde, y las dos deudas que quedaban
+anotadas están saldadas. La guía de implementación está **publicada en
 `https://aojeda006.github.io/HispaLIS/`** (las páginas cuelgan de `/es/`; la raíz redirige por
-JavaScript), y el backend ya tiene su primer circuito de escritura completo: un `POST /fhir/Patient`
-entra por la API, pasa por el núcleo de dominio y sale publicado como proyección, todo en una sola
-transacción, y el primer invariante de negocio puro ya rechaza lo que no debe.
+JavaScript), el circuito completo funciona de extremo a extremo desde un clon recién hecho, y los
+cinco invariantes de §10 que el hito 1 alcanza viven en el núcleo de dominio, con sus tests.
 
 | Componente | Estado | Verificado con |
 |---|---|---|
 | `ig/` | 9 perfiles, extensión `codigo-ine`, `CodeSystem` de 21 pruebas, `ConceptMap` a LOINC, 4 `ValueSet` y 18 ejemplos — **publicada** | `npx fsh-sushi .` → **0 errores, 0 warnings**; en CI, IG Publisher y validador oficial **en verde**; sitio desplegado comprobado (19 enlaces de la portada, `lang="es"`, los tres avisos) |
-| `backend/` | Servidor JPA empotrado · **los cinco agregados del hito 1** sobre el esquema `dominio` con Flyway · circuito completo `Patient` → `ServiceRequest` → `Specimen` → `Observation` → `DiagnosticReport` · concurrencia optimista con `If-Match` → `412` · búsqueda filtrada y paginada por `Bundle.link` · los siete caminos de error, cada uno con su código y su `OperationOutcome` · el resultado conserva cuándo se midió, quién lo hizo y entre qué cifras es normal · **búsqueda por `POST _search` sin datos del paciente en la URL**, enlace de paginación válido detrás de un proxy y **la transacción ya no se salta el núcleo** | `./mvnw verify` → **BUILD SUCCESS, 56 tests**; validador oficial sobre lo que publica el circuito → **0 errores** |
+| `backend/` | Servidor JPA empotrado · **los cinco agregados del hito 1** sobre el esquema `dominio` con Flyway · circuito completo `Patient` → `ServiceRequest` → `Specimen` → `Observation` → `DiagnosticReport` · concurrencia optimista con `If-Match` → `412` · búsqueda filtrada y paginada por `Bundle.link` · los siete caminos de error, cada uno con su código y su `OperationOutcome` · el resultado conserva cuándo se midió, quién lo hizo y entre qué cifras es normal · **búsqueda por `POST _search` sin datos del paciente en la URL**, enlace de paginación válido detrás de un proxy, **la transacción ya no se salta el núcleo** y **el informe no sale con el volante a medias** | `./mvnw verify` → **BUILD SUCCESS, 73 tests**; validador oficial sobre lo que publica el circuito → **0 errores** |
 | `web-profesional/` | Angular 22.1 + vitest + angular-eslint · capa de presentación FHIR · **cliente HTTP** (búsqueda por `POST _search`, paginación por el enlace del servidor, errores traducidos del `OperationOutcome`) · **alta de petición y consulta de informe** con sus ViewModels | `npm run lint`, `npm test` (**66 tests**), `npm run build`; API recorrida en vivo por el proxy, primero con `-Parranque-local` y después contra el `compose` |
-| `simuladores/` | **Generador de datos sintéticos completo**: terminología leída de la guía, identificadores españoles con dígito de control, paneles correlacionados, reflejas y muestras rechazadas | `ruff check`/`format`, `pytest` → **70 tests**; validador oficial sobre el corpus generado → **0 errores** |
+| `simuladores/` | **Generador de datos sintéticos completo**: terminología leída de la guía, **rangos de referencia leídos del fichero que publica el laboratorio**, identificadores españoles con dígito de control, paneles correlacionados, reflejas y muestras rechazadas | `ruff check`/`format`, `pytest` → **77 tests**; validador oficial sobre el corpus generado → **0 errores** |
 | `infra/` | **`compose` del hito 1**: PostgreSQL 14 + backend + web tras nginx, encadenados por *healthcheck* | `docker compose … up` desde una copia limpia del árbol commiteado, y el circuito recorrido de extremo a extremo contra la pila |
 | `integracion/`, `app-ciudadano/` | **Sin andamiar a propósito** (hito 2) | conservan su guarda de auto-omisión |
 
@@ -376,22 +410,27 @@ DAO directamente—, así que colaba un `Patient` en la proyección sin agregado
 fila en `dominio.paciente`, devolviendo `201`. Es el mismo fallo del ítem 10 en otra puerta. Cerrado
 con test en rojo primero.
 
-**Lo único que queda del hito es el ítem 16**, y con él las dos deudas anotadas más abajo: los rangos
-de referencia escritos dos veces y el invariante completo del informe de §10.
+**Las dos deudas que quedaban están saldadas** (ítem 16): el invariante completo del informe de §10 y
+los rangos de referencia escritos dos veces. Las dos con su rojo o su comprobación cruzada, y las dos
+anotadas abajo, en *Notas / riesgos*, con lo que se descubrió al cerrarlas.
 
 > **Estado de la CI.** Subido a `origin/main` por **SSH** (el PAT de HTTPS no tiene *scope* `workflow`
-> y GitHub rechaza el push de `.github/workflows/`). Comprobado ya en ejecuciones reales:
+> y GitHub rechaza el push de `.github/workflows/`). **Los seis workflows han corrido y están en
+> verde.** Comprobado en ejecuciones reales:
 >
 > - **El filtrado por ruta funciona**, con evidencia en los dos sentidos: un push que tocó `ig/**` y
 >   `backend/**` disparó exactamente esos dos workflows y ninguno de los otros cuatro.
-> - **`backend` en verde**, tras corregir el bit de ejecución de `mvnw`.
-> - **`ig`: los dos jobs pasan.** El IG Publisher construye la guía —Ruby + Jekyll y plantilla `fhir2`
->   incluidos—, la comprobación de «un ejemplo por perfil» pasa, el **validador oficial de HL7 valida
->   los 18 ejemplos** contra sus perfiles, y el job de publicación despliega a Pages.
+> - **`backend`, `ig`, `web-profesional` y `simuladores` han corrido por `push`**, disparados por sus
+>   propias rutas. El IG Publisher construye la guía —Ruby + Jekyll y plantilla `fhir2` incluidos—, la
+>   comprobación de «un ejemplo por perfil» pasa, el **validador oficial de HL7 valida los 18
+>   ejemplos** contra sus perfiles, y el job de publicación despliega a Pages.
+> - **`integracion` y `app-ciudadano` se lanzaron a mano** (`workflow_dispatch`) para cerrar el hito:
+>   nunca se habían ejecutado porque su ruta no se ha tocado desde la primera subida, que es el
+>   comportamiento correcto. Los dos pasan **ejercitando su guarda de auto-omisión**, que hasta ahora
+>   solo se había leído: sin `pom.xml` ni `pubspec.yaml`, el job avisa y no construye nada. Retirar la
+>   guarda es lo primero que hay que hacer al andamiarlos en el hito 2.
 > - **La salvaguarda de C2 se ha visto fallar de verdad**: con los nueve perfiles escritos y sin
 >   ejemplos, la CI detuvo el build. No es una comprobación teórica.
-> - **`web-profesional`, `simuladores`, `integracion` y `app-ciudadano` siguen sin ejecutarse nunca**:
->   no se ha tocado su ruta desde la primera subida.
 
 ---
 
@@ -722,7 +761,39 @@ de referencia escritos dos veces y el invariante completo del informe de §10.
 
 ### Cierre del hito
 
-- [ ] **16 — Hito 1 cerrado.**
+- [x] **16 — Hito 1 cerrado.** — *hecho el 2026-08-06.*
+  **Las dos deudas, saldadas.** El invariante completo del informe de §10 (rojo en `3a9bd7a`, verde en
+  `cca8424`) y los rangos de referencia en un fichero de datos común. Las dos están contadas con
+  detalle en *Notas / riesgos*, tachadas.
+  **Los 12 criterios, verificados uno a uno.** Diez tienen test automatizado; los doce se recorrieron
+  además **contra la pila del `compose`**, con un guion de 25 comprobaciones que entra por
+  `http://localhost:4200/fhir` —el mismo camino que el navegador, nginx incluido— y que termina
+  consultando la base de datos del contenedor para que lo comprobado no dependa de lo que diga la API:
+
+  | | Criterio | Con qué se afirma |
+  |---|---|---|
+  | C1 | La IG compila y el publisher la genera | `npx fsh-sushi .` → **0 errores, 0 warnings** (9 perfiles, 1 extensión, 4 `ValueSet`, 1 `CodeSystem`, 19 instancias); el IG Publisher, en `ci-ig` |
+  | C2 | El validador oficial corre en CI y ningún ejemplo se libra | `ci-ig` valida los 18 ejemplos contra `hl7.fhir.r5.core@5.0.0`; **probado en rojo** rompiendo uno |
+  | C3 | `metadata` con `fhirVersion 5.0.0` y sus perfiles | `ConformidadFhirTest` + en vivo: R5 y los 9 perfiles |
+  | C4 | Read-your-writes | `AltaDePacienteTest` + en vivo: `201`, `Location`, `ETag W/"1"` y `GET` inmediato |
+  | C5 | El circuito completo, conforme | `CircuitoCompletoTest` + validador oficial sobre lo que publica + en vivo, con dos líneas de volante |
+  | C6 | Muestra rechazada ⇒ sin resultado | `EspecimenRechazadoTest` y `EspecimenTest` (rojo en `a283f1f`) + en vivo → `422` |
+  | C7 | `If-Match` obsoleto → `412` | `ConcurrenciaOptimistaTest` + en vivo: vigente `200`+`W/"2"`, obsoleto `412` |
+  | C8 | Búsqueda y paginación por `Bundle.link` | `BusquedaPaginadaTest` + en vivo: 8 resultados de 3 en 3, `next` como `http://localhost:4200/fhir?…` y segunda página alcanzada |
+  | C9 | Errores en `OperationOutcome` | `ErroresEnOperationOutcomeTest` (7 casos) + en vivo: `400`, `404`, `409`, `412`, `422`, todos con `OperationOutcome` en `application/fhir+json` |
+  | C10 | La web contra la API real | 66 tests de la web; y en vivo, las llamadas que hacen sus dos pantallas, tal y como las hacen |
+  | C11 | Generador con apellidos dobles, DNI/NIE y NUHSA | 77 tests + validador oficial sobre el corpus, en `ci-simuladores` |
+  | C12 | `docker compose up` levanta el circuito | Pila levantada y recorrida; comprobado **desde una copia limpia del árbol commiteado** |
+
+  **Lo que no está verificado, dicho en claro:** la interfaz **pulsada en un navegador**. Aquí no hay
+  forma de automatizarlo. Las plantillas las compila el build, los ViewModels tienen tests, y todo lo
+  que las pantallas piden a la API está ejercitado en vivo por el mismo camino que recorre el
+  navegador — pero el clic no.
+  **Cuatro ADR nuevos** con lo aprendido que sirve fuera de este proyecto: `adr-0014` (un framework
+  que también escribe tiene varias puertas), `adr-0015` (los datos de configuración no van en las
+  migraciones), `adr-0016` (un identificador de paciente no viaja en la URL) y `adr-0017` (los enlaces
+  los firma el servidor, y tras un proxy los firma mal). **La biblioteca no se toca a mitad de
+  proyecto**; las aportaciones a `interoperabilidad/hl7-v2/` siguen anotadas para el final (§17.2).
   *Criterio:* los 12 criterios de §14 verificados, CI en verde en los seis workflows, `PLAN.md` y
   `README.md` coherentes con la realidad del repo, y los aprendizajes transversales del hito anotados
   como ADR nuevos (no se toca la biblioteca a mitad de proyecto).
@@ -804,14 +875,18 @@ Se detalla al cerrar el hito 1; no se adelanta trabajo.
   de prueba son terminología compartida (D15), pero los rangos dependen del método y del analizador
   de cada laboratorio — dos laboratorios que usan el mismo `CREA` publican rangos distintos sin
   contradecirse.
-- **Los rangos de referencia están escritos dos veces**, y de momento nada comprueba que coincidan:
-  en `V5__rangos_de_referencia.sql` (lo que el laboratorio **publica**) y en
-  `simuladores/generador/clinica.py` (lo que el generador usa para **sortear valores verosímiles**).
-  Son dos propósitos distintos, pero si divergen, el generador producirá resultados que el
-  laboratorio interpretará de otra manera. Ni el backend puede leer el fichero de Python ni el
-  generador puede alcanzar la base de datos, así que el arreglo es un **fichero de datos común** que
-  consuman los dos —el mismo patrón que la terminología, pero sin sitio en la IG porque esto no es
-  vocabulario compartido—. Pendiente para el cierre del hito.
+- ~~**Los rangos de referencia están escritos dos veces**~~ — **cerrado el 2026-08-06** (ítem 16).
+  Los dos leen ahora `backend/src/main/resources/laboratorio/rangos-de-referencia.json`, y la tabla
+  `dominio.rango_de_referencia` **desaparece** (`V6`): sembrarlos con un `INSERT` en una migración es
+  justamente lo que los convirtió en esquema, y a partir de ahí copiarlos en Python fue el camino
+  corto. Registrado como `docs/adr/adr-0015-los-datos-de-configuracion-no-van-en-las-migraciones.md`.
+  **Ya habían divergido, y en silencio:** una copia escribía los límites como enteros y la otra con
+  un decimal, así que el mismo rango salía publicado como `4`–`11` o como `4.0`–`11.0` según quién lo
+  escribiera. Con LEU, HB y HTO informadas a un decimal, la forma correcta era la segunda. Comprobado
+  que el resto del corpus **no cambia ni un valor** con la misma semilla. El test nuevo del backend
+  vale más que los dos que sustituye: cruza cada rango contra el FSH del catálogo y exige que esté
+  **en la misma unidad** en la que el laboratorio emite esa prueba — una glucosa de 92 mg/dL contra un
+  rango en mmol/L sale marcada como altísima y las dos cifras son correctas.
 - ~~**Un `Bundle` de tipo `transaction` se salta el dominio.**~~ — **cerrado el 2026-08-05**, y el
   rojo está en el historial: la transacción devolvía `201 Created` con `Patient/1001`, un id numérico
   de HAPI que no es el UUID de ningún agregado, sin NHC validado y sin fila en `dominio.paciente`. La
@@ -835,10 +910,28 @@ Se detalla al cerrar el hito 1; no se adelanta trabajo.
   catálogo obliga a reconstruirla. En el hito 2, con el servidor de terminología, pasa a pedirse con
   `$expand` y el problema desaparece; hasta entonces es lo más cercano a la fuente que puede hacer un
   cliente que no tiene servidor de terminología al que preguntar.
-- **El invariante completo del informe está a medias.** §10 pide que solo se emita *con todas las
-  líneas de la petición resueltas*; ahora se exige que no esté vacío y que no mezcle pacientes.
-  Cerrar la versión completa necesita cruzar las líneas de la petición con sus resultados, y el
-  enlace ya existe (`Resultado.peticionId`). Pendiente para el cierre del hito.
+- ~~**El invariante completo del informe está a medias.**~~ — **cerrado el 2026-08-06** (ítem 16), y
+  el rojo está en el historial (`3a9bd7a`): un volante con glucosa y creatinina, solo la glucosa
+  informada, y el `DiagnosticReport` con esa sola glucosa devolvía `201`. Es el más dañino de los tres
+  casos y el único que no se ve: trae resultados, correctos y del paciente correcto, así que el
+  peticionario lo lee como la respuesta a lo que pidió y **deja de esperar lo que falta**.
+  El alcance se reconstruye en dos saltos, y el primero es el que importa: de las líneas que citan los
+  resultados se sube **al número de volante**, y de ahí se bajan *todas* sus líneas. Sin ese rodeo solo
+  se verían las que ya tienen resultado —las que nunca bloquean nada—, el invariante quedaría siempre
+  satisfecho y no habría forma de notarlo. Se busca por número **y paciente**, porque
+  `numero_de_peticion` no es único a propósito y hoy lo genera el cliente.
+  **Consecuencia asumida:** con una muestra rechazada el volante no se puede informar hasta la nueva
+  extracción. Es lo que corresponde clínicamente; la salida rápida sería **anular la línea**, y eso es
+  hito 2 (`ServiceRequest.status = revoked`).
+- **Verificar contra el `compose` en WSL exige una sola sesión, y si no, el diagnóstico miente.** WSL
+  apaga la distro cuando no queda ninguna sesión abierta, y con ella se van los contenedores: si se
+  levanta la pila en una invocación de `wsl` y se comprueba en otra, lo que contesta puede ser un
+  contenedor **de la sesión anterior** —imagen vieja y base de datos distinta— escuchando en el mismo
+  puerto. Pasó al verificar el ítem 16: el invariante nuevo del informe pareció no funcionar contra la
+  pila, y funcionaba; lo que había detrás del puerto era el backend del día anterior. La comprobación
+  que lo destapó fue mirar **qué imagen sirve el contenedor y qué hay en su base de datos**, no releer
+  el código. Desde entonces el guion de verificación levanta, comprueba y consulta la base **dentro de
+  la misma sesión**, y empieza imprimiendo qué contenedores había en pie antes de empezar.
 - **Los códigos INE de municipio del generador son una lista corta escrita a mano** (ocho municipios
   de la provincia 41), no el registro del INE. La provincia sí está verificada —41, Sevilla, la
   misma que usa el ejemplo de la guía— y el `codigo-ine` no se valida contra ningún `ValueSet`, así
