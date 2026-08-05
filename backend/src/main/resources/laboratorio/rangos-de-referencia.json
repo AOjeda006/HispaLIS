@@ -1,0 +1,24 @@
+{
+  "descripcion": "Rangos de referencia que publica el laboratorio HispaLIS: entre qué cifras se considera normal cada prueba del catálogo local. Los consume el backend, que los publica en Observation.referenceRange, y el generador de datos sintéticos, que los usa para sortear valores verosímiles. Es un fichero de datos común a propósito: escritos dos veces, divergen, y entonces el generador produce resultados que el laboratorio interpreta de otra manera. No van en la guía de implementación porque no son terminología: los códigos de prueba son comunes a todo el que hable con este laboratorio, pero los rangos dependen de su método y de su analizador, y dos laboratorios que usan el mismo código CREA publican rangos distintos sin contradecirse.",
+  "rangos": [
+    { "prueba": "GLU",   "bajo": 70,    "alto": 100,  "unidad": "mg/dL" },
+    { "prueba": "CREA",  "bajo": 0.70,  "alto": 1.30, "unidad": "mg/dL", "sexo": "male" },
+    { "prueba": "CREA",  "bajo": 0.60,  "alto": 1.10, "unidad": "mg/dL", "sexo": "female" },
+    { "prueba": "UREA",  "bajo": 17,    "alto": 43,   "unidad": "mg/dL" },
+    { "prueba": "NA",    "bajo": 135,   "alto": 145,  "unidad": "mmol/L" },
+    { "prueba": "K",     "bajo": 3.50,  "alto": 5.10, "unidad": "mmol/L" },
+    { "prueba": "COLT",  "bajo": 120,   "alto": 200,  "unidad": "mg/dL" },
+    { "prueba": "GOT",   "bajo": 5,     "alto": 34,   "unidad": "U/L" },
+    { "prueba": "GPT",   "bajo": 5,     "alto": 55,   "unidad": "U/L" },
+    { "prueba": "PCR",   "bajo": 0,     "alto": 5,    "unidad": "mg/L" },
+    { "prueba": "HBA1C", "bajo": 4.0,   "alto": 5.7,  "unidad": "%" },
+    { "prueba": "HB",    "bajo": 13.5,  "alto": 17.5, "unidad": "g/dL", "sexo": "male" },
+    { "prueba": "HB",    "bajo": 12.0,  "alto": 16.0, "unidad": "g/dL", "sexo": "female" },
+    { "prueba": "HTO",   "bajo": 40.0,  "alto": 52.0, "unidad": "%", "sexo": "male" },
+    { "prueba": "HTO",   "bajo": 36.0,  "alto": 47.0, "unidad": "%", "sexo": "female" },
+    { "prueba": "LEU",   "bajo": 4.0,   "alto": 11.0, "unidad": "10*3/uL" },
+    { "prueba": "PLAQ",  "bajo": 150,   "alto": 400,  "unidad": "10*3/uL" },
+    { "prueba": "TSH",   "bajo": 0.40,  "alto": 4.00, "unidad": "u[IU]/mL" },
+    { "prueba": "T4L",   "bajo": 0.70,  "alto": 1.90, "unidad": "ng/dL" }
+  ]
+}

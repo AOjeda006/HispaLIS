@@ -2,8 +2,14 @@ package es.hispalis.backend.dominio.resultado;
 
 import java.util.List;
 
-/** Puerto de lectura de los rangos de referencia que publica este laboratorio. */
-public interface RepositorioDeRangosDeReferencia {
+/**
+ * Puerto de lectura de los rangos de referencia que publica este laboratorio.
+ *
+ * <p>Se llama catálogo y no repositorio porque no lo es: los rangos son <strong>configuración del
+ * laboratorio</strong>, se leen y nunca se escriben desde el sistema. Un repositorio guarda
+ * agregados; esto es una tabla de consulta que alguien redacta y el laboratorio publica.
+ */
+public interface CatalogoDeRangosDeReferencia {
 
     /**
      * Devuelve todos los rangos definidos para una prueba.

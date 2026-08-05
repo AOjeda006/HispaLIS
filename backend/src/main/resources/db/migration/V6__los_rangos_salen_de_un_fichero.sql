@@ -1,0 +1,23 @@
+-- Los rangos de referencia dejan la base de datos y pasan a un fichero de datos común.
+--
+-- La V5 los sembró con un INSERT, y eso es lo que los convirtió en esquema: una vez ahí, cambiar un
+-- rango exigía escribir otra migración. El generador de datos sintéticos necesitaba los mismos
+-- números para sortear valores verosímiles, no podía alcanzar esta tabla, y el camino corto fue
+-- escribirlos otra vez en `simuladores/generador/clinica.py`. Nada comprobaba que las dos copias
+-- coincidieran, y si divergían el corpus seguía validando —los dos ficheros son válidos por
+-- separado—, solo que el generador producía resultados que el laboratorio interpretaba de otra
+-- manera.
+--
+-- Ahora los dos leen `backend/src/main/resources/laboratorio/rangos-de-referencia.json`. Es el mismo
+-- patrón que la terminología con la guía (D15), sin sitio en la IG porque los rangos no son
+-- vocabulario compartido: dependen del método y del analizador de cada laboratorio.
+--
+-- Una tabla cuyo único escritor es una migración es un fichero de configuración con pasos de más.
+-- Las dos garantías que daba PostgreSQL —límites ordenados y un solo rango por prueba y sexo— se
+-- comprueban ahora al leer el fichero, y el proceso no arranca si no se cumplen.
+--
+-- Se hace en una migración nueva y NO editando la V5: cambiar una migración ya aplicada le rompe la
+-- suma de comprobación a Flyway, y cualquier base de datos que ya la hubiera pasado —el volumen del
+-- `compose` de quien haya levantado la pila una vez— se negaría a arrancar.
+
+DROP TABLE IF EXISTS dominio.rango_de_referencia;

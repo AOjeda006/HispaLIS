@@ -17,12 +17,18 @@ es que los resultados se comporten como resultados:
 Los códigos de prueba **no se escriben aquí**: se nombran, y un test comprueba que cada uno de los
 nombrados existe en el catálogo que publica la guía. Es lo que impide que esto se convierta en la
 lista paralela que prohíbe D15.
+
+Los **rangos de referencia** tampoco: se leen del fichero que publica el laboratorio, el mismo que
+consume el backend (ver `rangos.py`). Aquí estuvieron escritos a mano, en paralelo a los del
+laboratorio y sin nada que comprobara que coincidían.
 """
 
 from __future__ import annotations
 
 import random
 from dataclasses import dataclass
+
+from .rangos import RangoDeReferencia, cargar_rangos
 
 SNOMED = "http://snomed.info/sct"
 INTERPRETACION = "http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation"
@@ -39,21 +45,6 @@ NEGATIVO = "260385009"
 
 #: Sexo al que aplica un rango de referencia, en SNOMED.
 SEXO_SNOMED = {"male": "248153007", "female": "248152002"}
-
-
-@dataclass(frozen=True, slots=True)
-class RangoDeReferencia:
-    """Los límites entre los que un resultado se considera normal.
-
-    Attributes:
-        bajo: Límite inferior.
-        alto: Límite superior.
-        sexo: Sexo al que aplica el rango, o `None` si aplica a cualquiera.
-    """
-
-    bajo: float
-    alto: float
-    sexo: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,27 +82,13 @@ PANELES = (
     Panel("Tuberculosis por PCR", ("MTBPCR",), ESPUTO, 2),
 )
 
-#: Rangos de referencia del laboratorio, por código del catálogo. Son datos clínicos, no
-#: terminología: el `CodeSystem` no los lleva y no puede llevarlos, porque dependen del método y del
-#: analizador de cada laboratorio.
-RANGOS = {
-    "GLU": (RangoDeReferencia(70, 100),),
-    "CREA": (RangoDeReferencia(0.7, 1.3, "male"), RangoDeReferencia(0.6, 1.1, "female")),
-    "UREA": (RangoDeReferencia(17, 43),),
-    "NA": (RangoDeReferencia(135, 145),),
-    "K": (RangoDeReferencia(3.5, 5.1),),
-    "COLT": (RangoDeReferencia(120, 200),),
-    "GOT": (RangoDeReferencia(5, 34),),
-    "GPT": (RangoDeReferencia(5, 55),),
-    "PCR": (RangoDeReferencia(0, 5),),
-    "HBA1C": (RangoDeReferencia(4, 5.7),),
-    "HB": (RangoDeReferencia(13.5, 17.5, "male"), RangoDeReferencia(12, 16, "female")),
-    "HTO": (RangoDeReferencia(40, 52, "male"), RangoDeReferencia(36, 47, "female")),
-    "LEU": (RangoDeReferencia(4, 11),),
-    "PLAQ": (RangoDeReferencia(150, 400),),
-    "TSH": (RangoDeReferencia(0.4, 4),),
-    "T4L": (RangoDeReferencia(0.7, 1.9),),
-}
+#: Rangos de referencia del laboratorio, por código del catálogo. **No se escriben aquí**: se leen
+#: del fichero que publica el laboratorio, que es el mismo que consume el backend.
+#:
+#: Se cargan al importar el módulo, y no la primera vez que se piden, a propósito: si el fichero
+#: falta o define un rango imposible, el generador tiene que negarse a arrancar y no descubrirlo a
+#: mitad del corpus, cuando ya ha escrito medio juego de datos con valores sorteados sin rango.
+RANGOS = cargar_rangos()
 
 #: Cuántos decimales lleva impreso cada resultado. Un recuento de plaquetas con dos decimales
 #: delata que los datos son de mentira antes que cualquier otra cosa.

@@ -2,9 +2,9 @@ package es.hispalis.backend.fhir.resultado;
 
 import es.hispalis.backend.dominio.DatoInvalido;
 import es.hispalis.backend.dominio.especimen.Especimen;
+import es.hispalis.backend.dominio.resultado.CatalogoDeRangosDeReferencia;
 import es.hispalis.backend.dominio.resultado.Medicion;
 import es.hispalis.backend.dominio.resultado.RangoDeReferencia;
-import es.hispalis.backend.dominio.resultado.RepositorioDeRangosDeReferencia;
 import es.hispalis.backend.dominio.resultado.Resultado;
 import es.hispalis.backend.fhir.CatalogoDePruebas;
 import es.hispalis.backend.fhir.PerfilesDeLaGuia;
@@ -34,9 +34,9 @@ public class TraductorDeResultado {
     /** Sexo al que aplica un rango, en SNOMED: los códigos que usa `referenceRange.appliesTo`. */
     private static final Map<String, String> SEXO_EN_SNOMED = Map.of("male", "248153007", "female", "248152002");
 
-    private final RepositorioDeRangosDeReferencia rangos;
+    private final CatalogoDeRangosDeReferencia rangos;
 
-    public TraductorDeResultado(RepositorioDeRangosDeReferencia rangos) {
+    public TraductorDeResultado(CatalogoDeRangosDeReferencia rangos) {
         this.rangos = rangos;
     }
 
