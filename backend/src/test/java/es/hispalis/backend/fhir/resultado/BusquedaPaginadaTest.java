@@ -111,6 +111,26 @@ class BusquedaPaginadaTest extends TestDeIntegracion {
     }
 
     @Test
+    void el_enlace_next_apunta_a_donde_el_cliente_puede_ir_y_no_a_la_direccion_interna() {
+        String paciente = conGlucemiasYRuido();
+
+        HttpHeaders comoSiViniesePorUnProxy = new HttpHeaders();
+        comoSiViniesePorUnProxy.set("X-Forwarded-Host", "laboratorio.example");
+        comoSiViniesePorUnProxy.set("X-Forwarded-Proto", "https");
+
+        Bundle pagina = buscar(consultaDeGlucemias(paciente, POR_PAGINA), comoSiViniesePorUnProxy);
+
+        // El navegador no alcanza el backend: lo alcanza a través de un proxy —el servidor de
+        // desarrollo de Angular, y el `compose` del ítem 15—. Si el servidor firmase el enlace con
+        // la dirección por la que le llegó la petición, la segunda página apuntaría a una máquina
+        // que el navegador no puede resolver, y el cliente no puede corregirlo porque para él la
+        // URL es opaca. El fallo aparecería solo al pasar de la primera página.
+        assertThat(enlaceSiguiente(pagina))
+                .as("la página siguiente tiene que estar donde el cliente pueda pedirla")
+                .startsWith("https://laboratorio.example/fhir");
+    }
+
+    @Test
     void la_busqueda_no_devuelve_lo_de_otro_paciente_ni_lo_de_otra_prueba() {
         String paciente = conGlucemiasYRuido();
 
@@ -203,7 +223,12 @@ class BusquedaPaginadaTest extends TestDeIntegracion {
     }
 
     private Bundle buscar(URI url) {
-        ResponseEntity<String> respuesta = rest.getForEntity(url, String.class);
+        return buscar(url, new HttpHeaders());
+    }
+
+    private Bundle buscar(URI url, HttpHeaders cabeceras) {
+        ResponseEntity<String> respuesta =
+                rest.exchange(url, HttpMethod.GET, new HttpEntity<>(cabeceras), String.class);
         assertThat(respuesta.getStatusCode())
                 .as("falló la búsqueda %s: %s", url, respuesta.getBody())
                 .isEqualTo(HttpStatus.OK);

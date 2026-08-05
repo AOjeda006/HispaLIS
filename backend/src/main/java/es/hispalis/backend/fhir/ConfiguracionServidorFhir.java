@@ -18,6 +18,7 @@ import ca.uhn.fhir.jpa.provider.JpaSystemProvider;
 import ca.uhn.fhir.jpa.search.DatabaseBackedPagingProvider;
 import ca.uhn.fhir.jpa.subscription.channel.config.SubscriptionChannelConfig;
 import ca.uhn.fhir.rest.api.EncodingEnum;
+import ca.uhn.fhir.rest.server.ApacheProxyAddressStrategy;
 import ca.uhn.fhir.rest.server.IResourceProvider;
 import ca.uhn.fhir.rest.server.RestfulServer;
 import ca.uhn.fhir.rest.server.provider.ResourceProviderFactory;
@@ -187,6 +188,15 @@ public class ConfiguracionServidorFhir {
         // La paginación va contra la base de datos, no contra memoria: es lo que hace que
         // `Bundle.link[relation=next]` siga funcionando con un resultado grande (ítem 11).
         servidor.setPagingProvider(paginacion);
+
+        // Y el enlace tiene que apuntar a donde el cliente pueda ir. El servidor lo construye a
+        // partir de la petición que le llega, así que detrás de un proxy —que es como lo alcanza el
+        // navegador, tanto en desarrollo como en el `compose` del ítem 15— saldría con la dirección
+        // interna del contenedor. El cliente trata esa URL como opaca, que es lo correcto, y por eso
+        // no puede corregirla: si viene mal, la segunda página es inalcanzable. Con esta estrategia
+        // se respetan las cabeceras `X-Forwarded-*` cuando las hay, y se cae a la dirección de la
+        // petición cuando no.
+        servidor.setServerAddressStrategy(ApacheProxyAddressStrategy.forHttp());
 
         // JSON por defecto. FHIR admite XML y JSON, pero un cliente que no negocia debe recibir lo
         // que espera todo el ecosistema actual.
