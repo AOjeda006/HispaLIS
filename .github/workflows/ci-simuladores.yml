@@ -8,10 +8,15 @@ on:
     paths:
       - 'simuladores/**'
       - '.github/workflows/ci-simuladores.yml'
+      # El generador lee su terminología del FSH de la guía (D15): consume el MISMO `CodeSystem` y
+      # el MISMO `ConceptMap` que el sistema, no una lista paralela. Sin esta ruta, añadir una
+      # prueba al catálogo no dispararía los tests que comprueban que el generador la conoce.
+      - 'ig/input/fsh/**'
   pull_request:
     paths:
       - 'simuladores/**'
       - '.github/workflows/ci-simuladores.yml'
+      - 'ig/input/fsh/**'
   workflow_dispatch:
 
 permissions:
@@ -21,12 +26,28 @@ concurrency:
   group: ci-simuladores-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  VERSION_FHIR: 5.0.0
+  PAQUETE_FHIR: hl7.fhir.r5.core#5.0.0
+
 jobs:
   verificar:
     name: Lint + tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # El catálogo de pruebas no está versionado: lo produce SUSHI a partir del FSH. Los tests del
+      # generador fallan a propósito si falta, en vez de arrancar con un catálogo a medias, así que
+      # este paso no es opcional. NO se construye la IG entera: eso es cosa de `ci-ig` y cuesta
+      # minutos, mientras que los artefactos de conformidad salen en segundos.
+      - name: Compilar la terminología de la guía
+        working-directory: ig
+        run: npx --yes fsh-sushi .
 
       - uses: actions/setup-python@v5
         with:
@@ -47,3 +68,43 @@ jobs:
       - name: Tests
         working-directory: simuladores
         run: pytest
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Descargar el validador oficial de HL7
+        run: |
+          curl -sSL -o validator_cli.jar \
+            https://github.com/hapifhir/org.hl7.fhir.core/releases/latest/download/validator_cli.jar
+
+      # Criterio de aceptación 11, la mitad que los tests no pueden afirmar por sí solos: que los
+      # recursos generados sean CONFORMES a sus perfiles. Un test comprueba que el generador escribe
+      # lo que cree que escribe; que eso sea válido según la especificación solo lo dice el
+      # validador oficial.
+      #
+      # La fecha se fija para que el corpus validado sea siempre el mismo: sin ella, un fallo que
+      # dependiera del día no se podría reproducir.
+      - name: Generar un corpus sintético
+        working-directory: simuladores
+        run: python -m generador --seed 42 --pacientes 40 --fecha 2026-08-05 --salida corpus
+
+      - name: Validar el corpus contra los perfiles de la guía
+        run: |
+          java -jar validator_cli.jar simuladores/corpus/recursos \
+            -version "$VERSION_FHIR" \
+            -ig "$PAQUETE_FHIR" \
+            -ig hl7.fhir.uv.tools.r5#1.1.2 \
+            -ig ig/fsh-generated/resources \
+            -recurse \
+            -output-style compact
+
+      - name: Publicar el corpus generado
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: simuladores-corpus
+          path: simuladores/corpus/
+          retention-days: 7
+          if-no-files-found: ignore

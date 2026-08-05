@@ -13,6 +13,9 @@ from generador.configuracion import (
     ConfiguracionInvalidaError,
     crear_configuracion,
 )
+from generador.escenario import generar
+from generador.salida import escribir
+from generador.terminologia import TerminologiaNoDisponibleError, cargar_catalogo
 
 
 def construir_analizador() -> argparse.ArgumentParser:
@@ -39,6 +42,22 @@ def construir_analizador() -> argparse.ArgumentParser:
         default="salida-generador",
         help="Directorio donde se escriben los recursos generados.",
     )
+    analizador.add_argument(
+        "--fecha",
+        default=None,
+        help=(
+            "Día de referencia en ISO (2026-08-05). La actividad se reparte hacia atrás desde "
+            "aquí, así que fijarlo es lo que hace la salida reproducible entre días distintos."
+        ),
+    )
+    analizador.add_argument(
+        "--terminologia",
+        default=None,
+        help=(
+            "Directorio con los recursos que produce SUSHI. Por defecto, "
+            "«ig/fsh-generated/resources» del propio repositorio."
+        ),
+    )
     return analizador
 
 
@@ -49,20 +68,36 @@ def resolver_configuracion(argumentos: Sequence[str] | None = None) -> Configura
         semilla=opciones.semilla,
         pacientes=opciones.pacientes,
         salida=opciones.salida,
+        fecha=opciones.fecha,
     )
 
 
 def main(argumentos: Sequence[str] | None = None) -> int:
     """Ejecuta el generador y devuelve el código de salida del proceso."""
+    opciones = construir_analizador().parse_args(argumentos)
     try:
-        configuracion = resolver_configuracion(argumentos)
+        configuracion = crear_configuracion(
+            semilla=opciones.semilla,
+            pacientes=opciones.pacientes,
+            salida=opciones.salida,
+            fecha=opciones.fecha,
+        )
+        catalogo = cargar_catalogo(opciones.terminologia)
     except ConfiguracionInvalidaError as error:
         print(f"Configuración inválida: {error}", file=sys.stderr)
         return 2
+    except TerminologiaNoDisponibleError as error:
+        # No se genera con un catálogo a medias ni con uno inventado: mejor no generar nada.
+        print(f"Falta la terminología de la guía: {error}", file=sys.stderr)
+        return 3
+
+    corpus = generar(configuracion, catalogo)
+    destino = escribir(corpus, configuracion)
 
     print(
-        f"Generación configurada: {configuracion.pacientes} pacientes "
-        f"con semilla {configuracion.semilla}, salida en {configuracion.salida}."
+        f"Generados {len(corpus.recursos)} recursos de {configuracion.pacientes} pacientes "
+        f"—{corpus.episodios} episodios, {corpus.muestras_rechazadas} muestras rechazadas, "
+        f"{corpus.reflejas} pruebas reflejas— con semilla {configuracion.semilla} en {destino}."
     )
     return 0
 

@@ -10,7 +10,11 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = "CC0-1.0"
 authors = [{ name = "Andrés Ojeda Rodríguez", email = "andresojedarodriguez@gmail.com" }]
-dependencies = []
+# Faker aporta la localización española (nombres de pila, viario). El rango está acotado por arriba
+# a propósito: sus corpus cambian entre versiones mayores, y la salida del generador tiene que ser
+# reproducible —es un arnés de carga, no solo un juego de datos—. Sin la cota, una versión nueva de
+# Faker cambiaría la salida con la misma semilla y nadie sabría por qué.
+dependencies = ["faker>=40,<41"]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "ruff>=0.6"]
