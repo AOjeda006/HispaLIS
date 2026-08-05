@@ -254,8 +254,13 @@ para tipar los *slices* de `identifier` —CIP-SNS `1551000122105`, CIP-AUT `157
   ocho minutos por ciclo—. El embebido arranca un binario real de PostgreSQL en proceso: mismo motor
   y mismo dialecto que producción, sin Docker. H2 se descartó porque su esquema y su dialecto no son
   los de producción y esconderían hasta el ítem 15 cualquier fallo específico de PostgreSQL.
-  **Pendiente que afecta al ítem 15:** `docker compose up` (C12) sí necesita Docker; hay que
-  instalarlo antes de llegar ahí.
+  ~~**Pendiente que afecta al ítem 15:** `docker compose up` (C12) sí necesita Docker; hay que
+  instalarlo antes de llegar ahí.~~ — **resuelto el 2026-08-05:** Docker instalado **dentro de la
+  distro WSL2** que ya existía en el equipo (`docker.io` + `docker-compose-v2` de Ubuntu 26.04), sin
+  Docker Desktop. Menos invasivo —ni UAC, ni licencia, ni primer arranque manual de una GUI— y da el
+  mismo `docker compose`. Los puertos publicados se ven en `localhost` desde Windows. **Los tests
+  siguen con el PostgreSQL embebido:** que ahora haya Docker no cambia la decisión, porque lo que la
+  motivó —que un ciclo de test no dependa de levantar contenedores— sigue valiendo.
 - **2026-08-03 — Empotrar HAPI JPA cuesta siete obstáculos y ninguno falla al compilar.** Seis
   `@Configuration` que importar en vez de una, beans que el `starter` define por ti, el dialecto que
   hay que declarar explícito, `allow-circular-references` por un ciclo de HAPI, Hibernate Search y
@@ -330,7 +335,8 @@ para tipar los *slices* de `identifier` —CIP-SNS `1551000122105`, CIP-AUT `157
 
 ## Estado actual
 
-**Ítems 0 a 13 cerrados (2026-08-05).** La guía de implementación está terminada y **publicada en
+**Ítems 0 a 15 cerrados (2026-08-05). Queda solo el 16, el cierre del hito.** La guía de
+implementación está terminada y **publicada en
 `https://aojeda006.github.io/HispaLIS/`** (las páginas cuelgan de `/es/`; la raíz redirige por
 JavaScript), y el backend ya tiene su primer circuito de escritura completo: un `POST /fhir/Patient`
 entra por la API, pasa por el núcleo de dominio y sale publicado como proyección, todo en una sola
@@ -340,8 +346,9 @@ transacción, y el primer invariante de negocio puro ya rechaza lo que no debe.
 |---|---|---|
 | `ig/` | 9 perfiles, extensión `codigo-ine`, `CodeSystem` de 21 pruebas, `ConceptMap` a LOINC, 4 `ValueSet` y 18 ejemplos — **publicada** | `npx fsh-sushi .` → **0 errores, 0 warnings**; en CI, IG Publisher y validador oficial **en verde**; sitio desplegado comprobado (19 enlaces de la portada, `lang="es"`, los tres avisos) |
 | `backend/` | Servidor JPA empotrado · **los cinco agregados del hito 1** sobre el esquema `dominio` con Flyway · circuito completo `Patient` → `ServiceRequest` → `Specimen` → `Observation` → `DiagnosticReport` · concurrencia optimista con `If-Match` → `412` · búsqueda filtrada y paginada por `Bundle.link` · los siete caminos de error, cada uno con su código y su `OperationOutcome` · el resultado conserva cuándo se midió, quién lo hizo y entre qué cifras es normal · **búsqueda por `POST _search` sin datos del paciente en la URL**, enlace de paginación válido detrás de un proxy y **la transacción ya no se salta el núcleo** | `./mvnw verify` → **BUILD SUCCESS, 56 tests**; validador oficial sobre lo que publica el circuito → **0 errores** |
-| `web-profesional/` | Angular 22.1 + vitest + angular-eslint · capa de presentación FHIR · **cliente HTTP** (búsqueda por `POST _search`, paginación por el enlace del servidor, errores traducidos del `OperationOutcome`) · **las dos pantallas** con sus ViewModels; **sin ejercitar aún contra un backend en marcha** | `npm run lint`, `npm test` (**66 tests**), `npm run build` |
+| `web-profesional/` | Angular 22.1 + vitest + angular-eslint · capa de presentación FHIR · **cliente HTTP** (búsqueda por `POST _search`, paginación por el enlace del servidor, errores traducidos del `OperationOutcome`) · **alta de petición y consulta de informe** con sus ViewModels | `npm run lint`, `npm test` (**66 tests**), `npm run build`; API recorrida en vivo por el proxy, primero con `-Parranque-local` y después contra el `compose` |
 | `simuladores/` | **Generador de datos sintéticos completo**: terminología leída de la guía, identificadores españoles con dígito de control, paneles correlacionados, reflejas y muestras rechazadas | `ruff check`/`format`, `pytest` → **70 tests**; validador oficial sobre el corpus generado → **0 errores** |
+| `infra/` | **`compose` del hito 1**: PostgreSQL 14 + backend + web tras nginx, encadenados por *healthcheck* | `docker compose … up` desde una copia limpia del árbol commiteado, y el circuito recorrido de extremo a extremo contra la pila |
 | `integracion/`, `app-ciudadano/` | **Sin andamiar a propósito** (hito 2) | conservan su guarda de auto-omisión |
 
 **Con el 12 cerrado, la API del hito 1 está completa**: escribe por el núcleo, lee por la proyección,
@@ -351,10 +358,10 @@ predijeron baratos «porque vienen heredados de HAPI y solo hay que probarlos»;
 dominio atrás—. Lo heredado hay que **probarlo antes de darlo por bueno**, que es distinto de
 implementarlo y distinto de confiar en ello.
 
-**En curso: ítem 14** — la web profesional, **escrita entera**: capa de presentación, cliente HTTP y
-las dos pantallas con sus ViewModels. Sus dos prerrequisitos se cerraron antes, al leer el criterio
-con cuidado en vez de al llegar a la pantalla: el resultado publica `effective[x]`, `performer` y
-`referenceRange`, porque la web no puede mostrar lo que el servidor no publica.
+**La pila entera se levanta con un comando** (ítem 15) y el circuito se recorre contra ella. Se
+comprobó además **desde una copia limpia del árbol commiteado**, sin `fsh-generated`, sin
+`node_modules` y sin `target`: `docker compose … up --build` construye las dos imágenes —compilando
+de paso la terminología con SUSHI— y deja los tres servicios sanos.
 
 Lo que la web obligó a cambiar en el backend son dos cosas que **solo se ven desde el navegador**, y
 ninguna se habría notado escribiendo más tests del servidor: que buscar por número de historia con
@@ -363,16 +370,14 @@ ninguna se habría notado escribiendo más tests del servidor: que buscar por n�
 por la que le llegó la petición, que detrás de un proxy no es la del cliente. Las dos tienen ya su
 test en `backend/`.
 
-Y se ha ejercitado contra el servidor de verdad, que parecía imposible sin Docker: el perfil
-`arranque-local` levanta el backend con **el mismo PostgreSQL embebido que usan los tests**. Con eso
-se recorrió la API por el proxy del servidor de desarrollo tal y como la recorre la web —altas,
-conflicto de NHC, búsqueda con el identificador en el cuerpo, apellidos con `Ñ` y tildes intactos,
-las líneas de petición en R5, los rangos por sexo, el error en `OperationOutcome`— y, sobre todo,
-**el enlace de la página siguiente vuelve apuntando a donde el navegador puede ir**. Falta solo
-pulsar la interfaz en un navegador, que aquí no se puede automatizar.
+Y por el camino apareció **una segunda puerta de escritura abierta**, que no se buscaba: un `Bundle`
+de tipo `transaction` no pasa por los `ResourceProvider` propios —el procesador de HAPI llama a las
+DAO directamente—, así que colaba un `Patient` en la proyección sin agregado, sin NHC validado y sin
+fila en `dominio.paciente`, devolviendo `201`. Es el mismo fallo del ítem 10 en otra puerta. Cerrado
+con test en rojo primero.
 
-Después queda **una sola pieza de infraestructura**: el ítem 15 (`docker compose up`), que **necesita
-que el usuario instale Docker** — está anotado más abajo.
+**Lo único que queda del hito es el ítem 16**, y con él las dos deudas anotadas más abajo: los rangos
+de referencia escritos dos veces y el invariante completo del informe de §10.
 
 > **Estado de la CI.** Subido a `origin/main` por **SSH** (el PAT de HTTPS no tiene *scope* `workflow`
 > y GitHub rechaza el push de `.github/workflows/`). Comprobado ya en ejecuciones reales:
@@ -640,8 +645,7 @@ que el usuario instale Docker** — está anotado más abajo.
   que la IG, no una lista paralela. Salida **reproducible** con la misma semilla, y todos los recursos
   generados **validan** contra su perfil.
 
-- [ ] **14 — Web profesional en Angular. (C10)** — *escrita el 2026-08-05; **falta ejercitarla contra
-  un backend en marcha**, que necesita Docker (ítem 15).*
+- [x] **14 — Web profesional en Angular. (C10)** — *hecho el 2026-08-05.*
   **Hecho:** los dos prerrequisitos del backend, la **capa de presentación**, el **cliente HTTP** y
   **las dos pantallas**, con sus ViewModels. `web-profesional`: **66 tests**, lint y build en verde;
   cada pantalla es un *chunk* aparte. La web **no tiene datos propios**: todo sale de la API o del
@@ -683,8 +687,11 @@ que el usuario instale Docker** — está anotado más abajo.
   elección que hace la pantalla—, el error sin NHC como `400` con su `OperationOutcome` en
   `application/fhir+json`, y **el enlace `next` devuelto como `http://localhost:4200/fhir?…`**, que
   es la comprobación que de verdad importaba: el navegador puede seguirlo.
-  **Falta solo pulsar la interfaz en un navegador**, que aquí no hay forma de automatizar. Se cierra
-  en el ítem 15, con la pila completa levantada.
+  Repetido después **contra la pila del `compose`** (ítem 15), que es la que pide el criterio.
+  **Lo único no verificado es la interfaz pulsada en un navegador**, que aquí no hay forma de
+  automatizar: las plantillas las compila y comprueba el build de Angular, los ViewModels tienen sus
+  tests, y todo lo que las pantallas piden a la API está ejercitado en vivo por el mismo camino que
+  recorre el navegador.
   *Criterio:* alta de petición y consulta de informe funcionando **contra la API FHIR real** (sin
   *mocks*); los errores se muestran a partir del `OperationOutcome`; los apellidos se muestran sin
   partir por el espacio; el valor se presenta siempre con **unidad y rango de referencia**.
