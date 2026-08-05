@@ -8,11 +8,29 @@
 > un sistema técnicamente realista y acotado que atraviese los ejes importantes de interoperabilidad
 > sanitaria sin degenerar en una HCE en miniatura.
 >
-> **Estado:** v1.0 — decisiones cerradas, listo para bajar a `PLAN.md`.
-> **Última revisión:** 2026-08-03
+> **Estado:** v1.1 — decisiones cerradas. **Las D1–D20 no se han tocado.** Lo único que cambia
+> respecto de v1.0 son dos correcciones factuales aprendidas construyendo el hito 1.
+> **Última revisión:** 2026-08-06
+
+### Cambios sobre v1.0 (2026-08-03)
+
+| Fecha | Qué cambia | Por qué |
+|---|---|---|
+| 2026-08-06 | **§2.1 gana la fila `Organization.telecom` / `.address`** ➕ | R5 los elimina y los sustituye por `contact` (`ExtendedContactDetail`). Apareció **al compilar `LaboratorioOrg`**, no leyendo la especificación: un `Organization` copiado de R4 no valida. Verificado contra `hl7.fhir.r5.core@5.0.0` |
+| 2026-08-06 | **§2.1 gana la fila `ConceptMap.source[x]` / `.target[x]` / `element.target.equivalence`** ➕ | R5 los renombra a `sourceScope[x]` / `targetScope[x]` y `relationship`, y cambia los códigos. Apareció **al escribir `catalogo-a-loinc`**. Verificado contra el mismo paquete |
+
+Ninguna de las dos reabre una decisión: son del mismo tipo que las filas que ya estaban —diferencias
+de R5 que rompen un mapeo ingenuo desde R4— y solo faltaban por no haberse tropezado aún con ellas.
+
+> **Lo que NO cambia, y conviene saber al leer §4.3:** «un *slice* por colegio emisor» en
+> `Practitioner.identifier` **no es realizable** —el discriminador por `system` exige un valor fijo
+> por *slice* y ese `system` es paramétrico—. El texto se mantiene tal cual; la desviación y cómo se
+> modela en su lugar (`identifier.assigner`) están registradas en `PLAN.md` → *Notas / riesgos*.
 
 **Marcas de verificación:** `✅` verificado contra paquete canónico o repositorio oficial ·
 `🔍` verificado por fuente web secundaria · `⚠️` no verificado contra fuente primaria.
+**Marca de procedencia:** `➕` **no venía del diseño original**: se aprendió construyendo y se
+incorporó después (ver *Cambios sobre v1.0*).
 
 ---
 
@@ -81,8 +99,8 @@ tutorial, respuesta de IA o librería basada en R4 que se copie sin mirar va a f
 | `Observation.bodyStructure` | no existe | `0..1 Reference` | |
 | `DiagnosticReport.composition` | no existe | `0..1 Reference` | |
 | `Specimen.combined` / `.role` / `.feature` | no existen | nuevos | |
-| `Organization.telecom` / `.address` | existen | **eliminados** → `contact` (`ExtendedContactDetail`) | Un `Organization` de R4 **no valida** en R5 |
-| `ConceptMap.source[x]` / `.target[x]` · `element.target.equivalence` | así se llaman | **`sourceScope[x]`/`targetScope[x]`** y **`relationship`**, con códigos distintos | Un `ConceptMap` de R4 **no valida** en R5 |
+| ➕ `Organization.telecom` / `.address` | existen | **eliminados** → `contact` (`ExtendedContactDetail`) | Un `Organization` de R4 **no valida** en R5 |
+| ➕ `ConceptMap.source[x]` / `.target[x]` · `element.target.equivalence` | así se llaman | **`sourceScope[x]`/`targetScope[x]`** y **`relationship`**, con códigos distintos | Un `ConceptMap` de R4 **no valida** en R5 |
 | **Extensiones** | dentro del núcleo | **paquete aparte** `hl7.fhir.uv.extensions` | Ver §6.2 |
 
 > `Coverage.kind` obligatorio juega a favor: `self-pay` (privado que paga) frente a `insurance`
