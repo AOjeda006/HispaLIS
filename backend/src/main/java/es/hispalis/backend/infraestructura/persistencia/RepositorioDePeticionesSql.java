@@ -5,6 +5,8 @@ import es.hispalis.backend.dominio.peticion.RepositorioDePeticiones;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.jdbc.core.RowMapper;
@@ -28,6 +30,15 @@ public class RepositorioDePeticionesSql implements RepositorioDePeticiones {
             SELECT id, numero_de_peticion, paciente_id, codigo_de_prueba, solicitante, solicitada_en
               FROM dominio.peticion
              WHERE id = :id
+            """;
+
+    private static final String BUSCAR_LINEAS_DE_VOLANTES =
+            """
+            SELECT id, numero_de_peticion, paciente_id, codigo_de_prueba, solicitante, solicitada_en
+              FROM dominio.peticion
+             WHERE numero_de_peticion IN (:numeros)
+               AND paciente_id = :pacienteId
+             ORDER BY numero_de_peticion, codigo_de_prueba
             """;
 
     private static final RowMapper<Peticion> FILA_A_PETICION = RepositorioDePeticionesSql::aPeticion;
@@ -55,6 +66,21 @@ public class RepositorioDePeticionesSql implements RepositorioDePeticiones {
     public Optional<Peticion> buscarPorId(UUID id) {
         return jdbc.query(BUSCAR_POR_ID, new MapSqlParameterSource("id", id), FILA_A_PETICION).stream()
                 .findFirst();
+    }
+
+    @Override
+    public List<Peticion> buscarLineasDeVolantes(Collection<String> numerosDePeticion, UUID pacienteId) {
+        // `IN ()` no es SQL válido, así que un conjunto vacío hay que atajarlo aquí: sin esto, un
+        // informe cuyos resultados no vengan de ningún volante fallaría con un error de sintaxis.
+        if (numerosDePeticion.isEmpty()) {
+            return List.of();
+        }
+        return jdbc.query(
+                BUSCAR_LINEAS_DE_VOLANTES,
+                new MapSqlParameterSource()
+                        .addValue("numeros", numerosDePeticion)
+                        .addValue("pacienteId", pacienteId),
+                FILA_A_PETICION);
     }
 
     private static Peticion aPeticion(ResultSet fila, int numeroDeFila) throws SQLException {

@@ -5,19 +5,30 @@ import es.hispalis.backend.dominio.ReglaDeNegocioIncumplida;
 import es.hispalis.backend.dominio.resultado.Resultado;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * Informe analítico emitido: el conjunto de resultados que se entrega. Agregado raíz.
  *
- * <p>Aquí vive el invariante de que <strong>un informe vacío no es un informe</strong>. Suena obvio y
- * por eso se cuela: un informe sin resultados llega al peticionario con la apariencia de una
- * respuesta y no contiene ninguna, y quien lo recibe da por hecho que ya no tiene que esperar nada.
+ * <p>Aquí vive el invariante de §10 del diseño: <strong>un informe solo se emite con todas las líneas
+ * del volante resueltas</strong>. Tiene dos mitades y la segunda es la que de verdad hace daño:
  *
- * <p><strong>Pendiente para el cierre del hito</strong> (§10 del diseño): el invariante completo es
- * que el informe solo se emite <em>con todas las líneas de la petición resueltas</em>, no solo con
- * alguna. Eso necesita cruzar las líneas de la petición con sus resultados y está anotado en
- * {@code docs/PLAN.md}; no se adelanta aquí para no ampliar el alcance del ítem 9.
+ * <ul>
+ *   <li><strong>Un informe vacío no es un informe.</strong> Suena obvio y por eso se cuela: llega al
+ *       peticionario con la apariencia de una respuesta y no contiene ninguna.
+ *   <li><strong>Un informe a medias tampoco.</strong> El volante trae cinco determinaciones, dos
+ *       están hechas y el informe sale con esas dos. No parece un error —trae resultados, correctos
+ *       y del paciente correcto—, pero se lee como la respuesta a lo que se pidió y quien lo recibe
+ *       <em>deja de esperar las otras tres</em>. El vacío se detecta solo; este no.
+ * </ul>
+ *
+ * <p><strong>Consecuencia asumida:</strong> mientras una línea no tenga resultado, el volante no se
+ * puede informar. Con una muestra rechazada eso significa esperar a la nueva extracción, que es lo
+ * que clínicamente corresponde — la salida rápida sería anular la línea, y el laboratorio todavía no
+ * sabe hacerlo (queda para el hito 2, con {@code ServiceRequest.status = revoked}).
  */
 public final class Informe {
 
@@ -39,11 +50,13 @@ public final class Informe {
      * Emite un informe con los resultados dados.
      *
      * @param resultados los resultados que lo componen; <strong>al menos uno</strong>
-     * @param alcance todas las líneas de los volantes que tocan esos resultados, resueltas o no
+     * @param alcance <strong>todas</strong> las líneas de los volantes que tocan esos resultados,
+     *     resueltas o no; vacío si ninguno vino de un volante
      * @param emisor referencia a quien lo firma ({@code Organization/…} o {@code Practitioner/…})
      * @param emitidoEn cuándo se emite; {@code null} se resuelve como ahora
-     * @throws ReglaDeNegocioIncumplida si no hay ningún resultado
-     * @throws DatoInvalido si falta el emisor o los resultados no son del mismo paciente
+     * @throws ReglaDeNegocioIncumplida si no hay ningún resultado o si queda alguna línea pendiente
+     * @throws DatoInvalido si falta el emisor, si los resultados no son del mismo paciente o si el
+     *     alcance no cubre las líneas que citan los resultados
      */
     public static Informe emitir(
             List<Resultado> resultados, List<LineaDeLaPeticion> alcance, String emisor, Instant emitidoEn) {
@@ -64,12 +77,64 @@ public final class Informe {
             throw new DatoInvalido("Un informe no puede mezclar resultados de pacientes distintos.");
         }
 
+        List<LineaDeLaPeticion> lineas = alcance == null ? List.of() : List.copyOf(alcance);
+        exigirQueElAlcanceCubraLosResultados(resultados, lineas);
+        exigirQueElVolanteEsteTerminado(lineas);
+
         return new Informe(
                 UUID.randomUUID(),
                 paciente,
                 resultados.stream().map(Resultado::id).toList(),
                 emisor.strip(),
                 emitidoEn == null ? Instant.now() : emitidoEn);
+    }
+
+    /**
+     * Comprueba que el alcance recibido incluye, como mínimo, las líneas que citan los resultados.
+     *
+     * <p>Es el control que impide que este invariante sea decorado. La fábrica no puede ir a buscar
+     * las líneas —el núcleo no sabe de repositorios— así que se las tiene que dar quien la llama, y
+     * un llamante que construyera el alcance de menos, dejando fuera justo lo que le estorba, pasaría
+     * la comprobación de abajo sin un solo error. Que falte una línea citada por un resultado no es
+     * un caso de negocio: es que el alcance está mal construido.
+     */
+    private static void exigirQueElAlcanceCubraLosResultados(
+            List<Resultado> resultados, List<LineaDeLaPeticion> lineas) {
+        Set<UUID> enElAlcance = lineas.stream().map(LineaDeLaPeticion::id).collect(Collectors.toSet());
+
+        String sinCubrir = resultados.stream()
+                .map(Resultado::peticionId)
+                .flatMap(Optional::stream)
+                .filter(linea -> !enElAlcance.contains(linea))
+                .map(UUID::toString)
+                .distinct()
+                .sorted()
+                .collect(Collectors.joining(", "));
+
+        if (!sinCubrir.isEmpty()) {
+            throw new DatoInvalido(
+                    ("El alcance del informe no incluye las líneas %s, que sus propios resultados citan. "
+                                    + "El alcance tiene que traer el volante entero, no una parte.")
+                            .formatted(sinCubrir));
+        }
+    }
+
+    /** @throws ReglaDeNegocioIncumplida si alguna línea del volante sigue sin resultado */
+    private static void exigirQueElVolanteEsteTerminado(List<LineaDeLaPeticion> lineas) {
+        String pendientes = lineas.stream()
+                .filter(linea -> !linea.resuelta())
+                .map(linea -> "%s (volante %s)".formatted(linea.codigoDePrueba(), linea.numeroDePeticion()))
+                .distinct()
+                .sorted()
+                .collect(Collectors.joining(", "));
+
+        if (!pendientes.isEmpty()) {
+            throw new ReglaDeNegocioIncumplida(
+                    ("El volante todavía no está terminado: queda sin resolver %s. Un informe con líneas "
+                                    + "pendientes se lee como la respuesta completa, y quien lo recibe deja de "
+                                    + "esperar lo que falta.")
+                            .formatted(pendientes));
+        }
     }
 
     /** Reconstruye un informe ya almacenado. Lo usa el repositorio, nunca un caso de uso. */

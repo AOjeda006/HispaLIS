@@ -6,7 +6,9 @@ import es.hispalis.backend.dominio.resultado.Resultado;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.util.Collection;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
@@ -33,6 +35,13 @@ public class RepositorioDeResultadosSql implements RepositorioDeResultados {
                    medido_en, realizado_por
               FROM dominio.resultado
              WHERE id = :id
+            """;
+
+    private static final String LINEAS_CON_RESULTADO =
+            """
+            SELECT DISTINCT peticion_id
+              FROM dominio.resultado
+             WHERE peticion_id IN (:lineas)
             """;
 
     private static final RowMapper<Resultado> FILA_A_RESULTADO = RepositorioDeResultadosSql::aResultado;
@@ -72,6 +81,16 @@ public class RepositorioDeResultadosSql implements RepositorioDeResultados {
     public Optional<Resultado> buscarPorId(UUID id) {
         return jdbc.query(BUSCAR_POR_ID, new MapSqlParameterSource("id", id), FILA_A_RESULTADO).stream()
                 .findFirst();
+    }
+
+    @Override
+    public Set<UUID> lineasConResultado(Collection<UUID> lineasDePeticion) {
+        // `IN ()` no es SQL válido: un volante vacío se atajaba aquí o reventaba en el driver.
+        if (lineasDePeticion.isEmpty()) {
+            return Set.of();
+        }
+        return Set.copyOf(jdbc.queryForList(
+                LINEAS_CON_RESULTADO, new MapSqlParameterSource("lineas", lineasDePeticion), UUID.class));
     }
 
     private static Resultado aResultado(ResultSet fila, int numeroDeFila) throws SQLException {
