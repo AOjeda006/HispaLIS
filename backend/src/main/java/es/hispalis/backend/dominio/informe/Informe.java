@@ -39,12 +39,14 @@ public final class Informe {
      * Emite un informe con los resultados dados.
      *
      * @param resultados los resultados que lo componen; <strong>al menos uno</strong>
+     * @param alcance todas las líneas de los volantes que tocan esos resultados, resueltas o no
      * @param emisor referencia a quien lo firma ({@code Organization/…} o {@code Practitioner/…})
      * @param emitidoEn cuándo se emite; {@code null} se resuelve como ahora
      * @throws ReglaDeNegocioIncumplida si no hay ningún resultado
      * @throws DatoInvalido si falta el emisor o los resultados no son del mismo paciente
      */
-    public static Informe emitir(List<Resultado> resultados, String emisor, Instant emitidoEn) {
+    public static Informe emitir(
+            List<Resultado> resultados, List<LineaDeLaPeticion> alcance, String emisor, Instant emitidoEn) {
         if (resultados == null || resultados.isEmpty()) {
             throw new ReglaDeNegocioIncumplida(
                     "Un informe sin resultados no informa de nada, y quien lo recibe deja de esperar.");

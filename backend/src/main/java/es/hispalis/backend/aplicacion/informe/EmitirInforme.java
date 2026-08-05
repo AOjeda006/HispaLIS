@@ -58,6 +58,7 @@ public class EmitirInforme {
 
         Informe informe = Informe.emitir(
                 incluidos,
+                List.of(),
                 recibido.getPerformerFirstRep().getReference(),
                 recibido.hasIssued() ? recibido.getIssued().toInstant() : null);
         informes.guardar(informe);
