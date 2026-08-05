@@ -3,6 +3,7 @@ package es.hispalis.backend.fhir;
 import ca.uhn.fhir.batch2.jobs.config.Batch2JobsConfig;
 import ca.uhn.fhir.context.FhirContext;
 import ca.uhn.fhir.context.support.IValidationSupport;
+import ca.uhn.fhir.interceptor.api.IInterceptorService;
 import ca.uhn.fhir.jpa.api.config.JpaStorageSettings;
 import ca.uhn.fhir.jpa.api.config.ThreadPoolFactoryConfig;
 import ca.uhn.fhir.jpa.api.dao.DaoRegistry;
@@ -169,7 +170,9 @@ public class ConfiguracionServidorFhir {
             IValidationSupport soporteDeValidacion,
             DatabaseBackedPagingProvider paginacion,
             List<ProveedorPropio> proveedoresPropios,
-            TraduccionDeErroresDeDominio traduccionDeErrores) {
+            TraduccionDeErroresDeDominio traduccionDeErrores,
+            IInterceptorService interceptoresDeAlmacenamiento,
+            EscrituraSoloPorElNucleo escrituraSoloPorElNucleo) {
         RestfulServer servidor = new RestfulServer(contexto);
 
         servidor.registerProviders(sustituyendoLosPropios(fabricaDeProveedores, proveedoresPropios));
@@ -182,6 +185,12 @@ public class ConfiguracionServidorFhir {
 
         // Sin esto, un invariante de negocio incumplido saldría como 500.
         servidor.registerInterceptor(traduccionDeErrores);
+
+        // Y este va en el servicio de interceptores del almacenamiento, no en el del servidor: los
+        // puntos de enganche `STORAGE_*` los dispara la capa JPA, que no consulta el registro del
+        // `RestfulServer`. Registrarlo en el sitio equivocado no da ningún error — simplemente no se
+        // llama nunca, que en un interceptor que cierra una puerta es la peor forma de fallar.
+        interceptoresDeAlmacenamiento.registerInterceptor(escrituraSoloPorElNucleo);
         servidor.setServerConformanceProvider(
                 new ConformidadHispaLis(servidor, systemDao, ajustes, parametrosDeBusqueda, soporteDeValidacion));
 

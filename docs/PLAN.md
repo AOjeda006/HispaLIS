@@ -339,7 +339,7 @@ transacción, y el primer invariante de negocio puro ya rechaza lo que no debe.
 | Componente | Estado | Verificado con |
 |---|---|---|
 | `ig/` | 9 perfiles, extensión `codigo-ine`, `CodeSystem` de 21 pruebas, `ConceptMap` a LOINC, 4 `ValueSet` y 18 ejemplos — **publicada** | `npx fsh-sushi .` → **0 errores, 0 warnings**; en CI, IG Publisher y validador oficial **en verde**; sitio desplegado comprobado (19 enlaces de la portada, `lang="es"`, los tres avisos) |
-| `backend/` | Servidor JPA empotrado · **los cinco agregados del hito 1** sobre el esquema `dominio` con Flyway · circuito completo `Patient` → `ServiceRequest` → `Specimen` → `Observation` → `DiagnosticReport` · concurrencia optimista con `If-Match` → `412` · búsqueda filtrada y paginada por `Bundle.link` · los siete caminos de error, cada uno con su código y su `OperationOutcome` · el resultado conserva cuándo se midió, quién lo hizo y entre qué cifras es normal · **búsqueda por `POST _search` sin datos del paciente en la URL** y enlace de paginación válido detrás de un proxy | `./mvnw verify` → **BUILD SUCCESS, 52 tests**; validador oficial sobre lo que publica el circuito → **0 errores** |
+| `backend/` | Servidor JPA empotrado · **los cinco agregados del hito 1** sobre el esquema `dominio` con Flyway · circuito completo `Patient` → `ServiceRequest` → `Specimen` → `Observation` → `DiagnosticReport` · concurrencia optimista con `If-Match` → `412` · búsqueda filtrada y paginada por `Bundle.link` · los siete caminos de error, cada uno con su código y su `OperationOutcome` · el resultado conserva cuándo se midió, quién lo hizo y entre qué cifras es normal · **búsqueda por `POST _search` sin datos del paciente en la URL**, enlace de paginación válido detrás de un proxy y **la transacción ya no se salta el núcleo** | `./mvnw verify` → **BUILD SUCCESS, 56 tests**; validador oficial sobre lo que publica el circuito → **0 errores** |
 | `web-profesional/` | Angular 22.1 + vitest + angular-eslint · capa de presentación FHIR · **cliente HTTP** (búsqueda por `POST _search`, paginación por el enlace del servidor, errores traducidos del `OperationOutcome`) · **las dos pantallas** con sus ViewModels; **sin ejercitar aún contra un backend en marcha** | `npm run lint`, `npm test` (**66 tests**), `npm run build` |
 | `simuladores/` | **Generador de datos sintéticos completo**: terminología leída de la guía, identificadores españoles con dígito de control, paneles correlacionados, reflejas y muestras rechazadas | `ruff check`/`format`, `pytest` → **70 tests**; validador oficial sobre el corpus generado → **0 errores** |
 | `integracion/`, `app-ciudadano/` | **Sin andamiar a propósito** (hito 2) | conservan su guarda de auto-omisión |
@@ -786,15 +786,19 @@ Se detalla al cerrar el hito 1; no se adelanta trabajo.
   generador puede alcanzar la base de datos, así que el arreglo es un **fichero de datos común** que
   consuman los dos —el mismo patrón que la terminología, pero sin sitio en la IG porque esto no es
   vocabulario compartido—. Pendiente para el cierre del hito.
-- **⚠️ Un `Bundle` de tipo `transaction` se salta el dominio.** El `JpaSystemProvider` de HAPI está
-  registrado —lo pide el servidor JPA— y su procesador de transacciones escribe **llamando a las DAO
-  directamente**, no a los `ResourceProvider`. O sea que un `POST /fhir` con un `Bundle` que
-  contenga un `ServiceRequest` lo mete en la proyección **sin pasar por el núcleo**: sin agregado, sin
-  invariantes y sin fila en el esquema `dominio`. Contradice el invariante 3 del proyecto («un solo
-  camino de escritura») y **hoy nada lo impide**. No lo usa ningún cliente nuestro, así que no rompe
-  nada en marcha, pero la puerta está abierta. El arreglo es un interceptor que rechace `transaction`
-  y `batch` cuando toquen los cinco recursos con agregado. **Pendiente para el cierre del hito**, y
-  con test en rojo primero: es un invariante, no una mejora.
+- ~~**Un `Bundle` de tipo `transaction` se salta el dominio.**~~ — **cerrado el 2026-08-05**, y el
+  rojo está en el historial: la transacción devolvía `201 Created` con `Patient/1001`, un id numérico
+  de HAPI que no es el UUID de ningún agregado, sin NHC validado y sin fila en `dominio.paciente`. La
+  causa es que el procesador de transacciones de HAPI escribe **llamando a las DAO directamente** y
+  no pasa por los `ResourceProvider` propios, así que era una segunda puerta de escritura abierta
+  contra el invariante 3. La cierra `EscrituraSoloPorElNucleo`, un interceptor sobre
+  `STORAGE_TRANSACTION_PROCESSING`. Dos detalles que costarían un rato: los recursos protegidos se
+  **deducen de los proveedores propios registrados**, no de una lista escrita a mano, así que dar de
+  alta un proveedor nuevo lo protege solo; y el interceptor va en el `IInterceptorService` del
+  almacenamiento y **no** en el del `RestfulServer` —los puntos `STORAGE_*` los dispara la capa JPA—,
+  porque registrarlo en el sitio equivocado no da ningún error: simplemente no se llama nunca.
+  Una transacción de solo datos maestros (`Organization`, `Practitioner`) **se sigue admitiendo**:
+  no tienen agregado y no se salta nada.
 - **El número que agrupa las líneas de la petición lo inventa el cliente.** La API lo exige dentro
   del recurso (`ServiceRequest.requisition`) y el servidor no lo emite, así que la web genera
   `P<fecha>-<sufijo al azar>`. En un SIL real lo daría un contador del laboratorio; aquí el sufijo
