@@ -19,6 +19,10 @@ datos-generados/
 simuladores/corpus/
 *.ndjson
 *.hl7.recibido
+# Contador de `MSH-10` que HAPI HL7v2 persiste para los acuses que genera
+# (`FileBasedHiLoGenerator`, que lo llama así y lo escribe en el directorio de trabajo). Es estado de
+# ejecución, no fuente: commitearlo haría que dos máquinas arrancaran desde el mismo número.
+id_file
 
 # ─── FHIR IG (artefacto generado: nunca se edita ni se commitea) ──────────────
 ig/output/

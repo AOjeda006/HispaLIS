@@ -3,8 +3,9 @@
 | Carpeta | Qué es | Hito |
 |---|---|---|
 | `generador/` | Generador de **datos sintéticos** españoles: pacientes, peticiones, especímenes, resultados e informes | **1** |
-| `his/` | Simulador del **HIS** de la clínica: emitirá `ADT^A01`/`A08` y `OML^O21` por MLLP | 2 |
-| `analizador/` | Simulador del **analizador**: emitirá `ORU^R01` por MLLP | 2 |
+| `his/` | Simulador del **HIS** de la clínica: emite `ADT^A01`/`A08` y `OML^O21` por MLLP | 2 |
+| `analizador/` | Simulador del **analizador**: emite `ORU^R01` por MLLP | 2 |
+| `mllp/` | El **sobre** MLLP, compartido por los dos: son sistemas distintos que hablan el mismo transporte | 2 |
 
 > **Nunca datos reales de pacientes.** Todo lo que sale de aquí es sintético, en cualquier entorno.
 
@@ -70,3 +71,31 @@ devolviera siempre lo mismo aprobaría el primero con matrícula de honor.
 
 La versión de Faker está acotada en `pyproject.toml` por la misma razón: sus corpus cambian entre
 versiones mayores y la salida cambiaría con ellos.
+
+## Los dos simuladores v2
+
+Hablan **MLLP sobre TLS** contra el motor de integración (`integracion/`, puerto 2575). En
+desarrollo el certificado es autofirmado, así que la verificación va **apagada** por defecto y se
+enciende con `--verificar-certificado`; `--sin-tls` habla en claro y solo sirve para depurar en
+local, porque el plano de sistemas va cifrado (D4).
+
+```bash
+# El HIS: primero la filiación, luego la petición.
+python -m his --mensaje adt --evento A01 --nhc 70000001
+python -m his --mensaje oml --volante VOL20260806001 --acceso ACC70000001 --pruebas GLU,CREA,K
+
+# El analizador: el resultado bruto del tubo.
+python -m analizador --acceso ACC70000001 --medidas 2345-7:92:mg/dL,2160-0:0.9:mg/dL
+```
+
+- **`MSH-10` determinista y `--repetir`.** El identificador por defecto se deriva del contenido, así
+  que repetir la misma orden manda el **mismo** `MSH-10`: es lo que ejercita la deduplicación del
+  motor sin tener que copiar nada a mano. `--repetir 3` lo manda tres veces de una tacada.
+- **El HIS pide en el dialecto del laboratorio** (`99HISPALIS`) y **el analizador informa en LOINC**,
+  que es lo realista: un analizador comercial no conoce el catálogo de esta casa. Los dos aceptan
+  `--catalogo` para probar el camino contrario, y en ambos casos quien traduce es el `ConceptMap` de
+  la guía, nunca una tabla escrita a mano.
+- **`--charset` decide `MSH-18` y cómo se codifica el cable**, no solo lo que se declara. Con
+  `MUÑOZ DE LA TORRE` de apellido por defecto, un desajuste entre las dos cosas se ve en el acuse.
+- **Un `ORU^R01` que entra no está validado.** `OBX-11 = F` es «final del analizador»; la validación
+  es de un facultativo y va por el otro camino.

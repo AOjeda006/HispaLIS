@@ -7,6 +7,7 @@ prueba algo distinto de lo que dice probar.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -16,9 +17,19 @@ SEPARADOR_DE_SEGMENTO = "\r"
 #: `ADT_A08` no existe. El cruce medido está en `docs/adr/adr-0018-…`.
 ESTRUCTURA_ADT = "ADT_A01"
 
+#: `MSH-9-3` del `OML^O21`. Está en las dos fuentes de V2.5.1 y sin cambios desde V2.5.
+ESTRUCTURA_OML = "OML_O21"
+
 #: Los valores de la tabla 0211 que el motor acepta.
 CHARSET_LATIN1 = "8859/1"
 CHARSET_UTF8 = "UNICODE UTF-8"
+
+#: Cómo se nombra en v2 (tabla 0396) el catálogo local del laboratorio, y el común.
+CATALOGO_LOCAL = "99HISPALIS"
+CATALOGO_LOINC = "LN"
+
+#: `SPM-4`. Suero, que es el tipo de muestra más común del laboratorio.
+SUERO = "119364003"
 
 
 @dataclass(frozen=True)
@@ -67,7 +78,7 @@ def adt(
     """
     sello = (momento or datetime.now()).strftime("%Y%m%d%H%M%S")
     segmentos = [
-        _msh(evento, control_id, charset, emisor, instalacion, sello),
+        _msh("ADT", evento, ESTRUCTURA_ADT, control_id, charset, emisor, instalacion, sello),
         _campos(2, {0: "EVN", 1: evento, 2: sello}),
         _pid(paciente),
     ]
@@ -76,8 +87,91 @@ def adt(
     return SEPARADOR_DE_SEGMENTO.join(segmentos)
 
 
+def oml(
+    *,
+    control_id: str,
+    paciente: Paciente,
+    volante: str,
+    numero_de_acceso: str,
+    pruebas: Sequence[str],
+    tipo_de_muestra: str = SUERO,
+    catalogo: str = CATALOGO_LOCAL,
+    peticionario: str = "COL12345^Ruiz Pérez^Carmen",
+    charset: str = CHARSET_LATIN1,
+    emisor: str = "HIS_VIRGEN",
+    instalacion: str = "H_VIRGEN_MACARENA",
+    momento: datetime | None = None,
+) -> str:
+    """Devuelve un `OML^O21`: la petición analítica que el HIS manda al laboratorio.
+
+    Cada prueba va en su propio grupo `ORDER` (`ORC` + `OBR` + `SPM`), que es lo que dice la
+    estructura `OML_O21`. Las tres comparten `ORC-4`, que es el número de volante.
+
+    Args:
+        control_id: `MSH-10`.
+        paciente: la demografía; solo se manda `PID-3` y `PID-5`.
+        volante: `ORC-4`, el número que agrupa las líneas.
+        numero_de_acceso: `SPM-2`, el código de la etiqueta del tubo.
+        pruebas: los códigos que se piden.
+        tipo_de_muestra: `SPM-4`, código SNOMED.
+        catalogo: en qué codificación van los códigos de `OBR-4` (`99HISPALIS` o `LN`).
+        peticionario: `ORC-12`.
+        charset: `MSH-18`.
+        emisor: `MSH-3`.
+        instalacion: `MSH-4`.
+        momento: fecha del mensaje; por defecto, ahora.
+
+    Returns:
+        El mensaje con `\\r` como separador de segmento.
+    """
+    sello = (momento or datetime.now()).strftime("%Y%m%d%H%M%S")
+    segmentos = [
+        _msh("OML", "O21", ESTRUCTURA_OML, control_id, charset, emisor, instalacion, sello),
+        _pid(paciente),
+    ]
+    for posicion, prueba in enumerate(pruebas, start=1):
+        segmentos.append(
+            _campos(
+                12,
+                {
+                    0: "ORC",
+                    1: "NW",
+                    2: f"P{posicion}",
+                    4: volante,
+                    9: sello,
+                    12: peticionario,
+                },
+            )
+        )
+        segmentos.append(
+            _campos(7, {0: "OBR", 1: str(posicion), 4: f"{prueba}^^{catalogo}", 7: sello})
+        )
+        segmentos.append(
+            _campos(
+                4,
+                {
+                    0: "SPM",
+                    1: str(posicion),
+                    # Los dos componentes de `SPM-2`: el que puso el peticionario y el del
+                    # laboratorio. Aquí el HIS aún no sabe el nuestro, así que manda el suyo dos
+                    # veces — es lo que hace un HIS que imprime él la etiqueta.
+                    2: f"{numero_de_acceso}^{numero_de_acceso}",
+                    4: f"{tipo_de_muestra}^^SCT",
+                },
+            )
+        )
+    return SEPARADOR_DE_SEGMENTO.join(segmentos)
+
+
 def _msh(
-    evento: str, control_id: str, charset: str, emisor: str, instalacion: str, sello: str
+    tipo: str,
+    evento: str,
+    estructura: str,
+    control_id: str,
+    charset: str,
+    emisor: str,
+    instalacion: str,
+    sello: str,
 ) -> str:
     return _campos(
         17,
@@ -89,7 +183,7 @@ def _msh(
             4: "HISPALIS",
             5: "LAB_SEVILLA",
             6: sello,
-            8: f"ADT^{evento}^{ESTRUCTURA_ADT}",
+            8: f"{tipo}^{evento}^{estructura}",
             9: control_id,
             10: "P",
             11: "2.5.1",

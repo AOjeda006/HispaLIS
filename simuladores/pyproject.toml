@@ -22,9 +22,12 @@ dev = ["pytest>=8.0", "ruff>=0.6"]
 [project.scripts]
 generador = "generador.__main__:main"
 his = "his.__main__:main"
+analizador = "analizador.__main__:main"
 
 [tool.setuptools]
-packages = ["generador", "his"]
+# `mllp` es el transporte, compartido por los dos simuladores: el HIS y el analizador son sistemas
+# distintos que hablan el mismo sobre, y que uno importara del otro modelaría mal esa relación.
+packages = ["generador", "his", "analizador", "mllp"]
 
 [tool.ruff]
 line-length = 100

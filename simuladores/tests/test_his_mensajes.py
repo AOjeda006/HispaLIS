@@ -9,8 +9,17 @@ from __future__ import annotations
 
 import pytest
 
-from his.mensajes import CHARSET_LATIN1, CHARSET_UTF8, Paciente, adt
-from his.mllp import CharsetNoSoportadoError, _codificacion_de
+from his.__main__ import componer, construir_analizador
+from his.mensajes import (
+    CATALOGO_LOINC,
+    CHARSET_LATIN1,
+    CHARSET_UTF8,
+    SUERO,
+    Paciente,
+    adt,
+    oml,
+)
+from mllp.cliente import CharsetNoSoportadoError, _codificacion_de
 
 MUNOZ = "MUÑOZ DE LA TORRE"
 FERNANDEZ = "FERNÁNDEZ DE CÓRDOBA RUIZ"
@@ -105,3 +114,99 @@ def test_un_charset_que_no_sabemos_codificar_se_avisa_antes_de_enviar():
 
     with pytest.raises(CharsetNoSoportadoError, match="8859/8"):
         _codificacion_de(mensaje)
+
+
+def test_el_oml_agrupa_las_lineas_bajo_el_mismo_numero_de_volante():
+    """`ORC-4` es el `requisition` de FHIR: lo que agrupa las líneas de un volante."""
+    mensaje = oml(
+        control_id="OML1",
+        paciente=_paciente(),
+        volante="P20260806-A1",
+        numero_de_acceso="ACC1",
+        pruebas=["GLU", "CREA"],
+    )
+
+    orcs = [linea.split("|") for linea in mensaje.split("\r") if linea.startswith("ORC|")]
+    assert len(orcs) == 2
+    assert {orc[4] for orc in orcs} == {"P20260806-A1"}
+
+
+def test_cada_prueba_del_oml_va_en_su_propio_grupo_order():
+    mensaje = oml(
+        control_id="OML2",
+        paciente=_paciente(),
+        volante="P1",
+        numero_de_acceso="ACC1",
+        pruebas=["GLU", "CREA", "K"],
+    )
+
+    obrs = [linea.split("|") for linea in mensaje.split("\r") if linea.startswith("OBR|")]
+    assert [obr[4] for obr in obrs] == ["GLU^^99HISPALIS", "CREA^^99HISPALIS", "K^^99HISPALIS"]
+
+
+def test_el_oml_puede_pedir_en_loinc():
+    mensaje = oml(
+        control_id="OML3",
+        paciente=_paciente(),
+        volante="P1",
+        numero_de_acceso="ACC1",
+        pruebas=["2345-7"],
+        catalogo=CATALOGO_LOINC,
+    )
+
+    assert _campos(mensaje, "OBR")[4] == "2345-7^^LN"
+
+
+def test_el_numero_de_acceso_y_el_tipo_de_muestra_van_en_el_spm():
+    mensaje = oml(
+        control_id="OML4",
+        paciente=_paciente(),
+        volante="P1",
+        numero_de_acceso="ACC99",
+        pruebas=["GLU"],
+    )
+
+    spm = _campos(mensaje, "SPM")
+    assert spm[2] == "ACC99^ACC99"
+    assert spm[4] == f"{SUERO}^^SCT"
+
+
+def test_el_oml_dice_quien_pide_en_orc_12():
+    """Sin peticionario el laboratorio no sabe a quién devolver el resultado: el motor rechaza."""
+    mensaje = oml(
+        control_id="OML5",
+        paciente=_paciente(),
+        volante="P1",
+        numero_de_acceso="ACC1",
+        pruebas=["GLU"],
+    )
+
+    assert _campos(mensaje, "ORC")[12].startswith("COL12345^")
+
+
+def _componer(*argumentos: str) -> tuple[str, str]:
+    return componer(construir_analizador().parse_args(argumentos))
+
+
+def test_la_orden_por_defecto_sigue_mandando_el_adt():
+    """El `OML` es una opción nueva, no un cambio de comportamiento de lo que ya funcionaba."""
+    control_id, mensaje = _componer()
+
+    assert control_id == "HIS70000001A01"
+    assert _campos(mensaje, "MSH")[8] == "ADT^A01^ADT_A01"
+
+
+def test_la_orden_puede_pedir_un_oml_con_una_linea_por_prueba():
+    control_id, mensaje = _componer("--mensaje", "oml", "--pruebas", "GLU,CREA")
+
+    assert control_id == "HISVOL20260806001"
+    assert _campos(mensaje, "MSH")[8] == "OML^O21^OML_O21"
+    assert len([linea for linea in mensaje.split("\r") if linea.startswith("OBR|")]) == 2
+
+
+def test_la_lista_de_pruebas_tolera_espacios_y_comas_de_mas():
+    """Se escribe a mano en una terminal; un espacio de más no puede pedir una prueba vacía."""
+    _, mensaje = _componer("--mensaje", "oml", "--pruebas", "GLU, CREA ,")
+
+    codigos = [linea.split("|")[4] for linea in mensaje.split("\r") if linea.startswith("OBR|")]
+    assert codigos == ["GLU^^99HISPALIS", "CREA^^99HISPALIS"]

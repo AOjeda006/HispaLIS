@@ -1,4 +1,4 @@
-"""Envío MLLP sobre TLS.
+"""Envío MLLP sobre TLS, común al simulador del HIS y al del analizador.
 
 Aquí sí se escribe el *framing* a mano, y conviene decir por qué no contradice la regla del
 proyecto: la regla —«el framing lo implementa la librería»— vale para el **motor**, que es código de
