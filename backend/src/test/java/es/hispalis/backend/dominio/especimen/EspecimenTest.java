@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import es.hispalis.backend.dominio.DatoInvalido;
 import es.hispalis.backend.dominio.ReglaDeNegocioIncumplida;
+import es.hispalis.backend.dominio.peticion.Peticion;
 import es.hispalis.backend.dominio.resultado.Medicion;
 import es.hispalis.backend.dominio.resultado.Resultado;
 import java.math.BigDecimal;
@@ -26,7 +27,7 @@ class EspecimenTest {
     private static final String SANGRE_VENOSA = "122555007";
 
     /** Un resultado puede existir sin petición previa: una repetición de control, por ejemplo. */
-    private static final UUID SIN_PETICION = null;
+    private static final Peticion SIN_PETICION = null;
 
     @Test
     void una_muestra_rechazada_no_puede_producir_resultados() {

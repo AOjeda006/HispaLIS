@@ -1,7 +1,9 @@
 package es.hispalis.backend.dominio.peticion;
 
 import es.hispalis.backend.dominio.DatoInvalido;
+import es.hispalis.backend.dominio.ReglaDeNegocioIncumplida;
 import java.time.Instant;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -15,6 +17,13 @@ import java.util.UUID;
  * <p>El solicitante se guarda como <strong>referencia opaca</strong>. El facultativo peticionario y
  * la organización son datos maestros del laboratorio, no agregados con invariantes propios (§10), y
  * modelarlos como tales sería inventar complejidad que el negocio no pide.
+ *
+ * <p><strong>La línea tiene estado, y existe por una razón concreta:</strong> el invariante del
+ * informe bloquea la emisión mientras quede una línea sin resolver, y una muestra rechazada no
+ * produce ninguna. Sin {@link #anular}, un volante con una muestra rechazada quedaba bloqueado para
+ * siempre a la espera de una extracción que puede no llegar nunca. Anular no borra: la línea se
+ * sigue publicando —como {@code revoked}— y se sigue leyendo; lo único que cambia es que deja de
+ * estar pendiente.
  */
 public final class Peticion {
 
@@ -24,6 +33,9 @@ public final class Peticion {
     private final String codigoDePrueba;
     private final String solicitante;
     private final Instant solicitadaEn;
+    private final EstadoDeLinea estado;
+    private final String motivoDeAnulacion;
+    private final Instant anuladaEn;
 
     private Peticion(
             UUID id,
@@ -31,13 +43,19 @@ public final class Peticion {
             UUID pacienteId,
             String codigoDePrueba,
             String solicitante,
-            Instant solicitadaEn) {
+            Instant solicitadaEn,
+            EstadoDeLinea estado,
+            String motivoDeAnulacion,
+            Instant anuladaEn) {
         this.id = id;
         this.numeroDePeticion = numeroDePeticion;
         this.pacienteId = pacienteId;
         this.codigoDePrueba = codigoDePrueba;
         this.solicitante = solicitante;
         this.solicitadaEn = solicitadaEn;
+        this.estado = estado;
+        this.motivoDeAnulacion = motivoDeAnulacion;
+        this.anuladaEn = anuladaEn;
     }
 
     /**
@@ -72,7 +90,73 @@ public final class Peticion {
                 pacienteId,
                 codigoDePrueba.strip(),
                 solicitante.strip(),
-                solicitadaEn == null ? Instant.now() : solicitadaEn);
+                solicitadaEn == null ? Instant.now() : solicitadaEn,
+                EstadoDeLinea.ACTIVA,
+                null,
+                null);
+    }
+
+    /**
+     * Retira la línea: el laboratorio no va a hacer esa determinación.
+     *
+     * @param yaTieneResultados si contra esta línea consta ya algún resultado. El agregado
+     *     <strong>no puede saberlo por su cuenta</strong> —los resultados son otro agregado— así que
+     *     se lo tiene que dar quien lo llama, igual que el alcance del informe. La regla la decide
+     *     aquí el dominio, no el caso de uso.
+     * @param motivo por qué se retira; obligatorio
+     * @param cuando cuándo se retira; {@code null} se resuelve como ahora
+     * @return la línea anulada; la original no se modifica
+     * @throws ReglaDeNegocioIncumplida si ya está anulada o si ya tiene resultados
+     * @throws DatoInvalido si no se da motivo
+     */
+    public Peticion anular(boolean yaTieneResultados, String motivo, Instant cuando) {
+        if (estado == EstadoDeLinea.ANULADA) {
+            throw new ReglaDeNegocioIncumplida("La línea %s del volante %s ya estaba anulada (%s)."
+                    .formatted(codigoDePrueba, numeroDePeticion, motivoDeAnulacion));
+        }
+        // Anular algo ya informado dejaría el resultado publicado colgando de una línea que dice que
+        // no se hizo, y contradiría al informe que lo hubiera entregado. Lo que se corrige entonces
+        // es el resultado, no la línea.
+        if (yaTieneResultados) {
+            throw new ReglaDeNegocioIncumplida(
+                    ("La línea %s del volante %s ya tiene resultado informado, así que no se anula: lo que "
+                                    + "haya que corregir se corrige sobre el resultado.")
+                            .formatted(codigoDePrueba, numeroDePeticion));
+        }
+        // Sin motivo, el peticionario ve una prueba que pidió y que no se le entrega, y no sabe si
+        // reclamarla o repetir la extracción.
+        if (motivo == null || motivo.isBlank()) {
+            throw new DatoInvalido("Anular una línea sin decir por qué deja al peticionario sin saber qué hacer.");
+        }
+        return new Peticion(
+                id,
+                numeroDePeticion,
+                pacienteId,
+                codigoDePrueba,
+                solicitante,
+                solicitadaEn,
+                EstadoDeLinea.ANULADA,
+                motivo.strip(),
+                cuando == null ? Instant.now() : cuando);
+    }
+
+    /**
+     * Comprueba que esta línea todavía admite resultados, y falla si no.
+     *
+     * <p>Se llama <em>exigir</em> y no <em>puede</em> por lo mismo que en
+     * {@link es.hispalis.backend.dominio.especimen.Especimen#exigirQuePuedeProducirResultados()}: un
+     * booleano que se puede ignorar no es un invariante.
+     *
+     * @throws ReglaDeNegocioIncumplida si la línea está anulada
+     */
+    public void exigirQueAdmiteResultados() {
+        if (estado.admiteResultados()) {
+            return;
+        }
+        throw new ReglaDeNegocioIncumplida(
+                ("La línea %s del volante %s se anuló (%s), así que no puede producir resultados: el "
+                                + "laboratorio ya dijo que esa determinación no se iba a hacer.")
+                        .formatted(codigoDePrueba, numeroDePeticion, motivoDeAnulacion));
     }
 
     /** Reconstruye una petición ya almacenada. Lo usa el repositorio, nunca un caso de uso. */
@@ -82,8 +166,20 @@ public final class Peticion {
             UUID pacienteId,
             String codigoDePrueba,
             String solicitante,
-            Instant solicitadaEn) {
-        return new Peticion(id, numeroDePeticion, pacienteId, codigoDePrueba, solicitante, solicitadaEn);
+            Instant solicitadaEn,
+            EstadoDeLinea estado,
+            String motivoDeAnulacion,
+            Instant anuladaEn) {
+        return new Peticion(
+                id,
+                numeroDePeticion,
+                pacienteId,
+                codigoDePrueba,
+                solicitante,
+                solicitadaEn,
+                estado,
+                motivoDeAnulacion,
+                anuladaEn);
     }
 
     public UUID id() {
@@ -108,5 +204,21 @@ public final class Peticion {
 
     public Instant solicitadaEn() {
         return solicitadaEn;
+    }
+
+    public EstadoDeLinea estado() {
+        return estado;
+    }
+
+    public boolean estaAnulada() {
+        return estado == EstadoDeLinea.ANULADA;
+    }
+
+    public Optional<String> motivoDeAnulacion() {
+        return Optional.ofNullable(motivoDeAnulacion);
+    }
+
+    public Optional<Instant> anuladaEn() {
+        return Optional.ofNullable(anuladaEn);
     }
 }

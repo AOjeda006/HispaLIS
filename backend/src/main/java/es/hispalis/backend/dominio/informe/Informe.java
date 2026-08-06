@@ -25,10 +25,10 @@ import java.util.stream.Collectors;
  *       <em>deja de esperar las otras tres</em>. El vacío se detecta solo; este no.
  * </ul>
  *
- * <p><strong>Consecuencia asumida:</strong> mientras una línea no tenga resultado, el volante no se
- * puede informar. Con una muestra rechazada eso significa esperar a la nueva extracción, que es lo
- * que clínicamente corresponde — la salida rápida sería anular la línea, y el laboratorio todavía no
- * sabe hacerlo (queda para el hito 2, con {@code ServiceRequest.status = revoked}).
+ * <p><strong>Resuelta no es lo mismo que informada.</strong> Una línea {@link
+ * LineaDeLaPeticion#anulada() anulada} cuenta como resuelta: el laboratorio ya dijo —y publicó— que
+ * esa determinación no se va a hacer, así que nadie la sigue esperando. Sin esa salida, un volante
+ * con una muestra rechazada quedaba bloqueado para siempre, porque no iba a tener resultado nunca.
  */
 public final class Informe {
 

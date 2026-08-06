@@ -10,6 +10,9 @@ public interface RepositorioDePeticiones {
 
     void guardar(Peticion peticion);
 
+    /** Sobrescribe una línea ya registrada. Hoy el único cambio que existe es la anulación. */
+    void actualizar(Peticion peticion);
+
     Optional<Peticion> buscarPorId(UUID id);
 
     /**

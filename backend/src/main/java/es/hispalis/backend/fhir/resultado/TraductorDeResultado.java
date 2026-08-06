@@ -2,6 +2,7 @@ package es.hispalis.backend.fhir.resultado;
 
 import es.hispalis.backend.dominio.DatoInvalido;
 import es.hispalis.backend.dominio.especimen.Especimen;
+import es.hispalis.backend.dominio.peticion.Peticion;
 import es.hispalis.backend.dominio.resultado.CatalogoDeRangosDeReferencia;
 import es.hispalis.backend.dominio.resultado.Medicion;
 import es.hispalis.backend.dominio.resultado.RangoDeReferencia;
@@ -12,7 +13,6 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Date;
 import java.util.Map;
-import java.util.UUID;
 import org.hl7.fhir.r5.model.CodeableConcept;
 import org.hl7.fhir.r5.model.Coding;
 import org.hl7.fhir.r5.model.DateTimeType;
@@ -43,11 +43,12 @@ public class TraductorDeResultado {
     /**
      * Construye el agregado a partir del recurso recibido.
      *
-     * <p>Recibe el {@link Especimen} ya cargado del dominio y no solo su referencia: el invariante de
-     * C6 se comprueba dentro de la fábrica del agregado, y para eso hace falta la muestra de verdad,
-     * no lo que el recurso diga de ella.
+     * <p>Recibe el {@link Especimen} y la {@link Peticion} <strong>ya cargados del dominio</strong>,
+     * no sus referencias: los invariantes —muestra rechazada, línea anulada— se comprueban dentro de
+     * la fábrica del agregado, y para eso hacen falta los agregados de verdad, no lo que el recurso
+     * diga de ellos. La línea es {@code null} cuando el resultado no viene de ningún volante.
      */
-    public Resultado aDominio(Observation recurso, Especimen especimen, UUID peticionId) {
+    public Resultado aDominio(Observation recurso, Especimen especimen, Peticion linea) {
         String codigo = codigoDelCatalogo(recurso);
         Medicion medicion = medicionDe(recurso);
 
@@ -55,7 +56,7 @@ public class TraductorDeResultado {
             Quantity cantidad = recurso.getValueQuantity();
             return Resultado.informarCuantitativo(
                     especimen,
-                    peticionId,
+                    linea,
                     codigo,
                     cantidad.getValue(),
                     cantidad.hasCode() ? cantidad.getCode() : cantidad.getUnit(),
@@ -63,13 +64,13 @@ public class TraductorDeResultado {
         }
         if (recurso.hasValueStringType()) {
             return Resultado.informarTextual(
-                    especimen, peticionId, codigo, recurso.getValueStringType().getValue(), medicion);
+                    especimen, linea, codigo, recurso.getValueStringType().getValue(), medicion);
         }
         if (recurso.hasValueCodeableConcept()) {
             CodeableConcept valor = recurso.getValueCodeableConcept();
             return Resultado.informarTextual(
                     especimen,
-                    peticionId,
+                    linea,
                     codigo,
                     valor.hasText()
                             ? valor.getText()

@@ -6,12 +6,15 @@ import ca.uhn.fhir.rest.api.server.RequestDetails;
 import es.hispalis.backend.dominio.DatoInvalido;
 import es.hispalis.backend.dominio.especimen.Especimen;
 import es.hispalis.backend.dominio.especimen.RepositorioDeEspecimenes;
+import es.hispalis.backend.dominio.peticion.Peticion;
+import es.hispalis.backend.dominio.peticion.RepositorioDePeticiones;
 import es.hispalis.backend.dominio.resultado.RepositorioDeResultados;
 import es.hispalis.backend.dominio.resultado.Resultado;
 import es.hispalis.backend.fhir.Referencias;
 import es.hispalis.backend.fhir.resultado.TraductorDeResultado;
 import java.util.UUID;
 import org.hl7.fhir.r5.model.Observation;
+import org.hl7.fhir.r5.model.Reference;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,16 +33,19 @@ import org.springframework.transaction.annotation.Transactional;
 public class InformarResultado {
 
     private final RepositorioDeEspecimenes especimenes;
+    private final RepositorioDePeticiones peticiones;
     private final RepositorioDeResultados resultados;
     private final TraductorDeResultado traductor;
     private final DaoRegistry daos;
 
     public InformarResultado(
             RepositorioDeEspecimenes especimenes,
+            RepositorioDePeticiones peticiones,
             RepositorioDeResultados resultados,
             TraductorDeResultado traductor,
             DaoRegistry daos) {
         this.especimenes = especimenes;
+        this.peticiones = peticiones;
         this.resultados = resultados;
         this.traductor = traductor;
         this.daos = daos;
@@ -58,13 +64,23 @@ public class InformarResultado {
                         "La muestra %s no está registrada en este laboratorio.".formatted(especimenId)));
 
         // `basedOn` es opcional: una repetición de control o una determinación añadida en el
-        // laboratorio existen aunque nadie las pidiera por volante.
-        UUID peticionId =
-                recibido.hasBasedOn() ? Referencias.identidadDe(recibido.getBasedOnFirstRep(), "petición") : null;
+        // laboratorio existen aunque nadie las pidiera por volante. Cuando sí viene, la línea se
+        // CARGA del dominio y no se toma la referencia tal cual: es la misma razón que con la
+        // muestra —lo que el cliente diga de una línea no es fuente de verdad sobre esa línea— y es
+        // lo que permite que la fábrica del resultado compruebe que no está anulada.
+        Peticion linea = recibido.hasBasedOn() ? cargarLinea(recibido.getBasedOnFirstRep()) : null;
 
-        Resultado resultado = traductor.aDominio(recibido, especimen, peticionId);
+        Resultado resultado = traductor.aDominio(recibido, especimen, linea);
         resultados.guardar(resultado);
 
         return daos.getResourceDao(Observation.class).update(traductor.aFhir(resultado), peticion);
+    }
+
+    private Peticion cargarLinea(Reference referencia) {
+        UUID id = Referencias.identidadDe(referencia, "petición");
+        return peticiones
+                .buscarPorId(id)
+                .orElseThrow(() -> new DatoInvalido(
+                        "La línea de petición %s no está registrada en este laboratorio.".formatted(id)));
     }
 }

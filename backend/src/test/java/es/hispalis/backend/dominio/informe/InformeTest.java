@@ -9,6 +9,7 @@ import es.hispalis.backend.dominio.ReglaDeNegocioIncumplida;
 import es.hispalis.backend.dominio.especimen.Especimen;
 import es.hispalis.backend.dominio.especimen.EstadoDeEspecimen;
 import es.hispalis.backend.dominio.especimen.NumeroDeAcceso;
+import es.hispalis.backend.dominio.peticion.Peticion;
 import es.hispalis.backend.dominio.resultado.Medicion;
 import es.hispalis.backend.dominio.resultado.Resultado;
 import java.math.BigDecimal;
@@ -37,16 +38,16 @@ class InformeTest {
 
     @Test
     void un_informe_no_se_emite_con_una_linea_de_la_peticion_pendiente() {
-        UUID lineaGlucosa = UUID.randomUUID();
-        UUID lineaCreatinina = UUID.randomUUID();
-        Resultado glucosa = resultado(UN_PACIENTE, lineaGlucosa, "GLU");
+        Peticion lineaGlucosa = linea(UN_PACIENTE, "GLU");
+        Peticion lineaCreatinina = linea(UN_PACIENTE, "CREA");
+        Resultado glucosa = resultado(lineaGlucosa, "GLU");
 
         assertThatThrownBy(() -> Informe.emitir(
                         List.of(glucosa),
                         List.of(
-                                resuelta(lineaGlucosa, "GLU"),
+                                resuelta(lineaGlucosa),
                                 // La creatinina del mismo volante sigue en el analizador.
-                                pendiente(lineaCreatinina, "CREA")),
+                                pendiente(lineaCreatinina)),
                         EMISOR,
                         null))
                 .isInstanceOf(ReglaDeNegocioIncumplida.class)
@@ -57,17 +58,38 @@ class InformeTest {
 
     @Test
     void con_todas_las_lineas_resueltas_si_se_emite() {
-        UUID lineaGlucosa = UUID.randomUUID();
-        UUID lineaCreatinina = UUID.randomUUID();
+        Peticion lineaGlucosa = linea(UN_PACIENTE, "GLU");
+        Peticion lineaCreatinina = linea(UN_PACIENTE, "CREA");
 
         Informe informe = Informe.emitir(
-                List.of(resultado(UN_PACIENTE, lineaGlucosa, "GLU"), resultado(UN_PACIENTE, lineaCreatinina, "CREA")),
-                List.of(resuelta(lineaGlucosa, "GLU"), resuelta(lineaCreatinina, "CREA")),
+                List.of(resultado(lineaGlucosa, "GLU"), resultado(lineaCreatinina, "CREA")),
+                List.of(resuelta(lineaGlucosa), resuelta(lineaCreatinina)),
                 EMISOR,
                 null);
 
         assertThat(informe.resultadoIds()).hasSize(2);
         assertThat(informe.pacienteId()).isEqualTo(UN_PACIENTE);
+    }
+
+    /**
+     * Una línea anulada está resuelta aunque no tenga resultado: el laboratorio ya dijo, y publicó,
+     * que esa determinación no se iba a hacer. Sin esto, un volante con una muestra rechazada queda
+     * bloqueado para siempre a la espera de algo que no va a llegar.
+     */
+    @Test
+    void una_linea_anulada_no_bloquea_la_emision() {
+        Peticion lineaGlucosa = linea(UN_PACIENTE, "GLU");
+        Peticion lineaCreatinina = linea(UN_PACIENTE, "CREA");
+
+        Informe informe = Informe.emitir(
+                List.of(resultado(lineaGlucosa, "GLU")),
+                List.of(resuelta(lineaGlucosa), anulada(lineaCreatinina)),
+                EMISOR,
+                null);
+
+        assertThat(informe.resultadoIds())
+                .as("la línea anulada no aporta resultado: desbloquea, no rellena")
+                .hasSize(1);
     }
 
     /**
@@ -77,7 +99,7 @@ class InformeTest {
      */
     @Test
     void un_alcance_al_que_le_falta_la_linea_de_un_resultado_esta_mal_construido() {
-        Resultado glucosa = resultado(UN_PACIENTE, UUID.randomUUID(), "GLU");
+        Resultado glucosa = resultado(linea(UN_PACIENTE, "GLU"), "GLU");
 
         assertThatThrownBy(() -> Informe.emitir(List.of(glucosa), List.of(), EMISOR, null))
                 .isInstanceOf(DatoInvalido.class)
@@ -90,7 +112,7 @@ class InformeTest {
      */
     @Test
     void un_resultado_sin_peticion_previa_no_bloquea_nada() {
-        Resultado suelto = resultado(UN_PACIENTE, null, "GLU");
+        Resultado suelto = resultado(null, "GLU");
 
         assertThatCode(() -> Informe.emitir(List.of(suelto), List.of(), EMISOR, null))
                 .doesNotThrowAnyException();
@@ -104,30 +126,39 @@ class InformeTest {
 
     @Test
     void un_informe_sigue_sin_poder_mezclar_pacientes() {
-        UUID linea = UUID.randomUUID();
-        UUID otraLinea = UUID.randomUUID();
+        Peticion suya = linea(UN_PACIENTE, "GLU");
+        Peticion ajena = linea(OTRO_PACIENTE, "GLU");
 
         assertThatThrownBy(() -> Informe.emitir(
-                        List.of(resultado(UN_PACIENTE, linea, "GLU"), resultado(OTRO_PACIENTE, otraLinea, "GLU")),
-                        List.of(resuelta(linea, "GLU"), resuelta(otraLinea, "GLU")),
+                        List.of(resultado(suya, "GLU"), resultado(ajena, "GLU")),
+                        List.of(resuelta(suya), resuelta(ajena)),
                         EMISOR,
                         null))
                 .isInstanceOf(DatoInvalido.class)
                 .hasMessageContaining("pacientes");
     }
 
-    private static LineaDeLaPeticion resuelta(UUID id, String codigo) {
-        return new LineaDeLaPeticion(id, VOLANTE, codigo, true);
+    private static Peticion linea(UUID paciente, String codigo) {
+        return Peticion.registrar(VOLANTE, paciente, codigo, "Practitioner/peticionario", null);
     }
 
-    private static LineaDeLaPeticion pendiente(UUID id, String codigo) {
-        return new LineaDeLaPeticion(id, VOLANTE, codigo, false);
+    private static LineaDeLaPeticion resuelta(Peticion linea) {
+        return new LineaDeLaPeticion(linea.id(), linea.numeroDePeticion(), linea.codigoDePrueba(), true, false);
     }
 
-    private static Resultado resultado(UUID paciente, UUID peticionId, String codigo) {
+    private static LineaDeLaPeticion pendiente(Peticion linea) {
+        return new LineaDeLaPeticion(linea.id(), linea.numeroDePeticion(), linea.codigoDePrueba(), false, false);
+    }
+
+    private static LineaDeLaPeticion anulada(Peticion linea) {
+        return new LineaDeLaPeticion(linea.id(), linea.numeroDePeticion(), linea.codigoDePrueba(), false, true);
+    }
+
+    private static Resultado resultado(Peticion linea, String codigo) {
+        UUID paciente = linea == null ? UN_PACIENTE : linea.pacienteId();
         Especimen muestra = Especimen.registrar(
                 new NumeroDeAcceso("A" + UUID.randomUUID()), paciente, "122555007", EstadoDeEspecimen.DISPONIBLE, null);
         return Resultado.informarCuantitativo(
-                muestra, peticionId, codigo, new BigDecimal("92"), "mg/dL", Medicion.sinConstancia());
+                muestra, linea, codigo, new BigDecimal("92"), "mg/dL", Medicion.sinConstancia());
     }
 }

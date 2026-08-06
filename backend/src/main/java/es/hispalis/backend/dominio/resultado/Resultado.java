@@ -2,6 +2,7 @@ package es.hispalis.backend.dominio.resultado;
 
 import es.hispalis.backend.dominio.DatoInvalido;
 import es.hispalis.backend.dominio.especimen.Especimen;
+import es.hispalis.backend.dominio.peticion.Peticion;
 import java.math.BigDecimal;
 import java.util.Optional;
 import java.util.UUID;
@@ -9,10 +10,11 @@ import java.util.UUID;
 /**
  * Resultado de una determinación analítica. Agregado raíz.
  *
- * <p>Se crea <strong>a partir de la muestra</strong>, no junto a ella: la fábrica recibe el
- * {@link Especimen} y le exige que pueda producir resultados antes de construir nada. Así el
- * invariante no depende de que quien llame se acuerde de comprobarlo — no hay forma de obtener un
- * resultado de una muestra rechazada, porque la única puerta pasa por esa comprobación.
+ * <p>Se crea <strong>a partir de la muestra y de la línea</strong>, no junto a ellas: la fábrica
+ * recibe los dos agregados y les exige, en ese orden, que la muestra pueda producir resultados y que
+ * la línea siga admitiéndolos. Así el invariante no depende de que quien llame se acuerde de
+ * comprobarlo — no hay forma de obtener un resultado de una muestra rechazada ni de una línea
+ * anulada, porque la única puerta pasa por esas dos comprobaciones.
  *
  * <p>Un valor numérico va <strong>siempre con su unidad UCUM</strong>. Una cifra sin unidad no
  * significa nada: «4,2» puede ser normal o incompatible con la vida según de qué se hable.
@@ -55,22 +57,24 @@ public final class Resultado {
      *
      * @param especimen la muestra de la que procede; <strong>se le exige que pueda producir
      *     resultados</strong> antes de nada
+     * @param linea la línea de petición que lo motivó, o {@code null} si no vino de ninguna;
+     *     <strong>se le exige que siga admitiendo resultados</strong>
      * @param codigoDePrueba código del catálogo del laboratorio (p. ej. {@code GLU})
      * @param valor la cifra medida
      * @param unidadUcum unidad UCUM en la que está la cifra
      * @param medicion cuándo se midió y quién lo hizo; {@link Medicion#sinConstancia()} si no consta
      * @throws es.hispalis.backend.dominio.ReglaDeNegocioIncumplida si la muestra fue rechazada o no
-     *     está disponible
+     *     está disponible, o si la línea está anulada
      * @throws DatoInvalido si falta el código de prueba, la cifra o la unidad
      */
     public static Resultado informarCuantitativo(
             Especimen especimen,
-            UUID peticionId,
+            Peticion linea,
             String codigoDePrueba,
             BigDecimal valor,
             String unidadUcum,
             Medicion medicion) {
-        especimen.exigirQuePuedeProducirResultados();
+        exigirQueSePuedaInformar(especimen, linea);
 
         if (codigoDePrueba == null || codigoDePrueba.isBlank()) {
             throw new DatoInvalido("Un resultado sin código de prueba no dice qué se ha medido.");
@@ -86,7 +90,7 @@ public final class Resultado {
                 UUID.randomUUID(),
                 especimen.id(),
                 especimen.pacienteId(),
-                peticionId,
+                identidadDe(linea),
                 codigoDePrueba.strip(),
                 valor,
                 unidadUcum.strip(),
@@ -98,11 +102,11 @@ public final class Resultado {
      * Informa un resultado textual: lo que no se deja codificar ni medir.
      *
      * @throws es.hispalis.backend.dominio.ReglaDeNegocioIncumplida si la muestra no puede producir
-     *     resultados
+     *     resultados o si la línea está anulada
      */
     public static Resultado informarTextual(
-            Especimen especimen, UUID peticionId, String codigoDePrueba, String texto, Medicion medicion) {
-        especimen.exigirQuePuedeProducirResultados();
+            Especimen especimen, Peticion linea, String codigoDePrueba, String texto, Medicion medicion) {
+        exigirQueSePuedaInformar(especimen, linea);
 
         if (codigoDePrueba == null || codigoDePrueba.isBlank()) {
             throw new DatoInvalido("Un resultado sin código de prueba no dice qué se ha medido.");
@@ -114,12 +118,31 @@ public final class Resultado {
                 UUID.randomUUID(),
                 especimen.id(),
                 especimen.pacienteId(),
-                peticionId,
+                identidadDe(linea),
                 codigoDePrueba.strip(),
                 null,
                 null,
                 texto.strip(),
                 medicion);
+    }
+
+    /**
+     * Las dos condiciones que tienen que darse para que exista un resultado, en el orden en que un
+     * laboratorio las descubre: primero el tubo, después el volante.
+     *
+     * <p>La línea llega como agregado y no como identificador a propósito. Con un {@code UUID} el
+     * invariante no se podría comprobar aquí y acabaría en el caso de uso, que es donde deja de
+     * valer en cuanto aparece otra puerta de entrada — y el hito 2 trae una, el motor de integración.
+     */
+    private static void exigirQueSePuedaInformar(Especimen especimen, Peticion linea) {
+        especimen.exigirQuePuedeProducirResultados();
+        if (linea != null) {
+            linea.exigirQueAdmiteResultados();
+        }
+    }
+
+    private static UUID identidadDe(Peticion linea) {
+        return linea == null ? null : linea.id();
     }
 
     /** Reconstruye un resultado ya almacenado. Lo usa el repositorio, nunca un caso de uso. */

@@ -110,7 +110,11 @@ public class EmitirInforme {
 
         return lineas.stream()
                 .map(linea -> new LineaDeLaPeticion(
-                        linea.id(), linea.numeroDePeticion(), linea.codigoDePrueba(), resueltas.contains(linea.id())))
+                        linea.id(),
+                        linea.numeroDePeticion(),
+                        linea.codigoDePrueba(),
+                        resueltas.contains(linea.id()),
+                        linea.estaAnulada()))
                 .toList();
     }
 

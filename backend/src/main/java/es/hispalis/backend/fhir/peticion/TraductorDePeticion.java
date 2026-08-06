@@ -6,6 +6,7 @@ import es.hispalis.backend.fhir.CatalogoDePruebas;
 import es.hispalis.backend.fhir.PerfilesDeLaGuia;
 import es.hispalis.backend.fhir.Referencias;
 import java.util.Date;
+import org.hl7.fhir.r5.model.Annotation;
 import org.hl7.fhir.r5.model.CodeableConcept;
 import org.hl7.fhir.r5.model.CodeableReference;
 import org.hl7.fhir.r5.model.Coding;
@@ -43,7 +44,12 @@ public class TraductorDePeticion {
         recurso.setId(peticion.id().toString());
         recurso.getMeta().addProfile(PerfilesDeLaGuia.PETICION_LAB.canonica());
 
-        recurso.setStatus(RequestStatus.ACTIVE);
+        // R5 no tiene `statusReason` en `ServiceRequest` —es de `Task` y `MedicationRequest`—, así
+        // que el motivo de la anulación va en `note`, que es elemento estándar y está en el perfil.
+        // Publicar el `revoked` a secas obligaría al peticionario a llamar por teléfono.
+        recurso.setStatus(peticion.estaAnulada() ? RequestStatus.REVOKED : RequestStatus.ACTIVE);
+        peticion.motivoDeAnulacion().ifPresent(motivo -> recurso.addNote(new Annotation().setText(motivo)));
+
         recurso.setIntent(RequestIntent.ORDER);
         recurso.getRequisition().setValue(peticion.numeroDePeticion());
         recurso.setSubject(new Reference("Patient/" + peticion.pacienteId()));
