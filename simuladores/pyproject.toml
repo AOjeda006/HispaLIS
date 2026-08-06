@@ -21,9 +21,10 @@ dev = ["pytest>=8.0", "ruff>=0.6"]
 
 [project.scripts]
 generador = "generador.__main__:main"
+his = "his.__main__:main"
 
 [tool.setuptools]
-packages = ["generador"]
+packages = ["generador", "his"]
 
 [tool.ruff]
 line-length = 100
