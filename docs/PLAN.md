@@ -223,6 +223,58 @@ aceptable bajo ninguna de las tres opciones. Si algún día se implementa (a), e
   (`Organization/1002`, `Practitioner/analisis-clinicos`) tampoco pasa, así que publicarlo obliga a
   tomar la decisión en voz alta.
 
+### Decisiones tomadas al cerrar los canales del motor (ítems 25–28)
+
+- **2026-08-06 — La DLQ son las filas `RECHAZADO` del almacén, no una tabla aparte.** El original ya
+  está ahí íntegro; una tabla paralela obligaría a copiarlo, y entonces hay dos sitios que pueden
+  desincronizarse y una pregunta nueva («¿y si la copia falla?») que no aporta nada.
+- **2026-08-06 — La idempotencia vive en los canales, no en el reproceso.** Cada canal busca por
+  **clave de negocio** antes de escribir —línea: `requisition` + código de prueba; muestra: número de
+  acceso; resultado: muestra + código—. Así reprocesar es idéntico a recibir el mensaje otra vez, y
+  no hace falta un registro privado de «esto ya lo escribí» que pueda desviarse de la API.
+- **2026-08-06 — El caché de búsquedas del laboratorio, apagado; y el motor lo pide además en el
+  cable.** HAPI reutiliza 60 segundos el resultado de una búsqueda ya vista, y como el paso 1 del
+  canal es justamente esa búsqueda, comprobar que algo no existe **garantizaba** que siguiera
+  pareciendo inexistente durante el minuto siguiente. Detalle, medición y alternativas en
+  `docs/adr/adr-0019-…`.
+- **2026-08-06 — En el `OML`, primero las líneas y después la muestra.** Unas líneas sin muestra son
+  una petición esperando tubo, que es un estado normal del laboratorio; una muestra sin líneas es un
+  tubo que nadie pidió. Si hay que quedarse a medias, que sea en el estado que ya existe.
+- **2026-08-06 — El `OML^O21` se reparsea con el parser NO voraz, y el `ORU^R01` no.** La gramática
+  de `OML_O21` es ambigua —el segundo `ORC`/`OBR` cae en `PRIOR_RESULT.ORDER_PRIOR` y el mensaje
+  reserializa **idéntico**, así que nada avisa—, y `setNonGreedyMode(true)` lo arregla. Pero ese
+  mismo modo **rompe** `ORU_R01` («ORC does not exist in the group ORU_R01_PATIENT_RESULT»). El modo
+  de parseo es una propiedad de la gramática del mensaje, no del motor: `ContextosHl7.noVoraz()` lo
+  usa solo el canal del `OML`.
+- **2026-08-06 — El analizador no cabe en `Observation.performer`.** En R5 ese elemento no admite
+  `Device`; el sitio del aparato es `Observation.device` y hace falta el inventario modelado. El
+  canal deja `performer` vacío antes que inventar una referencia que tumba el recurso entero.
+  `OBX-16` tampoco es el aparato: es una **persona**.
+- **2026-08-06 — Una unidad que no cuadra con el catálogo se rechaza; una unidad vacía se acepta.**
+  Muchos analizadores no rellenan `OBX-6`, y con el catálogo delante no hace falta. Una que **sí**
+  viene y no coincide es el caso peligroso: una creatinina en `umol/L` guardada como `mg/dL` es la
+  misma cifra multiplicada por 88, dentro de un rango que no es el suyo y sin nada en el recurso que
+  permita notarlo después.
+- **2026-08-06 — El motor consume el `outbox` con su propio desplazamiento.** `integracion.hecho_consumido`
+  es suyo; `outbox.hecho.publicado_en` es del relay a Kafka (ítem 30) y **no se toca**. Dos
+  consumidores compartiendo la misma marca es cómo uno se come los hechos del otro.
+- **2026-08-06 — El `ConceptMap` se invierte solo para las equivalencias `equivalent`.** El
+  analizador informa en LOINC y el laboratorio publica en su catálogo, así que hace falta el sentido
+  contrario del mapa. Invertir una relación `source-is-broader-than-target` produciría una traducción
+  que estrecha el significado sin decirlo — `HTO → 4544-3` no se invierte, `HB → 718-7` sí.
+- **2026-08-06 — El `MSH-10` saliente se deriva del id del hecho, no es aleatorio.** Si el envío se
+  reintenta, el HIS recibe el mismo identificador y puede deduplicar él. Un aleatorio convertiría
+  cada reintento en un mensaje nuevo al otro lado, que es exactamente lo que el motor exige a los
+  demás no hacer.
+- **2026-08-06 — El `CapabilityStatement` deja de declarar `transaction`.** Un *bundle* de solo
+  lecturas funciona, pero lo que un cliente entiende al leer esa palabra es atomicidad de escritura,
+  y eso lo rechaza `ADR-0014`. Prometer la mitad que funciona hace que el límite se descubra
+  fallando.
+- **2026-08-06 — El transporte MLLP de los simuladores es un paquete aparte (`mllp/`), con emisor y
+  receptor.** El HIS y el analizador son **sistemas distintos** que hablan el mismo sobre; que uno
+  importara del otro modelaría mal esa relación. El receptor hace falta porque el `ORU^R01` saliente
+  no se puede probar de extremo a extremo sin un HIS que escuche.
+
 ### Decisiones tomadas al abrir el motor (ítems 20–24)
 
 - **2026-08-06 — Manda el capítulo 2 de V2.5.1 para la tabla 0354, y `ADT_A08` no existe.** El cruce
@@ -555,7 +607,7 @@ cinco invariantes de §10 que el hito 1 alcanza viven en el núcleo de dominio, 
 > `integracion`; `app-ciudadano` la conserva. Se empuja a `origin/main` por **SSH**: el PAT de HTTPS
 > no tiene *scope* `workflow` y GitHub rechaza el push de `.github/workflows/`.
 
-### Dónde estamos ahora — hito 2, ítem 25
+### Dónde estamos ahora — hito 2, ítem 29
 
 **Los tres huecos de dominio están cerrados (2026-08-06): ítems 17, 18 y 19.** Cada uno con su rojo
 en el historial —`81fdd0c`, `80b9ebf`, `abb1ddf`— y su verde detrás. `./mvnw verify` →
@@ -583,24 +635,54 @@ Verificado **contra la pila de verdad**, no solo contra el arnés de tests: back
 `dominio.paciente` confirmando la fila y la `Ñ` por punto de código. Validador oficial sobre el
 `Patient` real: **0 errores**.
 
-**El primer ítem no completado es el 25 — DLQ y reproceso idempotente**, que es lo que sostiene D22 y
-por eso va antes del `OML^O21`. Hoy un mensaje que falla queda `RECHAZADO` en el almacén con su
-motivo y **se puede reenviar**, pero no hay ni consulta de DLQ ni operación de reproceso: reintentar
-depende de que el emisor vuelva a mandarlo.
+**Y los canales del motor están cerrados (2026-08-06): ítems 25, 26, 27 y 28.** `./mvnw verify` del
+motor → **BUILD SUCCESS, 73 tests**; los simuladores, **116 tests** y `ruff` limpio. Lo que hay
+encima de lo anterior:
+
+- **`OML^O21` → `ServiceRequest` + `Specimen`**, recurso a recurso (D22), con la ventana de huérfano
+  **provocada y probada**, no supuesta.
+- **`ORU^R01` entrante → `Observation` preliminar**, con la terminología leída de la guía y la unidad
+  contrastada contra el catálogo.
+- **`ORU^R01` saliente al HIS**, disparado desde el hecho `INFORME_EMITIDO` del `outbox`, que el
+  motor consume con su propio desplazamiento.
+- **DLQ y reproceso** (`GET /motor/dlq`, `POST /motor/dlq/{id}/reproceso`) sobre las filas
+  `RECHAZADO` del almacén, sin tabla paralela y sin devolver nunca el mensaje v2.
+- **El simulador del analizador** (`simuladores/analizador/`) y el **receptor MLLP** del HIS, que es
+  lo que cierra el lazo del mensaje saliente.
+
+Verificado **contra la pila de verdad**: backend con `-Parranque-local`, motor apuntando a su API y
+compartiendo su PostgreSQL, y los dos simuladores. El circuito entero —`ADT` → `OML` → `ORU` ×3 →
+`$validar` ×3 → informe → `ORU` saliente— produjo 1 `Patient`, 3 `ServiceRequest`, 1 `Specimen` y 3
+`Observation`, y el `ORU^R01` llegó al HIS con `MUÑOZ DE LA TORRE` entero. Reproceso: el mismo
+mensaje entregado tres veces y reprocesado tres más → **una fila, `intentos = 9`, los mismos dos ids
+de `Observation` antes y después**.
+
+**Lo que este ítem destapó y no habría visto ningún test:** el caché de búsquedas de HAPI
+(`adr-0019`) y el `Device` en `Observation.performer`. Los dos pasaban en verde contra el doble de la
+API y los dos fallaban contra el servidor.
+
+**El primer ítem no completado es el 29 — Kafka y Schema Registry en el `compose`.**
 
 **Nada más se ha adelantado.** `app-ciudadano/` sigue sin andamiar, el `compose` sigue siendo el de
 tres servicios —el motor **no está en él**—, y no hay ni una línea de Kafka ni de Keycloak.
 
 > **Lo que queda sin verificar:**
 >
-> - **El workflow `ci-integracion` no ha corrido.** Esta tanda es `commit` sin push, así que la
->   guarda retirada y el `mvnw` ejecutable están comprobados en el índice, no en GitHub. Es lo
->   primero que hay que mirar en el próximo `push`.
+> - **El workflow `ci-integracion` no ha corrido.** Esta tanda es `commit` sin push. Además ahora
+>   **importa más**: el paso de SUSHI se movió **antes** del build porque los tests del motor leen
+>   `ig/fsh-generated/resources`, y ese reordenamiento no se ha ejecutado en GitHub.
 > - **El guion de verificación del `compose` sigue sin pasarse** con el paso de validación dentro.
 >   Viene del ítem 18 y sigue pendiente: la pila no se ha levantado con `docker compose`.
 > - **El motor no está en el `compose`.** El arranque en local se hizo a mano, con el PostgreSQL
->   embebido del backend y un almacén de claves generado al vuelo. Meterlo en la pila es trabajo del
->   ítem 25 o del primero que lo necesite.
+>   embebido del backend y un almacén de claves generado al vuelo.
+> - **El `ORU^R01` saliente se probó en claro contra el simulador**, no sobre TLS. El camino TLS del
+>   emisor sí lo cubre el test `NotificadorAlHisTest`, que levanta un HIS con certificado; lo que no
+>   se ha ejercitado a mano es el receptor Python con TLS, porque necesita un par PEM y el almacén
+>   que se genera es un PKCS12.
+> - **`Observation.device` sigue vacío.** El identificador del aparato llega en `OBX-18` y no se
+>   proyecta a FHIR: apuntar ahí exige que el laboratorio tenga su inventario de analizadores como
+>   recursos `Device`, que hoy no existe. La identidad del analizador **no se pierde** —está en el
+>   original archivado—, pero el recurso no la lleva.
 
 ---
 
@@ -1178,7 +1260,7 @@ tres servicios —el motor **no está en él**—, y no hay ni una línea de Kaf
   *Lo que este ítem destapó:* el motor **no arrancaba** contra la base que comparte con el
   laboratorio. Ningún test podía verlo. Ver las decisiones de abajo.
 
-- [ ] **25 — DLQ y reproceso idempotente.**
+- [x] **25 — DLQ y reproceso idempotente.**
   *Criterio:* un mensaje cuyo proceso falla va a la **DLQ** con el error y el original intactos; el
   punto de reproceso lo vuelve a aplicar **entero** y, aplicado dos veces, **no produce dos altas** —
   test explícito, reprocesando el mismo mensaje y contando con `SELECT count(*)` sobre el dominio. La
@@ -1186,8 +1268,23 @@ tres servicios —el motor **no está en él**—, y no hay ni una línea de Kaf
   se pierde al no usar Mirth).
   *Es lo que sostiene D22*, así que va **antes** del `OML^O21`: la atomicidad del par
   `ServiceRequest` + `Specimen` la pone este ítem, no el siguiente.
+  *Hecho (2026-08-06):* **la DLQ no es una tabla aparte**: son las filas `RECHAZADO` de
+  `integracion.mensaje`, que ya guarda el original íntegro. Una tabla paralela obligaría a copiar el
+  mensaje —dos sitios donde puede desincronizarse— y a decidir qué hacer si la copia falla.
+  `Reproceso.reaplicar(id)` reparsea el original archivado y vuelve a correr el canal **sobre la
+  misma fila**, sumando un intento; `ConsolaDelMotor` la publica en `GET /motor/dlq` y
+  `POST /motor/dlq/{id}/reproceso`. **La idempotencia no vive en el reproceso**, vive en los canales:
+  cada uno busca por clave de negocio antes de escribir, así que reaplicar es exactamente igual de
+  seguro que recibir el mensaje otra vez.
+  *Probado por repetición contra la pila de verdad:* el mismo `ORU^R01` entregado tres veces por MLLP
+  y luego reprocesado tres veces más desde la consola. `integracion.mensaje` → **una fila**,
+  `intentos = 9`, `estado = PROCESADO`; los `Observation` de la muestra, **los mismos dos ids** antes
+  y después. La consola nunca devuelve el mensaje v2: un volcado v2 en una respuesta HTTP es un
+  volcado clínico.
+  *Deuda nombrada, no escondida:* la consola **no tiene autenticación** todavía — va sin publicar
+  hacia fuera, dentro de la red del `compose`, y se cierra en el ítem 36.
 
-- [ ] **26 — `OML^O21` → `ServiceRequest` + `Specimen`, recurso a recurso (D22).**
+- [x] **26 — `OML^O21` → `ServiceRequest` + `Specimen`, recurso a recurso (D22).**
   *Criterio:* un `OML^O21` con varias pruebas produce las **líneas del volante** —que comparten
   `requisition` y avanzan por separado— y su `Specimen`, escritos **uno a uno** contra la API FHIR.
   **Test del fallo intermedio:** si la escritura del `Specimen` falla, el mensaje acaba en la DLQ y el
@@ -1199,8 +1296,23 @@ tres servicios —el motor **no está en él**—, y no hay ni una línea de Kaf
   tomada, eso pasa a ser parte del contrato publicado.
   *Y el número de volante:* aquí lo trae `ORC-4`, así que el apaño de la web —`P<fecha>-<sufijo al
   azar>`, ver *Notas / riesgos*— **no aplica a este camino**: si el HIS emite el número, manda el suyo.
+  *Hecho (2026-08-06):* `CanalOmlPeticion` escribe **líneas primero, muestra después**, cada una con
+  su búsqueda por clave de negocio (`requisition` + código de prueba para la línea, número de acceso
+  para la muestra). El orden importa: una muestra sin líneas es un tubo que nadie pidió, mientras que
+  unas líneas sin muestra son una petición esperando tubo — que es un estado que el laboratorio tiene
+  todos los días.
+  *El fallo a mitad, probado y no supuesto:* `LaboratorioDePrueba.fallarLaProximaEscrituraDe("Specimen")`
+  produce la ventana de huérfano —2 `ServiceRequest`, 0 `Specimen`, mensaje `RECHAZADO`— y tres
+  reprocesos seguidos convergen a 2 líneas + 1 muestra con `escriturasDe(ServiceRequest) == 2` y
+  `escriturasDe(Specimen) == 1`. La ventana **es un estado legítimo**, no un fallo: así lo dice D22.
+  *Y el contrato publicado dejó de mentir:* el `CapabilityStatement` declaraba `transaction` —valor
+  por defecto de HAPI—. Un *bundle* de solo lecturas sí funciona, pero lo que un cliente entiende al
+  leer esa palabra es atomicidad de escritura, y eso lo rechaza el interceptor de `ADR-0014` con un
+  422 (comprobado contra el servidor arrancado). `ConformidadHispaLis` la retira, con su test.
+  *Verificado de extremo a extremo:* un `OML^O21` con GLU, CREA y K → **3 `ServiceRequest` con el
+  mismo `requisition` y 1 `Specimen`**, contra el backend de verdad y con el simulador del HIS.
 
-- [ ] **27 — `ORU^R01` entrante → `Observation`.**
+- [x] **27 — `ORU^R01` entrante → `Observation`.**
   *Criterio:* un `ORU^R01` del analizador produce resultados en el dominio con **valor, unidad UCUM y
   `effective[x]`** desde `OBX-5`/`OBX-6`/`OBX-14`, y respeta el tipo declarado en **`OBX-2`** (`NM`
   numérico, `ST` texto, `CE` codificado) en vez de dar por hecho que es un número. Un `ORU^R01` sobre
@@ -1210,12 +1322,39 @@ tres servicios —el motor **no está en él**—, y no hay ni una línea de Kaf
   *Trampa:* `OBX-11` no es `Observation.status` sin traducir, y **el catálogo del analizador no es el
   catálogo del laboratorio**. El puente entre los dos es un `ConceptMap` servido por el servidor de
   terminología (ítem 33), nunca una tabla escrita a mano dentro del motor — invariante 4.
+  *Hecho (2026-08-06):* `TransformadorOruAResultado` hace caso a `OBX-2` (`NM`, `ST`, `TX`, `CE`,
+  `CWE`), traduce `OBX-3` con el `ConceptMap` de la guía leído como recurso FHIR —`CatalogoLeidoDeLaGuia`,
+  detrás de un puerto, para que el ítem 33 lo cambie por `$translate` sin tocar un canal—, y todo
+  entra **`preliminary`**: el `F` de `OBX-11` es del analizador. `C`, `X` e `I` se rechazan con `AE`
+  en vez de colarse como resultados nuevos.
+  *La comprobación que no estaba en el criterio y evita multiplicar una creatinina por 88:* si
+  `OBX-6` trae una unidad **distinta** de la que el laboratorio publica para esa prueba, el resultado
+  no entra. Un `OBX-6` vacío sí se acepta y se usa la del catálogo.
+  *Lo que solo apareció con el servidor de verdad:* el canal ponía el analizador en
+  `Observation.performer` como `Device/<id>` y el laboratorio devolvía **422** — en R5 ese elemento no
+  admite `Device`. Y `OBX-16` no es el aparato, es el *responsible observer*, o sea una persona. El
+  canal ya no rellena `performer`; el sitio del aparato sería `Observation.device` y para eso el
+  laboratorio tendría que tener su inventario modelado (pendiente, abajo). El doble de la API no
+  valida referencias y por eso los 72 tests en verde no lo vieron.
 
-- [ ] **28 — `ORU^R01` saliente al HIS cuando el informe se valida.**
+- [x] **28 — `ORU^R01` saliente al HIS cuando el informe se valida.**
   *Criterio:* al emitirse un informe, el motor construye y envía un `ORU^R01` al HIS con los
   resultados validados, y **el envío se dispara desde el hecho del `outbox`**, no desde un `if`
   dentro del caso de uso: con el HIS caído el hecho sigue ahí y se reintenta. Charset y acuse del
   lado emisor comprobados con los tres apellidos de siempre.
+  *Hecho (2026-08-06):* `NotificadorAlHis` sondea `outbox.hecho` y atiende los `INFORME_EMITIDO`. El
+  hecho **no trae los datos**, solo la referencia (invariante 6), así que el notificador lee el
+  informe por la API FHIR — que además aplica los mismos permisos que a cualquiera. `MSH-10` se
+  **deriva del id del hecho**: si se reintenta, el HIS recibe el mismo identificador y puede
+  deduplicar. `OBX-3` va con LOINC **y** el código local en la codificación alternativa, y solo se
+  incluyen los `Observation` en `final`.
+  *El outbox se usa como bus con desplazamiento propio:* el motor lleva su `integracion.hecho_consumido`
+  y **no toca `outbox.hecho.publicado_en`**, que es del relay a Kafka (ítem 30). Comprobado en la
+  ejecución de verdad: 27 hechos en el outbox, 27 consumidos por el motor (1 `ENTREGADO`, 26
+  `DESCARTADO` por no ser de su tipo) y `publicado_en` a cero en las 27 filas.
+  *Verificado de extremo a extremo:* con el simulador del HIS **escuchando** (`python -m his --escuchar`),
+  validar los tres resultados y emitir el informe produjo el `ORU^R01` saliente en el HIS, con
+  `MUÑOZ DE LA TORRE` entero en `PID-5` y las tres cifras en sus `OBX`.
 
 ### El bus de eventos
 
@@ -1363,6 +1502,31 @@ tres servicios —el motor **no está en él**—, y no hay ni una línea de Kaf
 
 ## Notas / riesgos
 
+- **Un doble de la API no prueba las propiedades del servidor real, y esta tanda lo demostró dos
+  veces.** Los 72 tests del motor estaban en verde mientras dos cosas fallaban contra el laboratorio
+  de verdad: el caché de búsquedas de HAPI, que hacía que la idempotencia fuese una ilusión
+  (`adr-0019`), y un `Device` en `Observation.performer`, que R5 no admite y el doble no validaba.
+  Los tests contra el doble siguen valiendo —son rápidos y prueban el mapeo—, pero **la ejecución de
+  extremo a extremo con los procesos de verdad no es una demostración: es parte de la verificación**,
+  y hay que hacerla antes de dar un canal por cerrado.
+- **HAPI escribe un fichero `id_file` en el directorio de trabajo del motor.** Es el contador de
+  `MSH-10` de los acuses que genera (`FileBasedHiLoGenerator`). Está en `.gitignore`, pero la
+  consecuencia real es de despliegue y hay que resolverla al meter el motor en el `compose`: en un
+  contenedor con sistema de ficheros de solo lectura el arranque falla, y con uno efímero el contador
+  se reinicia en cada despliegue. Las salidas son un volumen o cambiar el generador por uno sin
+  estado; ninguna de las dos se ha hecho.
+- **La CI del motor depende de SUSHI y el orden importa.** Los tests leen el `CodeSystem` y el
+  `ConceptMap` de `ig/fsh-generated/resources`, que **no está versionado**. En
+  `ci-integracion.yml` el paso de SUSHI se movió delante del build; en local, quien no lo haya
+  ejecutado nunca verá fallar los tests de terminología sin saber por qué.
+- **`Observation.device` está vacío a propósito, y `performer` también en lo que entra por el
+  analizador.** Ver la nota del ítem 27: falta modelar el inventario de analizadores. El validador
+  oficial lo dice como **aviso**, no como error —«todos los recursos Observation deben tener un
+  elemento performer»—, y el perfil `ResultadoLab` declara `performer` como `Must Support`, no como
+  obligatorio, con `Reference(FacultativoLab | PractitionerRole | LaboratorioOrg)`. Lo correcto sería
+  que el laboratorio se pusiera a sí mismo como `Organization` ejecutante, y eso exige tener su
+  propio `Organization` sembrado — no lo hay. El dato del aparato ya está en el `OBX-18` de los
+  mensajes archivados, así que cuando se modele se puede rellenar hacia atrás reprocesando.
 - ~~**URIs canónicas propias.** Único punto con riesgo real de **retrabajo**~~ — **cerrado** por D21
   (ítem 0). Quedan seis `system` propios, documentados como tales en la portada de la IG.
 - **El IG Publisher tiene cuatro trampas de *toolchain***, resueltas y registradas en
