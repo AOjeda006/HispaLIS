@@ -5,11 +5,15 @@ import ca.uhn.fhir.jpa.api.model.DaoMethodOutcome;
 import ca.uhn.fhir.rest.api.server.RequestDetails;
 import es.hispalis.backend.dominio.DatoInvalido;
 import es.hispalis.backend.dominio.ReglaDeNegocioIncumplida;
+import es.hispalis.backend.dominio.hecho.Hecho;
+import es.hispalis.backend.dominio.hecho.RepositorioDeHechos;
+import es.hispalis.backend.dominio.hecho.TipoDeHecho;
 import es.hispalis.backend.dominio.peticion.Peticion;
 import es.hispalis.backend.dominio.peticion.RepositorioDePeticiones;
 import es.hispalis.backend.dominio.resultado.RepositorioDeResultados;
 import es.hispalis.backend.fhir.peticion.TraductorDePeticion;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.hl7.fhir.instance.model.api.IIdType;
 import org.hl7.fhir.r5.model.Enumerations.RequestStatus;
@@ -35,16 +39,19 @@ public class AnularLinea {
 
     private final RepositorioDePeticiones peticiones;
     private final RepositorioDeResultados resultados;
+    private final RepositorioDeHechos hechos;
     private final TraductorDePeticion traductor;
     private final DaoRegistry daos;
 
     public AnularLinea(
             RepositorioDePeticiones peticiones,
             RepositorioDeResultados resultados,
+            RepositorioDeHechos hechos,
             TraductorDePeticion traductor,
             DaoRegistry daos) {
         this.peticiones = peticiones;
         this.resultados = resultados;
+        this.hechos = hechos;
         this.traductor = traductor;
         this.daos = daos;
     }
@@ -69,6 +76,12 @@ public class AnularLinea {
         boolean yaTieneResultados = !resultados.lineasConResultado(List.of(id)).isEmpty();
         Peticion anulada = linea.anular(yaTieneResultados, motivoDe(recibido), null);
         peticiones.actualizar(anulada);
+        // El motivo NO viaja en el hecho: puede describir el estado del paciente («no vuelve a
+        // extracción») y eso es información clínica. Quien la necesite lee el `ServiceRequest`.
+        hechos.registrar(Hecho.de(
+                TipoDeHecho.LINEA_ANULADA,
+                anulada.pacienteId(),
+                Map.of("serviceRequestRef", "ServiceRequest/" + anulada.id())));
 
         ServiceRequest proyeccion = traductor.aFhir(anulada);
         // Se conserva la versión que traía el `If-Match`: es lo que permite a la DAO detectar que

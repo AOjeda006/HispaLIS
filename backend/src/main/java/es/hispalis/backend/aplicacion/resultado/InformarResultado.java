@@ -6,12 +6,17 @@ import ca.uhn.fhir.rest.api.server.RequestDetails;
 import es.hispalis.backend.dominio.DatoInvalido;
 import es.hispalis.backend.dominio.especimen.Especimen;
 import es.hispalis.backend.dominio.especimen.RepositorioDeEspecimenes;
+import es.hispalis.backend.dominio.hecho.Hecho;
+import es.hispalis.backend.dominio.hecho.RepositorioDeHechos;
+import es.hispalis.backend.dominio.hecho.TipoDeHecho;
 import es.hispalis.backend.dominio.peticion.Peticion;
 import es.hispalis.backend.dominio.peticion.RepositorioDePeticiones;
 import es.hispalis.backend.dominio.resultado.RepositorioDeResultados;
 import es.hispalis.backend.dominio.resultado.Resultado;
 import es.hispalis.backend.fhir.Referencias;
 import es.hispalis.backend.fhir.resultado.TraductorDeResultado;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.UUID;
 import org.hl7.fhir.r5.model.Observation;
 import org.hl7.fhir.r5.model.Reference;
@@ -35,6 +40,7 @@ public class InformarResultado {
     private final RepositorioDeEspecimenes especimenes;
     private final RepositorioDePeticiones peticiones;
     private final RepositorioDeResultados resultados;
+    private final RepositorioDeHechos hechos;
     private final TraductorDeResultado traductor;
     private final DaoRegistry daos;
 
@@ -42,11 +48,13 @@ public class InformarResultado {
             RepositorioDeEspecimenes especimenes,
             RepositorioDePeticiones peticiones,
             RepositorioDeResultados resultados,
+            RepositorioDeHechos hechos,
             TraductorDeResultado traductor,
             DaoRegistry daos) {
         this.especimenes = especimenes;
         this.peticiones = peticiones;
         this.resultados = resultados;
+        this.hechos = hechos;
         this.traductor = traductor;
         this.daos = daos;
     }
@@ -72,8 +80,18 @@ public class InformarResultado {
 
         Resultado resultado = traductor.aDominio(recibido, especimen, linea);
         resultados.guardar(resultado);
+        hechos.registrar(Hecho.de(TipoDeHecho.RESULTADO_INFORMADO, resultado.pacienteId(), referenciasDe(resultado)));
 
         return daos.getResourceDao(Observation.class).update(traductor.aFhir(resultado), peticion);
+    }
+
+    /** La cifra NO va en el hecho: es dato clínico. Va dónde mirarla, y eso ya pasa por la API. */
+    private static Map<String, String> referenciasDe(Resultado resultado) {
+        Map<String, String> referencias = new LinkedHashMap<>();
+        referencias.put("observationRef", "Observation/" + resultado.id());
+        referencias.put("specimenRef", "Specimen/" + resultado.especimenId());
+        resultado.peticionId().ifPresent(linea -> referencias.put("serviceRequestRef", "ServiceRequest/" + linea));
+        return referencias;
     }
 
     private Peticion cargarLinea(Reference referencia) {

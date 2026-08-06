@@ -4,6 +4,9 @@ import ca.uhn.fhir.jpa.api.dao.DaoRegistry;
 import ca.uhn.fhir.jpa.api.model.DaoMethodOutcome;
 import ca.uhn.fhir.rest.api.server.RequestDetails;
 import es.hispalis.backend.dominio.DatoInvalido;
+import es.hispalis.backend.dominio.hecho.Hecho;
+import es.hispalis.backend.dominio.hecho.RepositorioDeHechos;
+import es.hispalis.backend.dominio.hecho.TipoDeHecho;
 import es.hispalis.backend.dominio.informe.Informe;
 import es.hispalis.backend.dominio.informe.LineaDeLaPeticion;
 import es.hispalis.backend.dominio.informe.RepositorioDeInformes;
@@ -14,6 +17,7 @@ import es.hispalis.backend.dominio.resultado.Resultado;
 import es.hispalis.backend.fhir.Referencias;
 import es.hispalis.backend.fhir.informe.TraductorDeInforme;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -42,6 +46,7 @@ public class EmitirInforme {
     private final RepositorioDeInformes informes;
     private final RepositorioDeResultados resultados;
     private final RepositorioDePeticiones peticiones;
+    private final RepositorioDeHechos hechos;
     private final TraductorDeInforme traductor;
     private final DaoRegistry daos;
 
@@ -49,11 +54,13 @@ public class EmitirInforme {
             RepositorioDeInformes informes,
             RepositorioDeResultados resultados,
             RepositorioDePeticiones peticiones,
+            RepositorioDeHechos hechos,
             TraductorDeInforme traductor,
             DaoRegistry daos) {
         this.informes = informes;
         this.resultados = resultados;
         this.peticiones = peticiones;
+        this.hechos = hechos;
         this.traductor = traductor;
         this.daos = daos;
     }
@@ -76,6 +83,10 @@ public class EmitirInforme {
                 recibido.getPerformerFirstRep().getReference(),
                 recibido.hasIssued() ? recibido.getIssued().toInstant() : null);
         informes.guardar(informe);
+        hechos.registrar(Hecho.de(
+                TipoDeHecho.INFORME_EMITIDO,
+                informe.pacienteId(),
+                Map.of("diagnosticReportRef", "DiagnosticReport/" + informe.id())));
 
         return daos.getResourceDao(DiagnosticReport.class).update(traductor.aFhir(informe), peticionHttp);
     }

@@ -3,9 +3,13 @@ package es.hispalis.backend.aplicacion.paciente;
 import ca.uhn.fhir.jpa.api.dao.DaoRegistry;
 import ca.uhn.fhir.jpa.api.model.DaoMethodOutcome;
 import ca.uhn.fhir.rest.api.server.RequestDetails;
+import es.hispalis.backend.dominio.hecho.Hecho;
+import es.hispalis.backend.dominio.hecho.RepositorioDeHechos;
+import es.hispalis.backend.dominio.hecho.TipoDeHecho;
 import es.hispalis.backend.dominio.paciente.Paciente;
 import es.hispalis.backend.dominio.paciente.RepositorioDePacientes;
 import es.hispalis.backend.fhir.paciente.TraductorDePaciente;
+import java.util.Map;
 import org.hl7.fhir.r5.model.Patient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>el recurso recibido se traduce al agregado, que <strong>valida sus invariantes al
  *       construirse</strong>: no llega a existir un paciente inválido;
  *   <li>el agregado se guarda en el esquema {@code dominio}, que es la fuente de verdad;
+ *   <li>el hecho queda apuntado en el {@code outbox} para que el bus lo publique;
  *   <li>la proyección FHIR se <strong>genera desde el agregado</strong> y se escribe con las DAO de
  *       HAPI, que de paso pueblan sus índices de búsqueda.
  * </ol>
@@ -37,11 +42,17 @@ import org.springframework.transaction.annotation.Transactional;
 public class AltaDePaciente {
 
     private final RepositorioDePacientes repositorio;
+    private final RepositorioDeHechos hechos;
     private final TraductorDePaciente traductor;
     private final DaoRegistry daos;
 
-    public AltaDePaciente(RepositorioDePacientes repositorio, TraductorDePaciente traductor, DaoRegistry daos) {
+    public AltaDePaciente(
+            RepositorioDePacientes repositorio,
+            RepositorioDeHechos hechos,
+            TraductorDePaciente traductor,
+            DaoRegistry daos) {
         this.repositorio = repositorio;
+        this.hechos = hechos;
         this.traductor = traductor;
         this.daos = daos;
     }
@@ -59,6 +70,7 @@ public class AltaDePaciente {
     public DaoMethodOutcome ejecutar(Patient recibido, RequestDetails peticion) {
         Paciente paciente = traductor.aDominio(recibido);
         repositorio.guardar(paciente);
+        hechos.registrar(Hecho.de(TipoDeHecho.PACIENTE_REGISTRADO, paciente.id(), Map.of()));
 
         return daos.getResourceDao(Patient.class).update(traductor.aFhir(paciente), peticion);
     }

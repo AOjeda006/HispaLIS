@@ -4,9 +4,13 @@ import ca.uhn.fhir.jpa.api.dao.DaoRegistry;
 import ca.uhn.fhir.jpa.api.model.DaoMethodOutcome;
 import ca.uhn.fhir.rest.api.server.RequestDetails;
 import es.hispalis.backend.dominio.DatoInvalido;
+import es.hispalis.backend.dominio.hecho.Hecho;
+import es.hispalis.backend.dominio.hecho.RepositorioDeHechos;
+import es.hispalis.backend.dominio.hecho.TipoDeHecho;
 import es.hispalis.backend.dominio.paciente.Paciente;
 import es.hispalis.backend.dominio.paciente.RepositorioDePacientes;
 import es.hispalis.backend.fhir.paciente.TraductorDePaciente;
+import java.util.Map;
 import java.util.UUID;
 import org.hl7.fhir.instance.model.api.IIdType;
 import org.hl7.fhir.r5.model.Patient;
@@ -29,11 +33,17 @@ import org.springframework.transaction.annotation.Transactional;
 public class ActualizarPaciente {
 
     private final RepositorioDePacientes repositorio;
+    private final RepositorioDeHechos hechos;
     private final TraductorDePaciente traductor;
     private final DaoRegistry daos;
 
-    public ActualizarPaciente(RepositorioDePacientes repositorio, TraductorDePaciente traductor, DaoRegistry daos) {
+    public ActualizarPaciente(
+            RepositorioDePacientes repositorio,
+            RepositorioDeHechos hechos,
+            TraductorDePaciente traductor,
+            DaoRegistry daos) {
         this.repositorio = repositorio;
+        this.hechos = hechos;
         this.traductor = traductor;
         this.daos = daos;
     }
@@ -53,6 +63,9 @@ public class ActualizarPaciente {
 
         Paciente actualizado = traductor.aplicarSobre(existente, recibido);
         repositorio.actualizar(actualizado);
+        // El hecho no dice QUÉ cambió: eso sería filiación en el bus. Quien lo necesite lee el
+        // recurso, que es donde el consentimiento y la autorización siguen aplicando.
+        hechos.registrar(Hecho.de(TipoDeHecho.PACIENTE_ACTUALIZADO, actualizado.id(), Map.of()));
 
         Patient proyeccion = traductor.aFhir(actualizado);
         // Se conserva la versión que traía el `If-Match`: es lo que hace que la DAO pueda detectar

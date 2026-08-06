@@ -4,11 +4,15 @@ import ca.uhn.fhir.jpa.api.dao.DaoRegistry;
 import ca.uhn.fhir.rest.api.server.RequestDetails;
 import es.hispalis.backend.dominio.DatoInvalido;
 import es.hispalis.backend.dominio.ReglaDeNegocioIncumplida;
+import es.hispalis.backend.dominio.hecho.Hecho;
+import es.hispalis.backend.dominio.hecho.RepositorioDeHechos;
+import es.hispalis.backend.dominio.hecho.TipoDeHecho;
 import es.hispalis.backend.dominio.resultado.RepositorioDeResultados;
 import es.hispalis.backend.dominio.resultado.Resultado;
 import es.hispalis.backend.fhir.resultado.TraductorDeProcedencia;
 import es.hispalis.backend.fhir.resultado.TraductorDeResultado;
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
 import org.hl7.fhir.instance.model.api.IIdType;
 import org.hl7.fhir.r5.model.DateTimeType;
@@ -36,16 +40,19 @@ import org.springframework.transaction.annotation.Transactional;
 public class ValidarResultado {
 
     private final RepositorioDeResultados resultados;
+    private final RepositorioDeHechos hechos;
     private final TraductorDeResultado traductor;
     private final TraductorDeProcedencia traductorDeProcedencia;
     private final DaoRegistry daos;
 
     public ValidarResultado(
             RepositorioDeResultados resultados,
+            RepositorioDeHechos hechos,
             TraductorDeResultado traductor,
             TraductorDeProcedencia traductorDeProcedencia,
             DaoRegistry daos) {
         this.resultados = resultados;
+        this.hechos = hechos;
         this.traductor = traductor;
         this.traductorDeProcedencia = traductorDeProcedencia;
         this.daos = daos;
@@ -71,6 +78,17 @@ public class ValidarResultado {
 
         Resultado validado = existente.validar(quienEs(facultativo), momentoDe(cuando));
         resultados.actualizar(validado);
+
+        // Este es el hecho del que colgarán el `ORU^R01` saliente y el notificador EDO. Ni la cifra
+        // ni quién firmó viajan en él: van las dos referencias que hay que mirar para saberlo.
+        hechos.registrar(Hecho.de(
+                TipoDeHecho.RESULTADO_VALIDADO,
+                validado.pacienteId(),
+                Map.of(
+                        "observationRef",
+                        "Observation/" + validado.id(),
+                        "provenanceRef",
+                        "Provenance/" + TraductorDeProcedencia.identidadDe(validado))));
 
         // La procedencia va primero porque es la que da fe del cambio: si algo revienta después, la
         // transacción entera se deshace y no queda ni un resultado `final` sin firma ni una firma sin
