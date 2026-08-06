@@ -71,9 +71,25 @@ public class ConfiguracionServidorFhir {
     /** Ruta bajo la que se publica la API. {@code /fhir/metadata} cuelga de aquí. */
     public static final String RUTA_BASE = "/fhir";
 
+    /**
+     * Ajustes del almacenamiento de HAPI, con el <strong>caché de búsquedas apagado</strong>.
+     *
+     * <p>HAPI reutiliza durante 60 segundos el resultado de una búsqueda ya vista. Aquí eso no vale:
+     * el patrón de todo cliente que escribe sin duplicar es <em>busca, no encuentra, crea</em>, y el
+     * motor de integración lo usa en cada canal —es lo único que hace idempotente el reproceso de un
+     * mensaje—. Con el caché encendido, la búsqueda posterior al alta devuelve el conjunto vacío que
+     * se guardó antes de ella, el cliente concluye que el recurso no existe y crea un duplicado.
+     *
+     * <p>No es una optimización que se pierda: <em>read-your-writes</em> es un invariante de este
+     * sistema (§9 del diseño), y no dice «el {@code GET} al {@code Location} funciona», dice que
+     * ninguna lectura puede ir por detrás de una escritura ya confirmada. Una búsqueda es una
+     * lectura. El detalle y cómo se detectó, en {@code docs/adr/adr-0019-…}.
+     */
     @Bean
     public JpaStorageSettings ajustesDeAlmacenamiento() {
-        return new JpaStorageSettings();
+        JpaStorageSettings ajustes = new JpaStorageSettings();
+        ajustes.setReuseCachedSearchResultsForMillis(null);
+        return ajustes;
     }
 
     @Bean

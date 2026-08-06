@@ -90,6 +90,38 @@ class AltaDePacienteTest extends TestDeIntegracion {
         assertThat(busqueda.getBody()).contains(nhc);
     }
 
+    /**
+     * Una búsqueda que no encontró nada no puede seguir diciendo lo mismo después del alta.
+     *
+     * <p>Este es el patrón de todo cliente que escribe sin duplicar: busca, no encuentra, crea. El
+     * motor de integración lo usa en cada canal, y es lo único que hace idempotente el reproceso de
+     * un mensaje. Si la segunda búsqueda devuelve el <em>searchset</em> vacío que se guardó en la
+     * primera, el cliente cree que el recurso no existe y crea un duplicado.
+     *
+     * <p>Es el criterio 4 aplicado a la búsqueda: <em>read-your-writes</em> no es «el {@code GET} al
+     * {@code Location} funciona», es que <strong>ninguna</strong> lectura puede ir por detrás de una
+     * escritura ya confirmada.
+     *
+     * <p><strong>Este test no vio el fallo.</strong> El fallo se reprodujo de forma determinista
+     * contra el servidor en marcha —tres búsquedas después de un {@code 201} y las tres a cero— y no
+     * aquí, sin que se llegara a averiguar por qué la ruta de reutilización de HAPI no se activa en
+     * este contexto. Se queda porque describe la propiedad que hay que conservar; quien la rompa por
+     * el mismo sitio lo verá en {@link es.hispalis.backend.fhir.ConfiguracionServidorFhir} y en
+     * {@code docs/adr/adr-0019-…}, no aquí.
+     */
+    @Test
+    void una_busqueda_vacia_no_sigue_estandolo_despues_del_alta() {
+        String nhc = nuevoNhc();
+        String busqueda = "/fhir/Patient?identifier=" + SYSTEM_NHC + "|" + nhc;
+        rest.getForEntity(busqueda, String.class);
+
+        darDeAlta(pacienteDePrueba(nhc));
+
+        assertThat(rest.getForEntity(busqueda, String.class).getBody())
+                .as("la búsqueda devuelve el resultado que se guardó antes del alta")
+                .contains(nhc);
+    }
+
     @Test
     void los_apellidos_espanoles_sobreviven_al_viaje_completo() {
         String nhc = nuevoNhc();
