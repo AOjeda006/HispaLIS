@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import ca.uhn.fhir.context.FhirContext;
 import es.hispalis.backend.TestDeIntegracion;
 import es.hispalis.backend.fhir.CatalogoDePruebas;
+import es.hispalis.backend.fhir.FacultativaDePrueba;
 import es.hispalis.backend.fhir.SistemasDeIdentificador;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.hl7.fhir.instance.model.api.IBaseResource;
@@ -17,6 +18,7 @@ import org.hl7.fhir.r5.model.HumanName;
 import org.hl7.fhir.r5.model.Observation;
 import org.hl7.fhir.r5.model.OperationOutcome;
 import org.hl7.fhir.r5.model.Organization;
+import org.hl7.fhir.r5.model.Parameters;
 import org.hl7.fhir.r5.model.Patient;
 import org.hl7.fhir.r5.model.Quantity;
 import org.hl7.fhir.r5.model.Reference;
@@ -51,6 +53,7 @@ class InformeConLineasPendientesTest extends TestDeIntegracion {
     private static final String SNOMED = "http://snomed.info/sct";
     private static final String UCUM = "http://unitsofmeasure.org";
     private static final String SANGRE_VENOSA = "122555007";
+    private static final String FACULTATIVA = FacultativaDePrueba.REFERENCIA;
 
     // Cada clase de test arranca en su propia decena de millón para no chocar con las demás: el NHC
     // es único en el laboratorio y los tests comparten base de datos. Las nueve decenas están
@@ -74,7 +77,7 @@ class InformeConLineasPendientesTest extends TestDeIntegracion {
         crear(linea(volante, paciente, laboratorio, "CREA"));
 
         String muestra = crear(muestra(paciente));
-        String glucosa = crear(resultado(paciente, muestra, lineaGlucosa, "GLU", 92));
+        String glucosa = resultadoFirmado(paciente, muestra, lineaGlucosa, "GLU", 92);
 
         ResponseEntity<String> intento = enviar(informe(paciente, laboratorio, glucosa));
 
@@ -103,8 +106,8 @@ class InformeConLineasPendientesTest extends TestDeIntegracion {
         String lineaCreatinina = crear(linea(volante, paciente, laboratorio, "CREA"));
 
         String muestra = crear(muestra(paciente));
-        String glucosa = crear(resultado(paciente, muestra, lineaGlucosa, "GLU", 92));
-        String creatinina = crear(resultado(paciente, muestra, lineaCreatinina, "CREA", 1));
+        String glucosa = resultadoFirmado(paciente, muestra, lineaGlucosa, "GLU", 92);
+        String creatinina = resultadoFirmado(paciente, muestra, lineaCreatinina, "CREA", 1);
 
         ResponseEntity<String> emitido = enviar(informe(paciente, laboratorio, glucosa, creatinina));
 
@@ -128,8 +131,8 @@ class InformeConLineasPendientesTest extends TestDeIntegracion {
         String lineaCreatinina = crear(linea(volante, paciente, laboratorio, "CREA"));
 
         String muestra = crear(muestra(paciente));
-        String glucosa = crear(resultado(paciente, muestra, lineaGlucosa, "GLU", 92));
-        crear(resultado(paciente, muestra, lineaCreatinina, "CREA", 1));
+        String glucosa = resultadoFirmado(paciente, muestra, lineaGlucosa, "GLU", 92);
+        resultadoFirmado(paciente, muestra, lineaCreatinina, "CREA", 1);
 
         ResponseEntity<String> emitido = enviar(informe(paciente, laboratorio, glucosa));
 
@@ -149,13 +152,29 @@ class InformeConLineasPendientesTest extends TestDeIntegracion {
         String paciente = crear(paciente());
 
         String muestra = crear(muestra(paciente));
-        String suelto = crear(resultado(paciente, muestra, null, "GLU", 92));
+        String suelto = resultadoFirmado(paciente, muestra, null, "GLU", 92);
 
         ResponseEntity<String> emitido = enviar(informe(paciente, laboratorio, suelto));
 
         assertThat(emitido.getStatusCode())
                 .as("cuerpo del error: %s", emitido.getBody())
                 .isEqualTo(HttpStatus.CREATED);
+    }
+
+    /** Informa un resultado y lo firma. Sin firma no entra en ningún informe, y de eso va otro test. */
+    private String resultadoFirmado(String paciente, String muestra, String linea, String codigo, double valor) {
+        String resultado = crear(resultado(paciente, muestra, linea, codigo, valor));
+        FacultativaDePrueba.darDeAlta(rest, contexto);
+
+        Parameters facultativo = new Parameters();
+        facultativo.addParameter().setName("facultativo").setValue(new Reference(FACULTATIVA));
+        ResponseEntity<String> firma = rest.exchange(
+                "/fhir/" + resultado + "/$validar", HttpMethod.POST, nuevaPeticion(facultativo), String.class);
+
+        assertThat(firma.getStatusCode())
+                .as("no se pudo validar %s: %s", resultado, firma.getBody())
+                .isEqualTo(HttpStatus.OK);
+        return resultado;
     }
 
     private String crear(IBaseResource recurso) {
@@ -169,12 +188,13 @@ class InformeConLineasPendientesTest extends TestDeIntegracion {
     }
 
     private ResponseEntity<String> enviar(IBaseResource recurso) {
+        return rest.exchange("/fhir/" + recurso.fhirType(), HttpMethod.POST, nuevaPeticion(recurso), String.class);
+    }
+
+    private HttpEntity<String> nuevaPeticion(IBaseResource recurso) {
         HttpHeaders cabeceras = new HttpHeaders();
         cabeceras.setContentType(MediaType.valueOf("application/fhir+json"));
-        String cuerpo = contexto.newJsonParser().encodeResourceToString(recurso);
-
-        return rest.exchange(
-                "/fhir/" + recurso.fhirType(), HttpMethod.POST, new HttpEntity<>(cuerpo, cabeceras), String.class);
+        return new HttpEntity<>(contexto.newJsonParser().encodeResourceToString(recurso), cabeceras);
     }
 
     private static Organization laboratorio() {

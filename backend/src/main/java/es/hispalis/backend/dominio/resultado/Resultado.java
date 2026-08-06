@@ -1,9 +1,11 @@
 package es.hispalis.backend.dominio.resultado;
 
 import es.hispalis.backend.dominio.DatoInvalido;
+import es.hispalis.backend.dominio.ReglaDeNegocioIncumplida;
 import es.hispalis.backend.dominio.especimen.Especimen;
 import es.hispalis.backend.dominio.peticion.Peticion;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -30,6 +32,7 @@ public final class Resultado {
     private final String unidadUcum;
     private final String valorTextual;
     private final Medicion medicion;
+    private final Validacion validacion;
 
     private Resultado(
             UUID id,
@@ -40,7 +43,8 @@ public final class Resultado {
             BigDecimal valor,
             String unidadUcum,
             String valorTextual,
-            Medicion medicion) {
+            Medicion medicion,
+            Validacion validacion) {
         this.id = id;
         this.especimenId = especimenId;
         this.pacienteId = pacienteId;
@@ -50,6 +54,7 @@ public final class Resultado {
         this.unidadUcum = unidadUcum;
         this.valorTextual = valorTextual;
         this.medicion = medicion == null ? Medicion.sinConstancia() : medicion;
+        this.validacion = validacion;
     }
 
     /**
@@ -95,7 +100,10 @@ public final class Resultado {
                 valor,
                 unidadUcum.strip(),
                 null,
-                medicion);
+                medicion,
+                // Recién salido del analizador. Lo que hay aquí es una cifra medida; que sea un
+                // resultado publicable lo decide después una persona.
+                null);
     }
 
     /**
@@ -123,7 +131,40 @@ public final class Resultado {
                 null,
                 null,
                 texto.strip(),
-                medicion);
+                medicion,
+                null);
+    }
+
+    /**
+     * Firma el resultado: una persona lo ha revisado y responde de él.
+     *
+     * <p>Es lo que convierte una cifra en un resultado publicable, y de aquí cuelgan el
+     * {@code ORU^R01} saliente hacia el HIS y la notificación EDO. Devuelve un agregado nuevo: el
+     * original no se toca.
+     *
+     * @throws ReglaDeNegocioIncumplida si ya estaba validado
+     * @throws DatoInvalido si no se dice quién valida
+     */
+    public Resultado validar(String facultativo, Instant cuando) {
+        // Revalidar no es corregir. Si valiera, la segunda firma taparía a la primera y el rastro de
+        // quién respondió del resultado quedaría reescrito sin dejar constancia de que hubo otro.
+        // Corregir un resultado ya validado es otra operación, con sus propias reglas.
+        if (validacion != null) {
+            throw new ReglaDeNegocioIncumplida(
+                    "El resultado %s ya está validado por %s: revalidar taparía la primera firma."
+                            .formatted(codigoDePrueba, validacion.facultativo()));
+        }
+        return new Resultado(
+                id,
+                especimenId,
+                pacienteId,
+                peticionId,
+                codigoDePrueba,
+                valor,
+                unidadUcum,
+                valorTextual,
+                medicion,
+                Validacion.por(facultativo, cuando));
     }
 
     /**
@@ -155,9 +196,19 @@ public final class Resultado {
             BigDecimal valor,
             String unidadUcum,
             String valorTextual,
-            Medicion medicion) {
+            Medicion medicion,
+            Validacion validacion) {
         return new Resultado(
-                id, especimenId, pacienteId, peticionId, codigoDePrueba, valor, unidadUcum, valorTextual, medicion);
+                id,
+                especimenId,
+                pacienteId,
+                peticionId,
+                codigoDePrueba,
+                valor,
+                unidadUcum,
+                valorTextual,
+                medicion,
+                validacion);
     }
 
     public UUID id() {
@@ -201,5 +252,19 @@ public final class Resultado {
     /** Cuándo se hizo la determinación y quién la hizo. Nunca {@code null}; puede no constar. */
     public Medicion medicion() {
         return medicion;
+    }
+
+    /** La firma facultativa, si ya se ha producido. */
+    public Optional<Validacion> validacion() {
+        return Optional.ofNullable(validacion);
+    }
+
+    /** Se deriva de la firma y no se guarda aparte: ver {@link EstadoDeResultado}. */
+    public EstadoDeResultado estado() {
+        return validacion == null ? EstadoDeResultado.PRELIMINAR : EstadoDeResultado.VALIDADO;
+    }
+
+    public boolean estaValidado() {
+        return validacion != null;
     }
 }

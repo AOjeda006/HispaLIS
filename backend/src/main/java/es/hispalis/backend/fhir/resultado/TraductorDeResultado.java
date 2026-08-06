@@ -87,7 +87,10 @@ public class TraductorDeResultado {
         recurso.setId(resultado.id().toString());
         recurso.getMeta().addProfile(PerfilesDeLaGuia.RESULTADO_LAB.canonica());
 
-        recurso.setStatus(ObservationStatus.FINAL);
+        // `final` significa «revisado y definitivo», no «terminado de medir». Publicar como final lo
+        // que solo ha pasado por el analizador es firmar por la máquina, y quien lo lee no tiene
+        // forma de distinguirlo de un resultado revisado.
+        recurso.setStatus(resultado.estaValidado() ? ObservationStatus.FINAL : ObservationStatus.PRELIMINARY);
         recurso.setCode(new CodeableConcept()
                 .addCoding(new Coding().setSystem(CatalogoDePruebas.SYSTEM).setCode(resultado.codigoDePrueba())));
         recurso.setSubject(new Reference("Patient/" + resultado.pacienteId()));

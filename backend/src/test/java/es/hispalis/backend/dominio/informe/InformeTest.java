@@ -34,6 +34,7 @@ class InformeTest {
     private static final UUID UN_PACIENTE = UUID.randomUUID();
     private static final UUID OTRO_PACIENTE = UUID.randomUUID();
     private static final String EMISOR = "Organization/laboratorio";
+    private static final String FACULTATIVA = "Practitioner/analisis-clinicos";
     private static final String VOLANTE = "P20260805-A1B2C3";
 
     @Test
@@ -118,6 +119,21 @@ class InformeTest {
                 .doesNotThrowAnyException();
     }
 
+    /**
+     * Lo que sale del analizador es una cifra, no un resultado. Emitir sin firma es publicar lo que
+     * dijo la máquina —avería del reactivo incluida— con el sello del laboratorio debajo.
+     */
+    @Test
+    void un_informe_no_se_emite_con_un_resultado_sin_validar() {
+        Peticion lineaGlucosa = linea(UN_PACIENTE, "GLU");
+
+        assertThatThrownBy(() -> Informe.emitir(
+                        List.of(sinValidar(lineaGlucosa, "GLU")), List.of(resuelta(lineaGlucosa)), EMISOR, null))
+                .isInstanceOf(ReglaDeNegocioIncumplida.class)
+                .as("hay que decir cuál falta por firmar, no solo que falta alguna")
+                .hasMessageContaining("GLU");
+    }
+
     @Test
     void un_informe_vacio_sigue_sin_emitirse() {
         assertThatThrownBy(() -> Informe.emitir(List.of(), List.of(), EMISOR, null))
@@ -154,7 +170,12 @@ class InformeTest {
         return new LineaDeLaPeticion(linea.id(), linea.numeroDePeticion(), linea.codigoDePrueba(), false, true);
     }
 
+    /** Un resultado listo para publicar: medido <strong>y firmado</strong>, que es lo que exige el informe. */
     private static Resultado resultado(Peticion linea, String codigo) {
+        return sinValidar(linea, codigo).validar(FACULTATIVA, null);
+    }
+
+    private static Resultado sinValidar(Peticion linea, String codigo) {
         UUID paciente = linea == null ? UN_PACIENTE : linea.pacienteId();
         Especimen muestra = Especimen.registrar(
                 new NumeroDeAcceso("A" + UUID.randomUUID()), paciente, "122555007", EstadoDeEspecimen.DISPONIBLE, null);

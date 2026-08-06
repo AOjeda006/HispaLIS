@@ -2,14 +2,20 @@ package es.hispalis.backend.fhir.resultado;
 
 import ca.uhn.fhir.jpa.api.dao.DaoRegistry;
 import ca.uhn.fhir.jpa.rp.r5.ObservationResourceProvider;
+import ca.uhn.fhir.rest.annotation.IdParam;
+import ca.uhn.fhir.rest.annotation.Operation;
+import ca.uhn.fhir.rest.annotation.OperationParam;
 import ca.uhn.fhir.rest.api.MethodOutcome;
 import ca.uhn.fhir.rest.api.server.RequestDetails;
 import es.hispalis.backend.aplicacion.resultado.InformarResultado;
+import es.hispalis.backend.aplicacion.resultado.ValidarResultado;
 import es.hispalis.backend.fhir.EscrituraSoloPorAlta;
 import es.hispalis.backend.fhir.ProveedorPropio;
 import jakarta.servlet.http.HttpServletRequest;
 import org.hl7.fhir.instance.model.api.IIdType;
+import org.hl7.fhir.r5.model.DateTimeType;
 import org.hl7.fhir.r5.model.Observation;
+import org.hl7.fhir.r5.model.Reference;
 import org.springframework.stereotype.Component;
 
 /**
@@ -23,9 +29,11 @@ import org.springframework.stereotype.Component;
 public class ProveedorDeResultado extends ObservationResourceProvider implements ProveedorPropio {
 
     private final InformarResultado informarResultado;
+    private final ValidarResultado validarResultado;
 
-    public ProveedorDeResultado(InformarResultado informarResultado) {
+    public ProveedorDeResultado(InformarResultado informarResultado, ValidarResultado validarResultado) {
         this.informarResultado = informarResultado;
+        this.validarResultado = validarResultado;
     }
 
     @Override
@@ -48,5 +56,25 @@ public class ProveedorDeResultado extends ObservationResourceProvider implements
             String condicional,
             RequestDetails detalles) {
         throw EscrituraSoloPorAlta.rechazar("resultado");
+    }
+
+    /**
+     * {@code POST /fhir/Observation/{id}/$validar}: la firma facultativa del resultado.
+     *
+     * <p>Es una operación y no un {@code PUT} porque el valor no cambia: cambia quién responde de él.
+     * Ver {@link ValidarResultado}.
+     *
+     * <p>{@code facultativo} se declara opcional <strong>a propósito</strong>. Marcarlo obligatorio
+     * aquí lo rechazaría con un mensaje genérico de HAPI sobre un parámetro que falta; dejándolo
+     * pasar, quien responde es el dominio, que explica por qué hace falta saber quién valida. La
+     * regla vive en un solo sitio y dice lo mismo entre por donde entre.
+     */
+    @Operation(name = "$validar", idempotent = false)
+    public Observation validar(
+            @IdParam IIdType identidad,
+            @OperationParam(name = "facultativo", max = 1) Reference facultativo,
+            @OperationParam(name = "cuando", max = 1) DateTimeType cuando,
+            RequestDetails detalles) {
+        return validarResultado.ejecutar(identidad, facultativo, cuando, detalles);
     }
 }

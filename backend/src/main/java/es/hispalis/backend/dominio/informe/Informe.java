@@ -13,8 +13,9 @@ import java.util.stream.Collectors;
 /**
  * Informe analítico emitido: el conjunto de resultados que se entrega. Agregado raíz.
  *
- * <p>Aquí vive el invariante de §10 del diseño: <strong>un informe solo se emite con todas las líneas
- * del volante resueltas</strong>. Tiene dos mitades y la segunda es la que de verdad hace daño:
+ * <p>Aquí viven dos condiciones para emitir. La primera es el invariante de §10 del diseño: <strong>un
+ * informe solo se emite con todas las líneas del volante resueltas</strong>. Tiene dos mitades y la
+ * segunda es la que de verdad hace daño:
  *
  * <ul>
  *   <li><strong>Un informe vacío no es un informe.</strong> Suena obvio y por eso se cuela: llega al
@@ -24,6 +25,10 @@ import java.util.stream.Collectors;
  *       y del paciente correcto—, pero se lee como la respuesta a lo que se pidió y quien lo recibe
  *       <em>deja de esperar las otras tres</em>. El vacío se detecta solo; este no.
  * </ul>
+ *
+ * <p>La segunda es la <strong>validación facultativa</strong>: un informe no entrega resultados que
+ * nadie haya revisado. Son condiciones distintas y las dos hacen falta — un volante puede estar
+ * entero y sus cifras sin firmar, y un resultado firmado puede pertenecer a un volante a medias.
  *
  * <p><strong>Resuelta no es lo mismo que informada.</strong> Una línea {@link
  * LineaDeLaPeticion#anulada() anulada} cuenta como resuelta: el laboratorio ya dijo —y publicó— que
@@ -54,7 +59,8 @@ public final class Informe {
      *     resueltas o no; vacío si ninguno vino de un volante
      * @param emisor referencia a quien lo firma ({@code Organization/…} o {@code Practitioner/…})
      * @param emitidoEn cuándo se emite; {@code null} se resuelve como ahora
-     * @throws ReglaDeNegocioIncumplida si no hay ningún resultado o si queda alguna línea pendiente
+     * @throws ReglaDeNegocioIncumplida si no hay ningún resultado, si alguno sigue sin validar o si
+     *     queda alguna línea pendiente
      * @throws DatoInvalido si falta el emisor, si los resultados no son del mismo paciente o si el
      *     alcance no cubre las líneas que citan los resultados
      */
@@ -79,6 +85,7 @@ public final class Informe {
 
         List<LineaDeLaPeticion> lineas = alcance == null ? List.of() : List.copyOf(alcance);
         exigirQueElAlcanceCubraLosResultados(resultados, lineas);
+        exigirQueTodosEstenValidados(resultados);
         exigirQueElVolanteEsteTerminado(lineas);
 
         return new Informe(
@@ -116,6 +123,32 @@ public final class Informe {
                     ("El alcance del informe no incluye las líneas %s, que sus propios resultados citan. "
                                     + "El alcance tiene que traer el volante entero, no una parte.")
                             .formatted(sinCubrir));
+        }
+    }
+
+    /**
+     * Un informe solo entrega resultados que alguien ha firmado.
+     *
+     * <p>Lo que sale de un analizador es una cifra: entregarla sin revisar es publicar la avería del
+     * reactivo con el sello del laboratorio. Y la revisión no se puede dar por hecha porque el
+     * recurso llegue con {@code status = final} — eso lo dice el cliente, no el facultativo.
+     *
+     * @throws ReglaDeNegocioIncumplida si alguno de los resultados sigue sin validar
+     */
+    private static void exigirQueTodosEstenValidados(List<Resultado> resultados) {
+        String sinValidar = resultados.stream()
+                .filter(resultado -> !resultado.estaValidado())
+                .map(Resultado::codigoDePrueba)
+                .distinct()
+                .sorted()
+                .collect(Collectors.joining(", "));
+
+        if (!sinValidar.isEmpty()) {
+            throw new ReglaDeNegocioIncumplida(
+                    ("El informe no puede entregar %s: nadie los ha validado todavía. Lo que sale del "
+                                    + "analizador es una cifra medida, y hasta que un facultativo responde de "
+                                    + "ella no es un resultado publicable.")
+                            .formatted(sinValidar));
         }
     }
 

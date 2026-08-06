@@ -11,6 +11,9 @@ public interface RepositorioDeResultados {
     /** Guarda un resultado recién informado. */
     void guardar(Resultado resultado);
 
+    /** Sobrescribe un resultado ya registrado. Hoy el único cambio que existe es la validación. */
+    void actualizar(Resultado resultado);
+
     /** Recupera un resultado por su identidad. */
     Optional<Resultado> buscarPorId(UUID id);
 

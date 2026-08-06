@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import ca.uhn.fhir.context.FhirContext;
 import es.hispalis.backend.TestDeIntegracion;
 import es.hispalis.backend.fhir.CatalogoDePruebas;
+import es.hispalis.backend.fhir.FacultativaDePrueba;
 import es.hispalis.backend.fhir.SistemasDeIdentificador;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.hl7.fhir.instance.model.api.IBaseResource;
@@ -54,7 +55,7 @@ class ValidacionFacultativaTest extends TestDeIntegracion {
     private static final String SNOMED = "http://snomed.info/sct";
     private static final String UCUM = "http://unitsofmeasure.org";
     private static final String SANGRE_VENOSA = "122555007";
-    private static final String FACULTATIVA = "Practitioner/analisis-clinicos";
+    private static final String FACULTATIVA = FacultativaDePrueba.REFERENCIA;
 
     private static final AtomicInteger SIGUIENTE = new AtomicInteger(25_000_000);
 
@@ -155,6 +156,7 @@ class ValidacionFacultativaTest extends TestDeIntegracion {
     private ResponseEntity<String> validar(String resultado, String facultativa) {
         Parameters parametros = new Parameters();
         if (facultativa != null) {
+            FacultativaDePrueba.darDeAlta(rest, contexto);
             parametros.addParameter().setName("facultativo").setValue(new Reference(facultativa));
         }
         return rest.exchange(

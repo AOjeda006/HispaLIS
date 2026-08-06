@@ -13,6 +13,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.Date;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.hl7.fhir.instance.model.api.IBaseResource;
+import org.hl7.fhir.r5.model.Bundle;
 import org.hl7.fhir.r5.model.CodeableConcept;
 import org.hl7.fhir.r5.model.CodeableReference;
 import org.hl7.fhir.r5.model.Coding;
@@ -22,6 +23,7 @@ import org.hl7.fhir.r5.model.Enumerations;
 import org.hl7.fhir.r5.model.HumanName;
 import org.hl7.fhir.r5.model.Observation;
 import org.hl7.fhir.r5.model.Organization;
+import org.hl7.fhir.r5.model.Parameters;
 import org.hl7.fhir.r5.model.Patient;
 import org.hl7.fhir.r5.model.Quantity;
 import org.hl7.fhir.r5.model.Reference;
@@ -57,6 +59,7 @@ class CircuitoCompletoTest extends TestDeIntegracion {
     private static final String SNOMED = "http://snomed.info/sct";
     private static final String UCUM = "http://unitsofmeasure.org";
     private static final String SANGRE_VENOSA = "122555007";
+    private static final String FACULTATIVA = FacultativaDePrueba.REFERENCIA;
 
     private static final AtomicInteger SIGUIENTE = new AtomicInteger(30_000_000);
 
@@ -74,8 +77,16 @@ class CircuitoCompletoTest extends TestDeIntegracion {
         String paciente = crear(pacienteDePrueba(), "1-paciente");
         String peticion = crear(peticionDePrueba(paciente, laboratorio), "2-peticion");
         String especimen = crear(especimenDePrueba(paciente), "3-especimen");
-        String resultado = crear(resultadoDePrueba(paciente, especimen, peticion, laboratorio), "4-resultado");
-        String informe = crear(informeDePrueba(paciente, resultado, laboratorio), "5-informe");
+        String resultado = crear(resultadoDePrueba(paciente, especimen, peticion, laboratorio), null);
+
+        // Entre la cifra y el informe hay una persona. El volcado del resultado se hace DESPUÉS de
+        // firmarlo porque lo que el laboratorio publica de verdad es el resultado validado; volcarlo
+        // antes le enseñaría al validador un `preliminary` que nunca llega a ningún informe.
+        validar(resultado);
+        volcar("4-resultado", resultado);
+        volcar("5-procedencia", procedenciaDe(resultado));
+
+        String informe = crear(informeDePrueba(paciente, resultado, laboratorio), "6-informe");
 
         // Que cada recurso exista es la mitad; la otra es que las referencias estén bien puestas.
         DiagnosticReport emitido = leer(informe, DiagnosticReport.class);
@@ -124,6 +135,28 @@ class CircuitoCompletoTest extends TestDeIntegracion {
         return referencia;
     }
 
+    /** Firma el resultado. Sin este paso el informe no sale, y con razón. */
+    private void validar(String resultado) {
+        FacultativaDePrueba.darDeAlta(rest, contexto);
+
+        Parameters facultativo = new Parameters();
+        facultativo.addParameter().setName("facultativo").setValue(new Reference(FACULTATIVA));
+
+        ResponseEntity<String> respuesta = rest.exchange(
+                "/fhir/" + resultado + "/$validar", HttpMethod.POST, peticionCon(facultativo), String.class);
+        assertThat(respuesta.getStatusCode())
+                .as("no se pudo validar el resultado: %s", respuesta.getBody())
+                .isEqualTo(HttpStatus.OK);
+    }
+
+    /** La referencia del {@code Provenance} que dejó la validación, buscándolo como lo haría un cliente. */
+    private String procedenciaDe(String resultado) {
+        Bundle encontrado = leer("Provenance?target=" + resultado, Bundle.class);
+        assertThat(encontrado.getEntry()).hasSize(1);
+        return "Provenance/"
+                + encontrado.getEntryFirstRep().getResource().getIdElement().getIdPart();
+    }
+
     private <T extends IBaseResource> T leer(String referencia, Class<T> tipo) {
         ResponseEntity<String> respuesta = rest.getForEntity("/fhir/" + referencia, String.class);
         assertThat(respuesta.getStatusCode()).isEqualTo(HttpStatus.OK);
@@ -146,12 +179,13 @@ class CircuitoCompletoTest extends TestDeIntegracion {
     }
 
     private ResponseEntity<String> enviar(IBaseResource recurso) {
+        return rest.exchange("/fhir/" + recurso.fhirType(), HttpMethod.POST, peticionCon(recurso), String.class);
+    }
+
+    private HttpEntity<String> peticionCon(IBaseResource recurso) {
         HttpHeaders cabeceras = new HttpHeaders();
         cabeceras.setContentType(MediaType.valueOf("application/fhir+json"));
-        String cuerpo = contexto.newJsonParser().encodeResourceToString(recurso);
-
-        return rest.exchange(
-                "/fhir/" + recurso.fhirType(), HttpMethod.POST, new HttpEntity<>(cuerpo, cabeceras), String.class);
+        return new HttpEntity<>(contexto.newJsonParser().encodeResourceToString(recurso), cabeceras);
     }
 
     private static Organization laboratorioDePrueba() {

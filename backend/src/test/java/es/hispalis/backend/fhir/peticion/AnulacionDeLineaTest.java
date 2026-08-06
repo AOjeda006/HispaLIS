@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import ca.uhn.fhir.context.FhirContext;
 import es.hispalis.backend.TestDeIntegracion;
 import es.hispalis.backend.fhir.CatalogoDePruebas;
+import es.hispalis.backend.fhir.FacultativaDePrueba;
 import es.hispalis.backend.fhir.SistemasDeIdentificador;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.hl7.fhir.instance.model.api.IBaseResource;
@@ -18,6 +19,7 @@ import org.hl7.fhir.r5.model.HumanName;
 import org.hl7.fhir.r5.model.Observation;
 import org.hl7.fhir.r5.model.OperationOutcome;
 import org.hl7.fhir.r5.model.Organization;
+import org.hl7.fhir.r5.model.Parameters;
 import org.hl7.fhir.r5.model.Patient;
 import org.hl7.fhir.r5.model.Quantity;
 import org.hl7.fhir.r5.model.Reference;
@@ -56,6 +58,7 @@ class AnulacionDeLineaTest extends TestDeIntegracion {
     private static final String UCUM = "http://unitsofmeasure.org";
     private static final String SANGRE_VENOSA = "122555007";
     private static final String MOTIVO = "Muestra hemolizada y el paciente no vuelve a extracción.";
+    private static final String FACULTATIVA = FacultativaDePrueba.REFERENCIA;
 
     // Las decenas de millón están agotadas (ver `docs/PLAN.md`, decisiones del ítem 16), así que las
     // clases nuevas se reparten DENTRO de ellas y no detrás: el NHC son exactamente ocho dígitos.
@@ -76,7 +79,7 @@ class AnulacionDeLineaTest extends TestDeIntegracion {
         String lineaCreatinina = crear(linea(volante, paciente, laboratorio, "CREA"));
 
         String muestra = crear(muestra(paciente));
-        String glucosa = crear(resultado(paciente, muestra, lineaGlucosa, "GLU", 92));
+        String glucosa = validado(crear(resultado(paciente, muestra, lineaGlucosa, "GLU", 92)));
 
         assertThat(enviar(informe(paciente, laboratorio, glucosa)).getStatusCode())
                 .as("de partida el volante está a medias, y eso ya se rechazaba")
@@ -164,6 +167,21 @@ class AnulacionDeLineaTest extends TestDeIntegracion {
 
         assertThat(intento.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
         assertThat(diagnostico(intento)).containsIgnoringCase("anular");
+    }
+
+    /** Firma el resultado y devuelve su referencia: sin firma no entra en ningún informe. */
+    private String validado(String resultado) {
+        FacultativaDePrueba.darDeAlta(rest, contexto);
+
+        Parameters facultativo = new Parameters();
+        facultativo.addParameter().setName("facultativo").setValue(new Reference(FACULTATIVA));
+
+        ResponseEntity<String> respuesta = rest.exchange(
+                "/fhir/" + resultado + "/$validar", HttpMethod.POST, nuevaPeticion(facultativo), String.class);
+        assertThat(respuesta.getStatusCode())
+                .as("no se pudo validar %s: %s", resultado, respuesta.getBody())
+                .isEqualTo(HttpStatus.OK);
+        return resultado;
     }
 
     private ResponseEntity<String> anular(String linea, String motivo) {
