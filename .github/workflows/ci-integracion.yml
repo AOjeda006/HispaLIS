@@ -47,6 +47,14 @@ jobs:
           java-version: '21'
           cache: maven
 
+      # SUSHI va ANTES del build, no después: el motor lee el `CodeSystem` del catálogo y su
+      # `ConceptMap` a LOINC desde `ig/fsh-generated/resources` —la terminología es una caja
+      # obligatoria, no un `Map<String,String>`—, así que sin este paso los tests del canal ni
+      # siquiera arrancan. También deja compilados los perfiles que necesita el validador al final.
+      - name: Compilar la terminología y los perfiles de la guía
+        working-directory: ig
+        run: npx --yes fsh-sushi .
+
       # `verify` incluye la comprobación de formato de Spotless, enganchada a esa fase en el pom, y
       # levanta PostgreSQL en proceso, el listener MLLP con TLS y un servidor HTTP que hace de
       # laboratorio. El certificado del listener se genera en `target/` durante el propio build: no
@@ -60,13 +68,10 @@ jobs:
           curl -sSL -o validator_cli.jar \
             https://github.com/hapifhir/org.hl7.fhir.core/releases/latest/download/validator_cli.jar
 
-      # El canal deja en `target/canal/` el `Patient` que el motor envía al laboratorio. Que el canal
-      # funcione y que lo que produce sea CONFORME son dos cosas distintas: un mapeo v2 → FHIR puede
-      # ejecutarse entero y producir un recurso que ningún servidor acepte.
-      - name: Compilar los perfiles de la guía
-        working-directory: ig
-        run: npx --yes fsh-sushi .
-
+      # El canal deja en `target/canal/` lo que el motor envía al laboratorio: el `Patient` del ADT,
+      # la línea y la muestra del OML y el resultado del ORU. Que el canal funcione y que lo que
+      # produce sea CONFORME son dos cosas distintas: un mapeo v2 → FHIR puede ejecutarse entero y
+      # producir un recurso que ningún servidor acepte.
       - name: Validar lo que el canal produce
         run: |
           java -jar validator_cli.jar integracion/target/canal \
