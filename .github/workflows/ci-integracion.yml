@@ -8,10 +8,15 @@ on:
     paths:
       - 'integracion/**'
       - '.github/workflows/ci-integracion.yml'
+      # El motor depende del FSH de la guía por dos vías reales: un test cruza sus `system` de
+      # identificador contra los alias, y el validador comprueba contra los perfiles el `Patient` que
+      # el canal produce. Sin esta ruta, cambiar la guía no dispararía ninguna de las dos.
+      - 'ig/input/fsh/**'
   pull_request:
     paths:
       - 'integracion/**'
       - '.github/workflows/ci-integracion.yml'
+      - 'ig/input/fsh/**'
   workflow_dispatch:
 
 permissions:
@@ -21,6 +26,10 @@ concurrency:
   group: ci-integracion-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  VERSION_FHIR: 5.0.0
+  PAQUETE_FHIR: hl7.fhir.r5.core#5.0.0
+
 jobs:
   verificar:
     name: Build + tests
@@ -28,16 +37,45 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
           cache: maven
 
-      # `verify` incluye la comprobación de formato de Spotless, enganchada a esa fase en el pom.
+      # `verify` incluye la comprobación de formato de Spotless, enganchada a esa fase en el pom, y
+      # levanta PostgreSQL en proceso, el listener MLLP con TLS y un servidor HTTP que hace de
+      # laboratorio. El certificado del listener se genera en `target/` durante el propio build: no
+      # hay ningún almacén de claves en el repositorio.
       - name: Build y tests
         working-directory: integracion
         run: ./mvnw --batch-mode verify
+
+      - name: Descargar el validador oficial de HL7
+        run: |
+          curl -sSL -o validator_cli.jar \
+            https://github.com/hapifhir/org.hl7.fhir.core/releases/latest/download/validator_cli.jar
+
+      # El canal deja en `target/canal/` el `Patient` que el motor envía al laboratorio. Que el canal
+      # funcione y que lo que produce sea CONFORME son dos cosas distintas: un mapeo v2 → FHIR puede
+      # ejecutarse entero y producir un recurso que ningún servidor acepte.
+      - name: Compilar los perfiles de la guía
+        working-directory: ig
+        run: npx --yes fsh-sushi .
+
+      - name: Validar lo que el canal produce
+        run: |
+          java -jar validator_cli.jar integracion/target/canal \
+            -version "$VERSION_FHIR" \
+            -ig "$PAQUETE_FHIR" \
+            -ig hl7.fhir.uv.tools.r5#1.1.2 \
+            -ig ig/fsh-generated/resources \
+            -recurse \
+            -output-style compact
 
       - name: Publicar los informes de test
         if: always()
