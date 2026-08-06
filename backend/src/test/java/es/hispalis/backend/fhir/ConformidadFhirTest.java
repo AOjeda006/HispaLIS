@@ -51,6 +51,27 @@ class ConformidadFhirTest extends TestDeIntegracion {
         assertThat(conformidad.getStatus()).isEqualTo(Enumerations.PublicationStatus.ACTIVE);
     }
 
+    /**
+     * El contrato publicado no promete transacciones, porque este servidor no las cumple.
+     *
+     * <p>HAPI declara {@code transaction} por defecto y un <em>bundle</em> de solo lecturas hasta
+     * funciona, pero lo que un cliente entiende al leerlo es «puedo escribir varios recursos y o
+     * entran todos o no entra ninguno» — y eso lo rechaza el interceptor de {@code ADR-0014} con un
+     * 422. Prometer la mitad que funciona hace que el límite se descubra fallando.
+     */
+    @Test
+    void metadata_no_promete_transacciones_que_el_nucleo_rechaza() {
+        CapabilityStatement conformidad = pedirConformidad();
+
+        List<String> interacciones = conformidad.getRestFirstRep().getInteraction().stream()
+                .map(interaccion -> interaccion.getCode().toCode())
+                .toList();
+
+        assertThat(interacciones)
+                .as("declarar `transaction` es prometer atomicidad, y D22 dice que aquí no la hay")
+                .doesNotContain("transaction");
+    }
+
     @Test
     void metadata_declara_los_nueve_perfiles_de_la_guia() {
         CapabilityStatement conformidad = pedirConformidad();

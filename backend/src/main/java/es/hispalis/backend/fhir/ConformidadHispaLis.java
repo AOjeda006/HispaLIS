@@ -9,7 +9,9 @@ import ca.uhn.fhir.rest.server.util.ISearchParamRegistry;
 import ca.uhn.fhir.util.FhirTerser;
 import org.hl7.fhir.instance.model.api.IBaseConformance;
 import org.hl7.fhir.r5.model.CapabilityStatement;
+import org.hl7.fhir.r5.model.CapabilityStatement.CapabilityStatementRestComponent;
 import org.hl7.fhir.r5.model.CapabilityStatement.CapabilityStatementRestResourceComponent;
+import org.hl7.fhir.r5.model.CapabilityStatement.SystemRestfulInteraction;
 
 /**
  * El {@code CapabilityStatement} de HispaLIS: el de HAPI, con los perfiles que de verdad soporta.
@@ -50,10 +52,30 @@ public class ConformidadHispaLis extends JpaCapabilityStatementProvider {
         // El cast es seguro y deliberado: este servidor es R5 y solo R5 (D1). Usar el `terser` para
         // ser agnóstico de versión sería pagar indirección por una portabilidad que nadie quiere.
         if (conformidad instanceof CapabilityStatement declaracion) {
+            declaracion.getRest().forEach(ConformidadHispaLis::noPrometerTransacciones);
             declaracion.getRest().stream()
                     .flatMap(rest -> rest.getResource().stream())
                     .forEach(ConformidadHispaLis::declararSoloLosPerfilesDeLaGuia);
         }
+    }
+
+    /**
+     * Retira {@code transaction} de las interacciones declaradas.
+     *
+     * <p>HAPI la declara porque su procesador de transacciones existe, y es verdad que un
+     * <em>bundle</em> de solo lecturas funciona. Pero un cliente que lee {@code transaction} en el
+     * {@code CapabilityStatement} entiende <strong>«puedo escribir varios recursos y o entran todos o
+     * no entra ninguno»</strong>, y eso aquí no pasa: el interceptor de {@code ADR-0014} rechaza con
+     * un 422 cualquier transacción que escriba recursos del laboratorio, porque el procesador de
+     * transacciones de HAPI no recorre el núcleo ni comprueba sus invariantes.
+     *
+     * <p>Declarar la mitad que funciona sería peor que no declarar nada: el cliente descubriría el
+     * límite al fallar, en producción y a medio camino. La consecuencia está asumida y escrita —es
+     * D22— y quien necesite atomicidad la consigue reprocesando, no metiéndolo todo en un sobre.
+     */
+    private static void noPrometerTransacciones(CapabilityStatementRestComponent rest) {
+        rest.getInteraction()
+                .removeIf(interaccion -> SystemRestfulInteraction.TRANSACTION.equals(interaccion.getCode()));
     }
 
     private static void declararSoloLosPerfilesDeLaGuia(CapabilityStatementRestResourceComponent recurso) {
