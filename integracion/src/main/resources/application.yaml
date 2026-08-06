@@ -1,0 +1,47 @@
+spring:
+  application:
+    name: hispalis-integracion
+
+  # El motor tiene SU PROPIO esquema y no toca ningún otro (D5). Comparte instancia de PostgreSQL con
+  # el laboratorio porque es la misma pila de desarrollo, no porque comparta datos: aquí no hay una
+  # sola consulta contra `dominio.*` ni contra el esquema de HAPI, y no puede haberla.
+  datasource:
+    url: ${HISPALIS_BD_URL:jdbc:postgresql://localhost:5432/hispalis}
+    username: ${HISPALIS_BD_USUARIO:hispalis}
+    password: ${HISPALIS_BD_CLAVE:hispalis}
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    # La tabla de control vive DENTRO del esquema del motor, no en `public`. No es cosmética: en la
+    # pila de desarrollo esta base de datos la comparte con el laboratorio, cuyo servidor JPA llena
+    # `public` de tablas propias. Con la tabla de control en `public`, Flyway encuentra un esquema no
+    # vacío sin historial y **se niega a arrancar** («Found non-empty schema(s) "public" but no schema
+    # history table»). Apuntando al esquema propio, el motor no mira `public` en ningún momento — que
+    # es justo lo que dice hacer.
+    schemas: integracion
+    default-schema: integracion
+    table: flyway_schema_history
+
+hispalis:
+  # La API del laboratorio. El motor escribe aquí como un cliente más, nunca contra su base de datos.
+  laboratorio:
+    url: ${HISPALIS_API_FHIR:http://localhost:8080/fhir}
+
+  mllp:
+    puerto: ${HISPALIS_MLLP_PUERTO:2575}
+    tls:
+      # Encendido por defecto. Apagarlo es una decisión que hay que escribir, y el arranque la avisa.
+      habilitado: ${HISPALIS_MLLP_TLS:true}
+      # Nunca una clave en el repositorio: llegan por variable de entorno.
+      almacen-de-claves: ${HISPALIS_MLLP_ALMACEN:}
+      clave: ${HISPALIS_MLLP_CLAVE:}
+      tipo: PKCS12
+
+logging:
+  level:
+    # El contenido de un mensaje v2 es PHI de principio a fin. Los canales registran identificadores
+    # de control y referencias, nunca el mensaje; subir a DEBUG el parser de HAPI vuelca mensajes
+    # enteros en el log, así que se deja explícitamente en WARN.
+    ca.uhn.hl7v2: WARN
+    es.hispalis.integracion: INFO
