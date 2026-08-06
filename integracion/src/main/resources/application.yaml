@@ -23,10 +23,36 @@ spring:
     default-schema: integracion
     table: flyway_schema_history
 
+# La consola del motor (bandeja de errores y reproceso) no se publica hacia fuera: vive dentro de la
+# red del `compose`. Puerto distinto del 8080 del laboratorio para poder arrancar los dos en local.
+server:
+  port: ${HISPALIS_MOTOR_PUERTO:8082}
+
 hispalis:
   # La API del laboratorio. El motor escribe aquí como un cliente más, nunca contra su base de datos.
   laboratorio:
     url: ${HISPALIS_API_FHIR:http://localhost:8080/fhir}
+
+  # El catálogo de pruebas se LEE de la guía, no se copia dentro del motor (D15, invariante 4). El
+  # directorio es el que produce SUSHI y NO está versionado: en desarrollo cuelga del propio repo, y
+  # en el `compose` se monta como volumen —igual que el almacén de claves—. La variable de entorno se
+  # llama igual que la del generador en Python a propósito: es el mismo artefacto.
+  terminologia:
+    directorio: ${HISPALIS_TERMINOLOGIA:../ig/fsh-generated/resources}
+
+  # Dónde escucha el HIS lo que el laboratorio le devuelve (ORU^R01 saliente, §11).
+  his:
+    servidor: ${HISPALIS_HIS_SERVIDOR:localhost}
+    puerto: ${HISPALIS_HIS_PUERTO:2576}
+    tls: ${HISPALIS_HIS_TLS:true}
+    # Apagado en desarrollo: el HIS simulado presenta un autofirmado. Fuera de desarrollo se enciende.
+    verificar-certificado: ${HISPALIS_HIS_VERIFICAR:false}
+    aplicacion: HISPALIS
+    instalacion: LAB_SEVILLA
+    aplicacion-destino: HIS_VIRGEN
+    instalacion-destino: H_VIRGEN_MACARENA
+    # Cada cuánto se mira el outbox del laboratorio. Sustituido por el consumo de Kafka en el ítem 30.
+    sondeo-ms: ${HISPALIS_HIS_SONDEO_MS:5000}
 
   mllp:
     puerto: ${HISPALIS_MLLP_PUERTO:2575}

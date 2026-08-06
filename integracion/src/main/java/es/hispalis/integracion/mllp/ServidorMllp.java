@@ -1,12 +1,10 @@
 package es.hispalis.integracion.mllp;
 
-import ca.uhn.hl7v2.DefaultHapiContext;
 import ca.uhn.hl7v2.HapiContext;
 import ca.uhn.hl7v2.app.HL7Service;
 import ca.uhn.hl7v2.llp.ExtendedMinLowerLayerProtocol;
-import ca.uhn.hl7v2.parser.CanonicalModelClassFactory;
 import ca.uhn.hl7v2.protocol.ReceivingApplication;
-import ca.uhn.hl7v2.validation.impl.ValidationContextFactory;
+import es.hispalis.integracion.hl7.ContextosHl7;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -54,15 +52,10 @@ public class ServidorMllp implements SmartLifecycle {
     }
 
     private static HapiContext contextoPara(PropiedadesMllp propiedades) {
-        DefaultHapiContext contexto = new DefaultHapiContext();
-        // Solo V2.5.1 (D12). Con el modelo canónico fijado, un mensaje que declare otra versión se
-        // parsea contra las estructuras de esta y las diferencias saltan, en vez de pasar calladas.
-        contexto.setModelClassFactory(new CanonicalModelClassFactory("2.5.1"));
-        contexto.setLowerLayerProtocol(new ExtendedMinLowerLayerProtocol());
-        // Sin las reglas de validación de HAPI: quien decide si un mensaje es aceptable es el canal,
-        // con un motivo que se le pueda contar al operador del HIS. La validación por defecto rechaza
-        // con errores de biblioteca que nadie sabe traducir a una acción.
-        contexto.setValidationContext(ValidationContextFactory.noValidation());
+        // Modelo canónico de V2.5.1, LLP extendido y sin validación de HAPI: ver `ContextosHl7`, que
+        // es donde vive esa configuración para que el listener, el emisor y el reproceso la
+        // compartan. Lo único propio del listener es su fábrica de sockets.
+        HapiContext contexto = ContextosHl7.nuevo();
         if (propiedades.tls().habilitado()) {
             contexto.setSocketFactory(new FabricaDeSocketsTls(propiedades.tls()));
         }

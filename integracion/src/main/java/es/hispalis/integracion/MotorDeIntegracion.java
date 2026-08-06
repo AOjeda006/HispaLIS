@@ -3,6 +3,7 @@ package es.hispalis.integracion;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * El motor de integración: canales HL7 V2.5.1 sobre MLLP hacia la API FHIR del laboratorio.
@@ -18,6 +19,7 @@ import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
  */
 @SpringBootApplication
 @ConfigurationPropertiesScan
+@EnableScheduling
 public class MotorDeIntegracion {
 
     public static void main(String[] argumentos) {

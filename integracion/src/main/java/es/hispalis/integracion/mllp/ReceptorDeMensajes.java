@@ -12,10 +12,10 @@ import es.hispalis.integracion.almacen.AlmacenDeMensajes;
 import es.hispalis.integracion.almacen.MensajeEntrante;
 import es.hispalis.integracion.canal.Canal;
 import es.hispalis.integracion.canal.Desenlace;
+import es.hispalis.integracion.canal.Despachador;
 import es.hispalis.integracion.hl7.CabeceraMsh;
 import es.hispalis.integracion.hl7.CharsetDeclarado;
 import java.io.IOException;
-import java.util.List;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -50,11 +50,11 @@ public class ReceptorDeMensajes implements ReceivingApplication<Message> {
     /** La versión que fija D12. Nada más entra: V2.5 y V2.5.1 no son intercambiables. */
     private static final String VERSION_ACEPTADA = "2.5.1";
 
-    private final List<Canal> canales;
+    private final Despachador despachador;
     private final AlmacenDeMensajes almacen;
 
-    public ReceptorDeMensajes(List<Canal> canales, AlmacenDeMensajes almacen) {
-        this.canales = canales;
+    public ReceptorDeMensajes(Despachador despachador, AlmacenDeMensajes almacen) {
+        this.despachador = despachador;
         this.almacen = almacen;
     }
 
@@ -101,53 +101,27 @@ public class ReceptorDeMensajes implements ReceivingApplication<Message> {
                     .formatted(VERSION_ACEPTADA, cabecera.version()));
         }
 
-        Optional<Canal> canal = canales.stream().filter(c -> c.acepta(cabecera)).findFirst();
+        Optional<Canal> canal = despachador.canalPara(cabecera);
         if (canal.isEmpty()) {
             return Desenlace.rechazado(
                     "No hay ningún canal para %s en este laboratorio.".formatted(cabecera.tipoYEvento()));
         }
 
-        Canal elegido = canal.get();
-        Canal.Indices indices = elegido.indices(recibido);
+        Canal.Indices indices = canal.get().indices(recibido);
         MensajeEntrante mensaje = MensajeEntrante.recienLlegado(cabecera, indices.nhc(), indices.episodio(), crudo);
 
         AlmacenDeMensajes.Admision admision = almacen.registrarSiEsNuevo(mensaje);
         if (admision == AlmacenDeMensajes.Admision.YA_PROCESADO) {
             LOG.info(
                     "Canal {}: {} con control {} ya se había aplicado; no se escribe otra vez",
-                    elegido.nombre(),
+                    canal.get().nombre(),
                     cabecera.tipoYEvento(),
                     cabecera.controlId());
             return Desenlace.duplicado("Ya aplicado en una entrega anterior de este mismo mensaje.");
         }
 
-        Desenlace desenlace = procesarConCuidado(elegido, mensaje, recibido);
-        if (desenlace.seAplico()) {
-            almacen.marcarProcesado(mensaje.id(), desenlace.detalle());
-        } else {
-            almacen.marcarRechazado(mensaje.id(), desenlace.detalle());
-        }
-        return desenlace;
-    }
-
-    /**
-     * Un fallo inesperado de un canal no puede tumbar la conexión ni dejar al emisor sin respuesta.
-     *
-     * <p>Se traduce a {@code AE} —error de aplicación, mírelo una persona— y queda en el archivo con
-     * su motivo. Es la conducta correcta también sin DLQ: el mensaje está guardado y se puede
-     * reenviar, porque la deduplicación no bloquea lo que quedó sin aplicar.
-     */
-    private Desenlace procesarConCuidado(Canal canal, MensajeEntrante mensaje, Message recibido) {
-        try {
-            return canal.procesar(mensaje, recibido);
-        } catch (RuntimeException inesperado) {
-            LOG.error(
-                    "Canal {}: fallo inesperado con el control {}",
-                    canal.nombre(),
-                    mensaje.cabecera().controlId(),
-                    inesperado);
-            return Desenlace.errorDeAplicacion("El motor no pudo aplicar el mensaje: " + inesperado.getMessage());
-        }
+        almacen.anotarIntento(mensaje.id());
+        return despachador.aplicar(mensaje, recibido);
     }
 
     /**

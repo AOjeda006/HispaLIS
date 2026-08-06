@@ -1,11 +1,15 @@
 package es.hispalis.integracion.infraestructura.persistencia;
 
 import es.hispalis.integracion.almacen.AlmacenDeMensajes;
+import es.hispalis.integracion.almacen.MensajeArchivado;
 import es.hispalis.integracion.almacen.MensajeEntrante;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -66,6 +70,31 @@ public class AlmacenDeMensajesSql implements AlmacenDeMensajes {
              WHERE id = :id
             """;
 
+    private static final String COLUMNAS =
+            """
+            id, aplicacion_emisora, instalacion_emisora, control_id, tipo, evento, nhc, recibido_en,
+            estado, detalle, intentos, crudo
+            """;
+
+    private static final String BANDEJA_DE_ERRORES =
+            """
+            SELECT %s
+              FROM integracion.mensaje
+             WHERE estado = 'RECHAZADO'
+             ORDER BY recibido_en DESC
+             LIMIT :limite
+            """
+                    .formatted(COLUMNAS);
+
+    private static final String POR_ID = "SELECT %s FROM integracion.mensaje WHERE id = :id".formatted(COLUMNAS);
+
+    private static final String ANOTAR_INTENTO =
+            """
+            UPDATE integracion.mensaje
+               SET intentos = intentos + 1, ultimo_intento_en = :cuando
+             WHERE id = :id
+            """;
+
     private final NamedParameterJdbcTemplate jdbc;
 
     public AlmacenDeMensajesSql(NamedParameterJdbcTemplate jdbc) {
@@ -96,6 +125,37 @@ public class AlmacenDeMensajesSql implements AlmacenDeMensajes {
     public void marcarRechazado(UUID id, String motivo) {
         marcar(id, "RECHAZADO", motivo);
     }
+
+    @Override
+    public List<MensajeArchivado> bandejaDeErrores(int limite) {
+        return jdbc.query(BANDEJA_DE_ERRORES, new MapSqlParameterSource("limite", limite), FILA);
+    }
+
+    @Override
+    public Optional<MensajeArchivado> buscar(UUID id) {
+        return jdbc.query(POR_ID, new MapSqlParameterSource("id", id), FILA).stream()
+                .findFirst();
+    }
+
+    @Override
+    public void anotarIntento(UUID id) {
+        jdbc.update(
+                ANOTAR_INTENTO,
+                new MapSqlParameterSource().addValue("id", id).addValue("cuando", Timestamp.from(Instant.now())));
+    }
+
+    private static final RowMapper<MensajeArchivado> FILA = (fila, numero) -> new MensajeArchivado(
+            fila.getObject("id", UUID.class),
+            fila.getString("aplicacion_emisora"),
+            fila.getString("instalacion_emisora"),
+            fila.getString("control_id"),
+            "%s^%s".formatted(fila.getString("tipo"), fila.getString("evento")),
+            fila.getString("nhc"),
+            fila.getTimestamp("recibido_en").toInstant(),
+            fila.getString("estado"),
+            fila.getString("detalle"),
+            fila.getInt("intentos"),
+            fila.getString("crudo"));
 
     private void marcar(UUID id, String estado, String detalle) {
         jdbc.update(

@@ -1,5 +1,7 @@
 package es.hispalis.integracion.almacen;
 
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -30,6 +32,28 @@ public interface AlmacenDeMensajes {
 
     /** Deja constancia de que no se aplicó, y por qué. El original se conserva intacto. */
     void marcarRechazado(UUID id, String motivo);
+
+    /**
+     * La bandeja de errores: lo que entró y no se pudo aplicar, lo más reciente primero.
+     *
+     * <p>No es una tabla aparte, y no lo es a propósito. Un mensaje en la DLQ es una fila de este
+     * mismo archivo en estado {@code RECHAZADO}: moverlo a otra tabla obligaría a devolverlo para
+     * reprocesarlo, y ese viaje de ida y vuelta es una transacción más que puede quedarse a medias
+     * — justo la avería que la DLQ existe para evitar.
+     */
+    List<MensajeArchivado> bandejaDeErrores(int limite);
+
+    /** Un mensaje concreto del archivo, con su original. */
+    Optional<MensajeArchivado> buscar(UUID id);
+
+    /**
+     * Apunta que se va a intentar aplicar, otra vez.
+     *
+     * <p>Se incrementa <strong>antes</strong> de intentarlo, no después de que salga bien: un
+     * reproceso que revienta a mitad tiene que dejar rastro de que se intentó, o la bandeja miente
+     * sobre cuántas veces se ha probado ya.
+     */
+    void anotarIntento(UUID id);
 
     /** Qué hacer con un mensaje según lo que el almacén ya sepa de él. */
     enum Admision {

@@ -37,9 +37,14 @@
   </properties>
 
   <dependencies>
+    <!--
+      Web, y solo por la consola del motor: ver la bandeja de errores y reprocesar (D11). Es lo que
+      se pierde al no usar Mirth y hay que construir; un `UPDATE` a mano en la base no es una consola.
+      El plano clínico NO entra por aquí: HL7 v2 entra por MLLP y FHIR sale por el cliente (D4).
+    -->
     <dependency>
       <groupId>org.springframework.boot</groupId>
-      <artifactId>spring-boot-starter</artifactId>
+      <artifactId>spring-boot-starter-web</artifactId>
     </dependency>
 
     <!--
