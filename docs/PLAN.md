@@ -165,6 +165,64 @@ aceptable bajo ninguna de las tres opciones. Si algún día se implementa (a), e
 - **La ventana de huérfano se documenta en la IG**, no se esconde: un `ServiceRequest` sin `Specimen`
   es un estado transitorio legítimo del sistema mientras el reproceso no ha corrido.
 
+### Decisiones tomadas en los huecos de dominio (ítems 17–19)
+
+- **2026-08-06 — El motivo de la anulación va en `ServiceRequest.note`, no en `statusReason`.**
+  Verificado contra el paquete canónico: **`ServiceRequest` no tiene `statusReason` en R5** — lo
+  tienen `Task` y `MedicationRequest`. No se inventa una extensión propia (§6.1): `note` existe, es
+  legible y es lo que el peticionario va a leer.
+- **2026-08-06 — El `PUT` de `ServiceRequest` se abre SOLO para anular.** `AnularLinea` rechaza
+  cualquier cuerpo que no traiga `status = revoked`, y la proyección se **regenera desde el dominio**,
+  así que no hay forma de colar otra modificación de paso. Es la regla de `adr-0014` aplicada al
+  revés: en vez de dejar heredado lo que no tiene reglas, se abre exactamente la operación que sí las
+  tiene.
+- **2026-08-06 — Las fábricas de `Resultado` reciben el agregado `Peticion`, no su `UUID`.** Con un
+  identificador, el invariante «una línea anulada no produce resultados» habría acabado en el caso de
+  uso, que es donde deja de valer en cuanto aparece la segunda puerta de entrada — y el ítem 26 la
+  trae. Coste asumido: `InformarResultado` hace una consulta más para cargar la línea.
+- **2026-08-06 — El estado del resultado se DERIVA de la firma; no hay columna `estado`.** Una fila
+  marcada como validada sin nadie que la firme es justo lo que este paso existe para impedir, y una
+  combinación imposible es mejor que ni siquiera se pueda escribir. La `CHECK` de `V8` remata lo
+  mismo abajo.
+- **2026-08-06 — Validar es una operación (`$validar`), no un `PUT`.** El valor no cambia: cambia
+  quién responde de él. Un `PUT` obligaría a mandar el recurso entero para tocar algo que ni siquiera
+  es un campo suyo, y abriría la puerta a colar de paso una corrección de la cifra — que es otra
+  operación clínica, con reglas propias, y sigue rechazada.
+- **2026-08-06 — El parámetro `facultativo` se declara OPCIONAL en la operación, a propósito.**
+  Marcarlo obligatorio lo rechazaría con un mensaje genérico de HAPI sobre un parámetro que falta;
+  dejándolo pasar, quien contesta es el dominio y explica **por qué** hace falta saber quién valida.
+  La regla vive en un solo sitio y dice lo mismo entre por donde entre.
+- **2026-08-06 — Quien firma tiene que estar dado de alta.** No lo exige el dominio —el directorio de
+  profesionales es dato maestro y no tiene agregado (§10)— sino la **integridad referencial de la
+  proyección**, en la misma transacción: un `Provenance.agent.who` que apunta a nadie se rechaza. Se
+  deja así: una firma con un nombre que no está registrado no es una firma. Consecuencia práctica:
+  todo test que valide necesita el `Practitioner` en el servidor (`FacultativaDePrueba`).
+- **2026-08-06 — El id del `Provenance` se DERIVA del resultado** (`UUID.nameUUIDFromBytes`) en vez
+  de sortearse. Es lo que permite que el reconciliador del ítem 31 regenere la proyección
+  sobrescribiendo en vez de duplicando firmas. Un resultado tiene como mucho una validación, así que
+  la correspondencia es uno a uno.
+- **2026-08-06 — La doble validación del resultado crítico (§10) NO entra todavía.** No es un olvido
+  y no es gratis: «crítico» exige un **catálogo de valores de pánico** que no existe —
+  `rangos-de-referencia.json` publica rangos de normalidad, que es otra cosa: un potasio de 6,2 está
+  fuera de rango y no es crítico; uno de 7,5 sí—, e inventar umbrales sería precisión falsa en lo
+  único donde el error mata. El gancho ya está puesto (`Resultado.validar`) y la otra mitad del
+  invariante —la notificación obligatoria— es del hito 3. **Planificado como ítem del hito 3**, junto
+  al notificador EDO, que necesita el mismo catálogo.
+- **2026-08-06 — Los campos de la carga del `outbox` se nombran `…Ref`, salvo `pacienteId`.** §9 los
+  enseña como `{ pacienteId, peticionId, observationRef }`, mezclando las dos formas. Se conserva
+  `pacienteId` —es la clave de partición, y va también dentro porque quien lee el mensaje no la ve— y
+  todo lo demás se nombra como referencia, porque lo siguiente que hace el consumidor con ese valor
+  es un `GET`.
+- **2026-08-06 — El hecho se escribe ANTES que la proyección, dentro de la misma transacción.** Para
+  el consumidor el orden es indiferente —o entra todo o no entra nada—, pero para poder **probarlo**
+  no lo es: con el hecho al final, un fallo de la proyección ocurriría antes de escribirlo y el test
+  del lado del fallo pasaría sin demostrar nada.
+- **2026-08-06 — La prohibición de PHI en el bus es estructural, no una lista de palabras.** `Hecho`
+  exige que cada valor de la carga sea un UUID o `Tipo/UUID`. Un NHC, un nombre, un DNI o un NUHSA no
+  tienen esa forma. Efecto lateral **buscado**: un dato maestro con identificador propio
+  (`Organization/1002`, `Practitioner/analisis-clinicos`) tampoco pasa, así que publicarlo obliga a
+  tomar la decisión en voz alta.
+
 ### Decisiones triviales resueltas al andamiar (ítem 1)
 
 - **2026-08-03 — Spring Boot 3.5.16, no 4.1.0.** HAPI FHIR 8.x va sobre Spring Framework 6 y Jakarta
@@ -444,22 +502,35 @@ cinco invariantes de §10 que el hito 1 alcanza viven en el núcleo de dominio, 
 > por **SSH**: el PAT de HTTPS no tiene *scope* `workflow` y GitHub rechaza el push de
 > `.github/workflows/`.
 
-### Dónde estamos ahora — hito 2, ítem 17
+### Dónde estamos ahora — hito 2, ítem 20
 
-El hito 2 está **planificado y sin empezar**: 25 ítems, del 17 al 41, con la sección de
-*Prerrequisitos operativos* justo antes del checklist. La decisión que lo bloqueaba ya está tomada
-—**D22**, la puerta transaccional sigue cerrada y la atomicidad la pone el reproceso idempotente— y
-`docs/diseno.md` está en **v1.1**, con las dos correcciones factuales del hito 1 marcadas como
-añadidos.
+**Los tres huecos de dominio están cerrados (2026-08-06): ítems 17, 18 y 19.** Cada uno con su rojo
+en el historial —`81fdd0c`, `80b9ebf`, `abb1ddf`— y su verde detrás. `./mvnw verify` →
+**BUILD SUCCESS, 117 tests**; el validador oficial, **sin errores** sobre los seis recursos que
+publica el circuito, `Provenance` incluido.
 
-**El primer ítem no completado es el 17 — anulación de línea de petición**, y no es casualidad que
-sea ese: al completar el invariante del informe, el hito 1 dejó un volante con una muestra rechazada
-**bloqueado para siempre**, porque `Peticion` no tiene estado. Los tres huecos de dominio (17, 18 y
-19) van **antes del puente** porque el puente los usa: el `OML^O21` necesita poder anular, el
-`ORU^R01` saliente cuelga del resultado validado, y el bus no puede publicar nada sin el `outbox`.
+Lo que el núcleo sabe hacer ahora y no sabía:
 
-**Nada de esto se ha adelantado.** `integracion/` y `app-ciudadano/` siguen sin andamiar, y el
-`compose` sigue siendo el de tres servicios.
+- **Anular una línea** (`ServiceRequest.status = revoked` con su motivo en `note`), que desbloquea el
+  volante con una muestra rechazada. Una línea anulada no admite resultados después, y eso lo exige
+  la fábrica de `Resultado`, no el caso de uso.
+- **Firmar un resultado** (`$validar` → `Provenance` + `Observation.status` `final`). Un informe **ya
+  no sale con nada sin firmar**: el circuito completo ganó ese paso.
+- **Apuntar cada hecho en el `outbox`**, en la misma transacción y sin PHI — invariante de la fábrica
+  de `Hecho`, no una comprobación de test.
+
+**El primer ítem no completado es el 20 — andamiar `integracion/`**, que abre el motor de
+integración. Los tres huecos iban antes porque el puente los usa: el `OML^O21` necesita poder anular,
+el `ORU^R01` saliente cuelga del resultado validado, y el relay del ítem 30 no puede publicar nada
+sin el `outbox`. Antes de empezar, la sección de *Prerrequisitos operativos del hito 2*.
+
+**Nada más se ha adelantado.** `integracion/` y `app-ciudadano/` siguen sin andamiar, el `compose`
+sigue siendo el de tres servicios, y no hay ni una línea de Kafka, de Keycloak ni de HL7 v2.
+
+> **Lo que queda sin verificar de esta tanda:** el guion de verificación del `compose` **no se ha
+> vuelto a pasar** con el paso de validación dentro. El ítem 18 lo pedía «en el mismo commit» y no se
+> ha hecho: la pila no se ha levantado. Comprobarlo antes de dar por buena la demo de extremo a
+> extremo.
 
 ---
 
@@ -879,7 +950,7 @@ sea ese: al completar el invariante del informe, el hito 1 dejó un volante con 
 
 ### Los huecos de dominio — van antes del puente, porque el puente los usa
 
-- [ ] **17 — Anulación de línea de petición.**
+- [x] **17 — Anulación de línea de petición.**
   `Peticion` no tiene estado, así que desde que el ítem 16 completó el invariante del informe, **un
   volante con una muestra rechazada queda bloqueado para siempre**. La salida ya está identificada:
   anular la línea, que es lo que hace un laboratorio de verdad.
@@ -892,8 +963,17 @@ sea ese: al completar el invariante del informe, el hito 1 dejó un volante con 
   *Trampa:* anular no es borrar. El `ServiceRequest` revocado se sigue publicando y se sigue leyendo;
   lo único que cambia es que deja de bloquear. Borrar la línea dejaría el volante sin rastro de lo
   que se pidió, que es justo lo que el peticionario necesita ver.
+  *Hecho (2026-08-06):* rojo `81fdd0c`, verde `7e0b4ff`. `EstadoDeLinea`, `Peticion.anular`,
+  migración `V7` con su `CHECK`, caso de uso `AnularLinea` y `AnulacionDeLineaTest` (5 casos). «Una
+  línea anulada no produce resultados» **no se comprueba en el caso de uso**: las fábricas de
+  `Resultado` pasaron a recibir la `Peticion` en vez de su `UUID`, así que no hay forma de informar
+  un resultado sin que el agregado compruebe el estado de la línea. Que una línea anulada cuente como
+  resuelta vive en `LineaDeLaPeticion.resuelta()`, no en `EmitirInforme`, por lo mismo.
+  *Lo único del criterio que NO entra:* «una línea anulada no admite un espécimen nuevo». Hoy es
+  incomprobable — el agregado `Especimen` **no guarda la línea que lo motivó** (no tiene con qué
+  cruzar), y `Specimen.request` no se proyecta. Anotado abajo, en *Notas / riesgos*.
 
-- [ ] **18 — Validación facultativa del resultado, con su `Provenance`.**
+- [x] **18 — Validación facultativa del resultado, con su `Provenance`.**
   *Criterio:* `Resultado` gana estado (`preliminar | validado`) y el caso de uso `ValidarResultado`,
   que exige un facultativo y sella la fecha; la proyección publica `Observation.status`
   `preliminary` → `final` **y un `Provenance`** con `.target` → `Observation`, `.agent.who` →
@@ -909,8 +989,16 @@ sea ese: al completar el invariante del informe, el hito 1 dejó un volante con 
   emitirse.
   *Nota:* `Provenance` no está entre los nueve perfiles de §6.5 y **no se le escribe uno** salvo que
   aparezca una restricción de negocio que justifique el décimo; §6.1 lo lista como recurso aparte.
+  *Hecho (2026-08-06):* rojo `80b9ebf`, verde `23bbdab`. Objeto de valor `Validacion`, estado
+  **derivado** (`EstadoDeResultado`, sin columna propia), migración `V8`, operación
+  `POST /fhir/Observation/{id}/$validar`, `TraductorDeProcedencia` con id **derivado** del resultado
+  —para que el reconciliador del ítem 31 regenere sin duplicar firmas— y `ProveedorDeProcedencia`,
+  que cierra `create` y `update` de `Provenance`. El circuito ganó su paso y vuelca la procedencia
+  para el validador oficial. Se confirmó que **no hace falta perfil**: no se ha añadido el décimo.
+  *Lo que se decidió NO hacer ahora:* la **doble validación del resultado crítico** de §10. Ver
+  *Decisiones tomadas en los huecos de dominio*.
 
-- [ ] **19 — Esquema `outbox`, escrito en la misma transacción.**
+- [x] **19 — Esquema `outbox`, escrito en la misma transacción.**
   *Criterio:* migración que crea el esquema `outbox` y su tabla de hechos (`id`, `tipo`,
   `clave_de_particion`, `carga`, `creado_en`, `publicado_en`); las escrituras del dominio dejan su
   hecho **dentro del mismo `@Transactional`** de §9. Test **por el lado del fallo**, como el del ítem
@@ -920,6 +1008,13 @@ sea ese: al completar el invariante del informe, el hito 1 dejó un volante con 
   cada tipo de hecho y falla si aparece un NHC, un nombre, un DNI o un NUHSA. El invariante 6 del
   proyecto prohíbe PHI en el bus, y **el sitio donde se incumple es aquí**, construyendo la carga —
   no en Kafka.
+  *Hecho (2026-08-06):* rojo `abb1ddf`, verde `990029b`. Migración `V9`, agregado `Hecho` con ocho
+  `TipoDeHecho`, y los **ocho** casos de uso dejando el suyo apuntado antes de escribir la proyección
+  — el orden importa para poder probarlo: con el hecho al final, el test del lado del fallo no
+  tendría forma de fallar. La prohibición de PHI **no es un test, es la fábrica**: `Hecho` exige que
+  cada valor de la carga sea un UUID o `Tipo/UUID`, así que también cubre los hechos que se añadan
+  mañana. Fuera de la carga a propósito: la cifra, el motivo de la anulación y qué cambió en una
+  filiación.
 
 ### El motor de integración
 
@@ -1135,6 +1230,13 @@ sea ese: al completar el invariante del informe, el hito 1 dejó un volante con 
 - `Observation.triggeredBy` para las **reflejas** (TSH alterado → T4 libre), repeticiones y re-ejecuciones.
 - **Notificador EDO** a SVEA/Redalerta: resultado validado cuyo código está en el catálogo EDO ⇒
   notificación obligatoria (`Task`). Obligación legal real, también para privados.
+- **Doble validación del resultado crítico** (§10), la mitad del invariante que el ítem 18 dejó
+  fuera. Va aquí y no antes porque necesita lo mismo que el notificador EDO: un **catálogo de valores
+  de pánico**, que no es el fichero de rangos de normalidad — un potasio de 6,2 está fuera de rango y
+  no es crítico; uno de 7,5 sí. Con el catálogo hecho, el gancho ya está puesto en
+  `Resultado.validar`, y la otra mitad del invariante —la notificación obligatoria— es este mismo
+  hito. Hacerlo antes habría exigido inventarse los umbrales, que es precisión falsa en lo único
+  donde el error mata.
 - **Bulk Data** `$export` + `Group` para vigilancia epidemiológica, vía SMART Backend Services.
 - `AuditEvent` completo (justificación de trazabilidad de D17). El `Provenance` de **quién validó el
   resultado** ya no espera aquí: entra en el hito 2, ítem 18, porque de él cuelga el notificador EDO.
@@ -1266,6 +1368,21 @@ sea ese: al completar el invariante del informe, el hito 1 dejó un volante con 
   declara hoy `GET /fhir/metadata`; si dice `transaction`, el único documento del que un cliente se
   fía está anunciando algo que el interceptor de `ADR-0014` deniega. No se rehace aquí —el hito 1 está
   cerrado— y se comprueba y corrige en el **ítem 26**, que es donde D22 aterriza.
+- **Los proveedores propios heredan MÁS puertas de escritura de las que cierran.**
+  `BaseJpaResourceProvider` expone `create`, `update`, `patch`, `delete`, `metaAdd`, `metaDelete` y
+  `expunge`. Los proveedores de este proyecto solo sobrescriben las dos primeras, así que **las otras
+  cinco siguen siendo las de HAPI: escriben la proyección y dejan el dominio atrás**, en silencio,
+  que es exactamente el fallo que `adr-0014` describe. Descubierto al abrir `$validar` (ítem 18) y
+  **no corregido en esa tanda a propósito** — cerrarlas es su propia unidad de trabajo, con su test
+  por cada verbo. **Tampoco se ha comprobado cuáles son alcanzables de verdad** con el
+  `JpaStorageSettings` actual: `expunge` y el borrado en cascada suelen venir apagados, y ese dato
+  cambia la prioridad. **Mirarlo antes del ítem 26**, que es cuando el motor de integración se
+  convierte en el segundo cliente de escritura.
+- **`Especimen` no guarda la línea de petición que lo motivó**, así que «una línea anulada no admite
+  un espécimen nuevo» (criterio del ítem 17) **no se puede comprobar hoy**: no hay con qué cruzar, y
+  `Specimen.request` tampoco se proyecta. No es urgente —el daño real, publicar un resultado de una
+  línea anulada, sí está cerrado en la fábrica de `Resultado`—, pero el `OML^O21` del ítem 26 trae
+  muestras y volantes juntos y ahí el enlace hará falta. Decidir entonces si el agregado lo gana.
 - **Simular normativa real tiene un límite.** El catálogo EDO y el formato de Redalerta se modelan de
   forma **verosímil, no fiel**, y así queda escrito en la IG.
 - **CI de monorepo multi-*toolchain*:** filtrado por `paths:` desde el primer día, o cada cambio en
