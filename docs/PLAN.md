@@ -223,6 +223,59 @@ aceptable bajo ninguna de las tres opciones. Si algún día se implementa (a), e
   (`Organization/1002`, `Practitioner/analisis-clinicos`) tampoco pasa, así que publicarlo obliga a
   tomar la decisión en voz alta.
 
+### Decisiones tomadas al abrir el motor (ítems 20–24)
+
+- **2026-08-06 — Manda el capítulo 2 de V2.5.1 para la tabla 0354, y `ADT_A08` no existe.** El cruce
+  medido está en `adr-0018`. `A01`, `A04`, `A08` y `A13` comparten `ADT_A01`; el canal **rechaza con
+  `AR`** un `MSH-9-3` que no cuadre, y el mensaje de error nombra el código bueno. No se normaliza en
+  silencio: un emisor que manda una estructura inexistente tiene que enterarse.
+- **2026-08-06 — La deduplicación es la restricción única, no una consulta previa.** `INSERT` y, si
+  choca, se mira el estado guardado. Un `SELECT … IF NOT EXISTS … INSERT` deja una ventana entre
+  comprobar y escribir por la que pasan los dos mensajes cuando el HIS reintenta rápido, que es
+  justo cuando reintenta. Efecto lateral buscado: **guardar el original y deduplicar son la misma
+  operación**, así que no hay forma de deduplicar sin haber archivado antes.
+- **2026-08-06 — Un duplicado se acusa `AA`, no `AE`.** Es contraintuitivo y es lo correcto: el
+  mensaje **sí** está aplicado en el laboratorio, que es lo que el emisor pregunta. Con un error, un
+  HIS bien programado lo reintentaría para siempre.
+- **2026-08-06 — Un `RECHAZADO` se puede reintentar; un `PROCESADO` no.** Reenviar un mensaje que
+  falló reabre su fila y lo vuelve a intentar —es lo que hace un operador tras arreglar el dato de
+  al lado—. Reenviar uno ya aplicado no escribe nada. Sin esta distinción, la DLQ del ítem 25 no
+  tendría por dónde reintentar.
+- **2026-08-06 — TLS encendido por defecto, y con `SSLContext` propio.** Apagarlo exige decirlo
+  (`HISPALIS_MLLP_TLS=false`) y el arranque lo avisa en el log. El contexto es del canal y no de la
+  JVM: las propiedades `javax.net.ssl.*` afectan a **todo** lo que abra un socket en el proceso —el
+  cliente FHIR incluido— y dejan la contraseña del almacén en la línea de órdenes.
+- **2026-08-06 — La lista de juegos de caracteres aceptados es nuestra, escrita a mano.** HAPI tiene
+  la suya (`ca.uhn.hl7v2.llp.HL7Charsets`) y es **de paquete**: no se puede usar desde fuera. En vez
+  de reflexión, una tabla explícita de cinco entradas y un test de ida y vuelta **a través del LLP de
+  HAPI** que demuestra que las dos partes entienden lo mismo por `8859/1`.
+- **2026-08-06 — `MSH-18` vacío significa latín-1.** Es legal y quiere decir «lo acordado entre las
+  partes»; el acuerdo aquí es el juego que manda un HIS español que no lo declara. Escrito en
+  `CharsetDeclarado` y replicado en el simulador.
+- **2026-08-06 — Un `A01` de un paciente que ya existe corrige, no duplica.** Es lo que hace un HIS
+  cuando reenvía la admisión tras caerse, y crear un segundo NHC sería peor que cualquier
+  alternativa. La clave es el NHC de `PID-3` con tipo `MR`; sin él, `AE`.
+- **2026-08-06 — El motor NO emite las extensiones de descomposición del apellido.** `PID-5.1` trae
+  el nombre familiar completo y **no dice** dónde acaba el del padre: «de la Torre Gómez» y
+  «Fernández de Córdoba Ruiz» no se parten por el espacio ni por ninguna otra heurística. Las
+  extensiones son `0..1` en el perfil precisamente para esto: se rellenan cuando el dato viene
+  separado en origen, y por MLLP no viene.
+- **2026-08-06 — La dirección (`PID-11`) y el teléfono (`PID-13`) se archivan pero no se mapean.** El
+  agregado `Paciente` del hito 1 no los tiene, y añadirlos al dominio desde el motor sería que el
+  puente decida el modelo. Están en el original guardado, así que el día que el dominio los quiera,
+  el dato ya estaba.
+- **2026-08-06 — El enganche de autenticación es una interfaz, no un `TODO`.**
+  `AutenticacionDelMotor` extiende `IClientInterceptor` y hoy la implementa `SinIdentidadTodavia`,
+  que no añade cabecera. En el ítem 36 se sustituye por la de SMART Backend Services y no cambia una
+  sola línea del canal. El punto de enganche es una clase con nombre y javadoc, que es lo que pedía
+  la restricción.
+- **2026-08-06 — La tabla de control de Flyway del motor vive DENTRO de su esquema.** No es
+  cosmética: en la pila de desarrollo el motor comparte instancia de PostgreSQL con el laboratorio,
+  cuyo servidor JPA llena `public`. Con la tabla de control en `public`, Flyway encuentra un esquema
+  no vacío sin historial y **el motor no arranca**. **Ningún test podía cazarlo** —cada test levanta
+  su propio PostgreSQL vacío—, y se descubrió al montar la pila de verdad para el ítem 24. Es la
+  misma lección de `adr-0017` con otra cara: hay fallos que solo existen cuando las piezas conviven.
+
 ### Decisiones triviales resueltas al andamiar (ítem 1)
 
 - **2026-08-03 — Spring Boot 3.5.16, no 4.1.0.** HAPI FHIR 8.x va sobre Spring Framework 6 y Jakarta
@@ -498,39 +551,56 @@ cinco invariantes de §10 que el hito 1 alcanza viven en el núcleo de dominio, 
 > **La CI está en verde en los seis workflows** y el filtrado por ruta está comprobado en los dos
 > sentidos. `integracion` y `app-ciudadano` **solo han corrido a mano** (`workflow_dispatch`) y lo que
 > ejercitan es su **guarda de auto-omisión**: sin `pom.xml` ni `pubspec.yaml` avisan y no construyen
-> nada. **Retirar esa guarda es lo primero al andamiarlos** (ítems 20 y 38). Se empuja a `origin/main`
-> por **SSH**: el PAT de HTTPS no tiene *scope* `workflow` y GitHub rechaza el push de
-> `.github/workflows/`.
+> nada. **Retirar esa guarda es lo primero al andamiarlos** (ítems 20 y 38) — hecho ya para
+> `integracion`; `app-ciudadano` la conserva. Se empuja a `origin/main` por **SSH**: el PAT de HTTPS
+> no tiene *scope* `workflow` y GitHub rechaza el push de `.github/workflows/`.
 
-### Dónde estamos ahora — hito 2, ítem 20
+### Dónde estamos ahora — hito 2, ítem 25
 
 **Los tres huecos de dominio están cerrados (2026-08-06): ítems 17, 18 y 19.** Cada uno con su rojo
 en el historial —`81fdd0c`, `80b9ebf`, `abb1ddf`— y su verde detrás. `./mvnw verify` →
 **BUILD SUCCESS, 117 tests**; el validador oficial, **sin errores** sobre los seis recursos que
 publica el circuito, `Provenance` incluido.
 
-Lo que el núcleo sabe hacer ahora y no sabía:
+Lo que el núcleo sabe hacer y no sabía: **anular una línea** (lo que desbloquea el volante con una
+muestra rechazada), **firmar un resultado** (`$validar` → `Provenance`, y un informe ya no sale con
+nada sin firmar) y **apuntar cada hecho en el `outbox`** en la misma transacción y sin PHI.
 
-- **Anular una línea** (`ServiceRequest.status = revoked` con su motivo en `note`), que desbloquea el
-  volante con una muestra rechazada. Una línea anulada no admite resultados después, y eso lo exige
-  la fábrica de `Resultado`, no el caso de uso.
-- **Firmar un resultado** (`$validar` → `Provenance` + `Observation.status` `final`). Un informe **ya
-  no sale con nada sin firmar**: el circuito completo ganó ese paso.
-- **Apuntar cada hecho en el `outbox`**, en la misma transacción y sin PHI — invariante de la fábrica
-  de `Hecho`, no una comprobación de test.
+**Y el motor de integración está abierto (2026-08-06): ítems 20, 21, 22, 23 y 24.** `integracion/`
+existe de verdad —Spring Boot 3.5.16 + HAPI HL7v2 2.6.0, `./mvnw verify` → **BUILD SUCCESS, 34
+tests**— con su CI sin guarda y su `mvnw` ejecutable en el índice. Lo que hay:
 
-**El primer ítem no completado es el 20 — andamiar `integracion/`**, que abre el motor de
-integración. Los tres huecos iban antes porque el puente los usa: el `OML^O21` necesita poder anular,
-el `ORU^R01` saliente cuelga del resultado validado, y el relay del ítem 30 no puede publicar nada
-sin el `outbox`. Antes de empezar, la sección de *Prerrequisitos operativos del hito 2*.
+- **Un listener MLLP sobre TLS** que acusa siempre: `AA` al aceptar y al descartar un duplicado,
+  `AE` ante error de aplicación, `AR` al rechazar. El *framing* lo pone HAPI.
+- **El canal `ADT^A01`/`A08` → `Patient`**, escribiendo **por la API FHIR** como un cliente más (D5).
+- **Las tres garantías**: original archivado antes de tocarlo, deduplicación por
+  `MSH-3`+`MSH-4`+`MSH-10` **antes** de escribir, y charset de `MSH-18` respetado de ida y vuelta.
+- **`adr-0018`**, con la tabla 0354 cruzada y medida entre las dos versiones.
+- **El simulador del HIS** (`simuladores/his/`), que es el arnés de extremo a extremo.
 
-**Nada más se ha adelantado.** `integracion/` y `app-ciudadano/` siguen sin andamiar, el `compose`
-sigue siendo el de tres servicios, y no hay ni una línea de Kafka, de Keycloak ni de HL7 v2.
+Verificado **contra la pila de verdad**, no solo contra el arnés de tests: backend con
+`-Parranque-local`, motor apuntando a su API, simulador emitiendo por MLLP/TLS, y `SELECT` sobre
+`dominio.paciente` confirmando la fila y la `Ñ` por punto de código. Validador oficial sobre el
+`Patient` real: **0 errores**.
 
-> **Lo que queda sin verificar de esta tanda:** el guion de verificación del `compose` **no se ha
-> vuelto a pasar** con el paso de validación dentro. El ítem 18 lo pedía «en el mismo commit» y no se
-> ha hecho: la pila no se ha levantado. Comprobarlo antes de dar por buena la demo de extremo a
-> extremo.
+**El primer ítem no completado es el 25 — DLQ y reproceso idempotente**, que es lo que sostiene D22 y
+por eso va antes del `OML^O21`. Hoy un mensaje que falla queda `RECHAZADO` en el almacén con su
+motivo y **se puede reenviar**, pero no hay ni consulta de DLQ ni operación de reproceso: reintentar
+depende de que el emisor vuelva a mandarlo.
+
+**Nada más se ha adelantado.** `app-ciudadano/` sigue sin andamiar, el `compose` sigue siendo el de
+tres servicios —el motor **no está en él**—, y no hay ni una línea de Kafka ni de Keycloak.
+
+> **Lo que queda sin verificar:**
+>
+> - **El workflow `ci-integracion` no ha corrido.** Esta tanda es `commit` sin push, así que la
+>   guarda retirada y el `mvnw` ejecutable están comprobados en el índice, no en GitHub. Es lo
+>   primero que hay que mirar en el próximo `push`.
+> - **El guion de verificación del `compose` sigue sin pasarse** con el paso de validación dentro.
+>   Viene del ítem 18 y sigue pendiente: la pila no se ha levantado con `docker compose`.
+> - **El motor no está en el `compose`.** El arranque en local se hizo a mano, con el PostgreSQL
+>   embebido del backend y un almacén de claves generado al vuelo. Meterlo en la pila es trabajo del
+>   ítem 25 o del primero que lo necesite.
 
 ---
 
@@ -1018,22 +1088,36 @@ sigue siendo el de tres servicios, y no hay ni una línea de Kafka, de Keycloak 
 
 ### El motor de integración
 
-- [ ] **20 — Andamiar `integracion/` y dejar su CI construyendo de verdad.**
+- [x] **20 — Andamiar `integracion/` y dejar su CI construyendo de verdad.**
   *Criterio:* `integracion/pom.xml` con Spring Boot 3.5.16 (la misma que el backend, por lo que dice
   la decisión del ítem 1) y HAPI HL7v2 (`ca.uhn.hl7v2`), Spotless enganchado a `verify`, y **la
   guarda de auto-omisión de `ci-integracion.yml` retirada en el mismo commit**. `integracion/mvnw`
   con bit de ejecución en el índice (`git ls-files -s integracion/mvnw` → `100755`). El workflow
   corre **por `push`**, no por `workflow_dispatch`, y **construye**: un `::notice::` de omisión en el
   log es un fallo del ítem.
+  *Hecho (2026-08-06):* `pom.xml` con HAPI HL7v2 2.6.0 (solo `hapi-structures-v251`, D12) y el
+  cliente FHIR de HAPI 8.10.1, `Dockerfile` con contexto en la raíz y usuario no privilegiado, y
+  `application.yaml` con datasource y tabla de control propias. Guarda retirada y `mvnw` copiado del
+  backend **con su bit**: `git ls-files -s integracion/mvnw` → `100755` (la trampa de `adr-0008`,
+  comprobada en el índice y no en el disco). El workflow ganó además la ruta `ig/input/fsh/**` y un
+  paso de validación oficial sobre lo que produce el canal.
+  *Lo que NO se puede dar por verificado desde aquí:* **el workflow no ha corrido**, porque esta
+  tanda es `commit` sin push. Que construya de verdad se comprueba en el primer `push`.
 
-- [ ] **21 — ⚠️ Cruzar la tabla 0354 entre V2.5 y V2.5.1.**
+- [x] **21 — ⚠️ Cruzar la tabla 0354 entre V2.5 y V2.5.1.**
   *Criterio:* documento corto en `docs/` —ADR si el hallazgo sirve fuera del proyecto— con el **diff
   medido** de la tabla 0354 entre las dos versiones archivadas en `_fuente/`, y la lista de las
   estructuras que este proyecto usa (`ADT_A01`, `ADT_A08`, `OML_O21`, `ORU_R01`) con su código en
   **V2.5.1**, que es la versión que fija D12. Se hace **antes** del primer parser: es una
   comprobación de un rato que evita generar código contra la tabla equivocada.
+  *Hecho (2026-08-06):* `docs/adr/adr-0018-la-tabla-0354-se-contradice-consigo-misma.md`, con el
+  cruce medido sobre los cuatro PDF. **194 / 194 / 199 / 194**: en V2.5 las dos fuentes coinciden y
+  es V2.5.1 quien introduce la divergencia. Las cuatro estructuras del proyecto están en las dos
+  fuentes y **sin cambios desde V2.5**, así que el canal no depende de qué copia se lea — pero eso
+  solo se sabe después de cruzarlas. **El criterio de este ítem contenía él mismo la trampa:**
+  `ADT_A08` no existe en ninguna de las cuatro fuentes; `A08` va con `ADT_A01`.
 
-- [ ] **22 — Almacén de mensajes: el original íntegro y la deduplicación.**
+- [x] **22 — Almacén de mensajes: el original íntegro y la deduplicación.**
   *Criterio:* todo mensaje que entra se guarda **antes de tocarlo**, tal y como llegó, con metadatos
   indexables (emisor `MSH-3`/`MSH-4`, tipo `MSH-9`, control `MSH-10`, versión `MSH-12`, fecha, estado
   de proceso). Reenviar el mismo mensaje **no produce una segunda escritura**, y la deduplicación
@@ -1041,8 +1125,15 @@ sigue siendo el de tres servicios, y no hay ni una línea de Kafka, de Keycloak 
   *La trampa que decide el diseño de la clave:* **`MSH-10` solo es único por emisor.** La clave es
   `MSH-3` + `MSH-4` + `MSH-10`, no `MSH-10` a secas: con dos analizadores que reinician su contador,
   `MSH-10` solo descarta mensajes buenos **en silencio**, que es peor que duplicarlos.
+  *Hecho (2026-08-06):* migración `V1` con `integracion.mensaje` y la restricción
+  `mensaje_unico_por_emisor UNIQUE (aplicacion_emisora, instalacion_emisora, control_id)`. **La
+  deduplicación ES la restricción**, no una consulta previa: el `INSERT` del original y el descarte
+  del duplicado son la misma operación, así que no hay ventana entre comprobar y escribir. Un
+  mensaje `RECHAZADO` se puede reintentar —reabre su fila—; solo `PROCESADO` bloquea una segunda
+  escritura. Guardar el original **es** el primer paso del proceso, no un `INSERT` aparte que se
+  pueda olvidar.
 
-- [ ] **23 — Listener MLLP sobre TLS, con acuses y charset.**
+- [x] **23 — Listener MLLP sobre TLS, con acuses y charset.**
   *Criterio:* el motor escucha MLLP (`0x0B` … `0x1C 0x0D`, que implementa HAPI — nunca se escribe a
   mano) **sobre TLS**, y responde `ACK` con el `MSA-1` que toca: `AA` al aceptar, `AE` ante error de
   aplicación, `AR` al rechazar. Un mensaje que no se puede procesar **produce `AE`/`AR`, nunca
@@ -1051,8 +1142,19 @@ sigue siendo el de tres servicios, y no hay ni una línea de Kafka, de Keycloak 
   `ÁLVAREZ` y `PEÑA` **de ida y vuelta**, en `8859/1` y en `UNICODE UTF-8`, son casos obligatorios.
   *Trampa:* leer como UTF-8 un mensaje `8859/1` **no lanza ninguna excepción** — produce `MU?OZ` y
   sigue. El test tiene que comparar la cadena, no comprobar que no hubo error.
+  *Hecho (2026-08-06):* `ServidorMllp` con `ExtendedMinLowerLayerProtocol` —que lee `MSH-18`
+  **antes** de convertir los bytes a texto— sobre un `SSLContext` propio (`FabricaDeSocketsTls`), no
+  sobre las propiedades globales `javax.net.ssl.*` de la JVM. Los seis casos obligatorios
+  —`MUÑOZ`, `ÁLVAREZ`, `PEÑA` × `8859/1` y `UNICODE UTF-8`— pasan por el cable en su codificación de
+  verdad y se comparan como cadena. **Todos los tests del canal corren con TLS puesto**, y hay uno
+  que comprueba que un emisor en claro no entrega nada.
+  *Y una vuelta de tuerca que no estaba en el criterio:* el emisor que **declara UTF-8 y manda
+  latín-1**. Se caza porque al decodificar aparecen caracteres de reemplazo (U+FFFD) y el motor
+  prefiere el `AR` a escribir `MU�OZ` en la historia de alguien. **El caso simétrico no se puede
+  cazar** —latín-1 declarado con bytes UTF-8 decodifica sin queja y produce `MUÃ‘OZ`— y así queda
+  escrito en `CharsetDeclarado`.
 
-- [ ] **24 — `ADT^A01` / `A08` → `Patient`.**
+- [x] **24 — `ADT^A01` / `A08` → `Patient`.**
   *Criterio:* un `ADT^A01` da de alta al paciente **por la API FHIR** y un `A08` corrige su
   filiación; los dos aterrizan en `dominio.paciente`, comprobado con SQL y no leyendo la proyección
   —la lección del ítem 10—. Los apellidos llegan **enteros** desde `PID-5` y no se parten por el
@@ -1060,6 +1162,21 @@ sigue siendo el de tres servicios, y no hay ni una línea de Kafka, de Keycloak 
   almacén con su motivo.
   *Se elige el primero a propósito:* es el único mapeo de un solo recurso, así que estrena el canal
   sin arrastrar el problema de atomicidad de D22.
+  *Hecho (2026-08-06):* `CanalAdtPaciente` con la estructura `origen → filtro → transformador →
+  destino`, y `TransformadorAdtAPaciente`, que reparte `PID-3` **por el tipo de la tabla 0203**
+  (`MR`→NHC, `NI`→DNI/NIE, `JHN`→CIP autonómico, `HC`→CIP-SNS, `SS`→NASS) y no por la posición. El
+  apellido de `PID-5` va **entero** a `HumanName.family`; el `A08` de un NHC desconocido se rechaza
+  con `AE` y su motivo queda en el almacén.
+  *Verificado contra la pila de verdad, no solo contra el arnés:* backend con `-Parranque-local`,
+  motor apuntando a su API, y el **simulador del HIS en Python** mandando por MLLP/TLS. `A01` con
+  `MUÑOZ DE LA TORRE` → `AA`; el mismo mensaje repetido → `AA` **sin segunda escritura** (el
+  `Patient` se queda en `versionId` 2, no 3); `A08` corrigiendo a `PEÑA ÁLVAREZ` → `AA`; `A08` de un
+  NHC desconocido → `AE`. `SELECT` sobre **`dominio.paciente`** —no sobre la proyección, que es la
+  lección del ítem 10—: una fila, y la `Ñ` es el punto de código **209**, comprobado con `chr()` para
+  no fiarse de la codificación de la consola. Validador oficial sobre el `Patient` real: **0
+  errores**.
+  *Lo que este ítem destapó:* el motor **no arrancaba** contra la base que comparte con el
+  laboratorio. Ningún test podía verlo. Ver las decisiones de abajo.
 
 - [ ] **25 — DLQ y reproceso idempotente.**
   *Criterio:* un mensaje cuyo proceso falla va a la **DLQ** con el error y el original intactos; el
@@ -1360,8 +1477,17 @@ sigue siendo el de tres servicios, y no hay ni una línea de Kafka, de Keycloak 
 - **La IG propia es trabajo real:** nueve perfiles más terminología, sin US Core ni IPS de donde tirar.
   Es el ítem que más fácilmente se subestima.
 - **Sin la red de seguridad de Mirth** (D11): almacén de mensajes, reintentos y consola de reproceso
-  hay que construirlos — **ítems 22 y 25**, y con D22 tomada dejan de ser una red de seguridad
-  opcional: son lo que sostiene la atomicidad del `OML^O21`.
+  hay que construirlos — el almacén está (**ítem 22**), los reintentos y la consola **no** (ítem 25).
+  Con D22 tomada dejan de ser una red de seguridad opcional: son lo que sostiene la atomicidad del
+  `OML^O21`.
+- **Un servicio con esquema propio no puede poner su tabla de control de Flyway en `public`.** Si
+  comparte instancia con otro que sí escribe ahí —y el laboratorio lo hace, por HAPI JPA—, Flyway
+  encuentra un esquema no vacío sin historial y **se niega a arrancar**. Descubierto al levantar el
+  motor contra el backend de verdad, y **ningún test lo veía**: cada suite levanta su propio
+  PostgreSQL vacío, donde `public` está limpio. Corregido en el motor (`spring.flyway.schemas`).
+  **El backend tiene el mismo montaje** —tabla de control en `public`— y hoy funciona porque su
+  Flyway corre antes de que HAPI cree nada; conviene revisarlo si algún día arranca contra una base
+  que ya tenga tablas.
 - **El `CapabilityStatement` puede estar prometiendo un verbo que el servidor rechaza.** El ítem 16
   cerró el `Bundle transaction` para los recursos con agregado, pero `ConformidadHispaLis` solo recorta
   `supportedProfile`: **no toca `rest.interaction`**, que HAPI rellena por su cuenta. Hay que mirar qué
@@ -1387,10 +1513,23 @@ sigue siendo el de tres servicios, y no hay ni una línea de Kafka, de Keycloak 
   forma **verosímil, no fiel**, y así queda escrito en la IG.
 - **CI de monorepo multi-*toolchain*:** filtrado por `paths:` desde el primer día, o cada cambio en
   Flutter recompila el backend.
-- **No verificado contra fuente primaria** (§17, nada de esto bloquea el hito 1): estructura interna del
-  CIP-SNS (irrelevante por D16), especificación MLLP (sin impacto en código: lo implementa HAPI), y la
-  **tabla 0354** de V2.5.1 — que deja de ser una anotación y pasa a ser **bloqueante: ítem 21**, antes
-  de generar código. Las dos versiones están archivadas, así que el cruce se hace en local.
+- **No verificado contra fuente primaria** (§17): estructura interna del CIP-SNS (irrelevante por
+  D16) y especificación MLLP (sin impacto en código: lo implementa HAPI). ~~La **tabla 0354** de
+  V2.5.1~~ — **cruzada el 2026-08-06** (ítem 21), `adr-0018`.
+- **El motor manda dos `given` y el laboratorio devuelve uno.** `PID-5` trae nombre y segundo nombre
+  por separado, y el transformador los envía como dos `HumanName.given`; el agregado `Paciente` tiene
+  una sola columna `nombre_de_pila`, así que los une y la proyección publica
+  `given: ["Rocío Ana"]`. Es del dominio del hito 1, no del canal, y no se toca aquí: cambiarlo es
+  tocar el agregado y su migración. Anotado porque **el arnés de tests no lo enseña** —el laboratorio
+  de prueba mira lo que el motor envía, no lo que el laboratorio guarda— y apareció al montar la pila
+  de verdad. Decidir si el agregado gana un segundo campo cuando aparezca el primer caso en que
+  importe.
+- **El cruce de la tabla 0354 da DIEZ códigos solo-capítulo y la biblioteca dice nueve.** El que
+  falta es `MFR_M05`, y se entiende: su fila es la del `Mo5` mal escrito, que cualquier extracción
+  que valide la columna de evento descarta. La biblioteca **no se edita a mitad de proyecto**
+  (CLAUDE.md §5.3); queda como aportación pendiente, con la medición en `adr-0018`.
 - **Aportaciones pendientes a la biblioteca** al terminar el proyecto (§17.2): las capas 2 y 3 de la
   trampa documental de MLLP —que el documento normativo es un estándar de **V3** y que está **retirado
-  desde mayo de 2025 sin sustituto**— van a `interoperabilidad/hl7-v2/`.
+  desde mayo de 2025 sin sustituto**— van a `interoperabilidad/hl7-v2/`. Con ellas, el refinamiento
+  de `MFR_M05` en el recuento de la tabla 0354 y el aviso de que `ca.uhn.hl7v2.llp.HL7Charsets` es
+  **de paquete** y no se puede reutilizar desde fuera de HAPI.
