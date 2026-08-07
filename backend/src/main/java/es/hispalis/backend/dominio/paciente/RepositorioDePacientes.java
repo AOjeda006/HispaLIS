@@ -1,5 +1,6 @@
 package es.hispalis.backend.dominio.paciente;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -28,4 +29,13 @@ public interface RepositorioDePacientes {
 
     /** Recupera un paciente por su identidad. */
     Optional<Paciente> buscarPorId(UUID id);
+
+    /**
+     * Las identidades de todos los pacientes, en orden estable.
+     *
+     * <p>Lo pide el reconciliador (§15), que es el único que necesita recorrer el dominio entero: es
+     * la vía oficial de recuperación cuando la proyección y el dominio divergen, y sin poder
+     * enumerar no hay nada que recorrer. Ninguna consulta de la API pasa por aquí.
+     */
+    List<UUID> todasLasIdentidades();
 }

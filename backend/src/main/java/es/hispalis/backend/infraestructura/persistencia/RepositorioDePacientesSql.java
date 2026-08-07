@@ -9,6 +9,7 @@ import es.hispalis.backend.dominio.paciente.Sexo;
 import java.sql.Date;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.dao.DuplicateKeyException;
@@ -70,6 +71,10 @@ public class RepositorioDePacientesSql implements RepositorioDePacientes {
              WHERE nhc = :nhc
             """;
 
+    /** Ordenado por NHC y no por identidad: el orden de los UUID no significa nada para quien lea el
+     * informe del reconciliador, y el del NHC es el de alta en el laboratorio. */
+    private static final String TODAS_LAS_IDENTIDADES = "SELECT id FROM dominio.paciente ORDER BY nhc";
+
     private final NamedParameterJdbcTemplate jdbc;
 
     public RepositorioDePacientesSql(NamedParameterJdbcTemplate jdbc) {
@@ -105,6 +110,11 @@ public class RepositorioDePacientesSql implements RepositorioDePacientes {
     public Optional<Paciente> buscarPorNhc(Nhc nhc) {
         return jdbc.query(BUSCAR_POR_NHC, new MapSqlParameterSource("nhc", nhc.valor()), FILA_A_PACIENTE).stream()
                 .findFirst();
+    }
+
+    @Override
+    public List<UUID> todasLasIdentidades() {
+        return jdbc.getJdbcTemplate().queryForList(TODAS_LAS_IDENTIDADES, UUID.class);
     }
 
     private static MapSqlParameterSource parametrosDe(Paciente paciente) {

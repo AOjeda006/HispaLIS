@@ -8,6 +8,7 @@
 @../../BibliotecaDocumentacion/stacks/java/convenciones.md
 @../../BibliotecaDocumentacion/stacks/spring/convenciones.md
 @../../BibliotecaDocumentacion/bases-de-datos/sql/convenciones.md
+@../../BibliotecaDocumentacion/fundamentos/datos-distribuidos/convenciones.md
 @../../BibliotecaDocumentacion/patrones/repository-y-dto.md
 @../../BibliotecaDocumentacion/patrones/inyeccion-dependencias.md
 @../../BibliotecaDocumentacion/herramientas/docker.md
@@ -62,8 +63,22 @@ LECTURA    cliente ──GET / search──► DAOs HAPI JPA ──► esquema `
   `GET` inmediato al `Location` devuelve el recurso. Si la proyección fuese asíncrona, el `GET` daría
   `404` y estaríamos incumpliendo FHIR REST. Hay test automatizado que lo prueba.
 - **Riesgo asumido y registrado** (`docs/adr/adr-0002-…`): escribir en el esquema de HAPI dentro de la
-  transacción del dominio ata a sus DAOs. Hace falta un **reconciliador** que recorra el dominio y
-  regenere la proyección — vía de recuperación **oficial**, no script de emergencia.
+  transacción del dominio ata a sus DAOs. Por eso existe el **reconciliador**
+  (`aplicacion/reconciliacion/`, `POST /fhir/$reconciliar`): recorre el dominio, regenera la
+  proyección y detecta **las dos** direcciones —lo que falta y lo que sobra sin agregado detrás—. Es
+  vía de recuperación **oficial**, no script de emergencia, y por defecto solo revisa.
+
+## El bus de salida (§11)
+
+- **El relay del `outbox` publica en Kafka** con **clave de partición = paciente** y esquema Avro
+  versionado en el registro. Vive en `infraestructura/bus/` y no toca el dominio.
+- **Entrega al menos una vez.** No se intenta más: exactamente-una-vez exigiría transacción
+  distribuida. Todo consumidor deduplica por `hechoId`.
+- **Kafka NO alimenta el modelo de lectura.** Si una lectura de la API llega a depender de que un
+  consumidor haya procesado algo, se ha roto *read-your-writes*.
+- **Nunca PHI en el bus**, ni siquiera de paso: un hecho lleva `pacienteId` interno y referencias. Lo
+  garantizan el agregado `Hecho` al construirlo y el esquema Avro al declararlo — un tópico replicado
+  es lo más difícil de borrar que hay el día que alguien ejerza el derecho de supresión.
 
 ## Invariantes de negocio que FHIR no puede expresar (§10)
 

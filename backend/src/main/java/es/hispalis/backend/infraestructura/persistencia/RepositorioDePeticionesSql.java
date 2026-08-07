@@ -49,6 +49,13 @@ public class RepositorioDePeticionesSql implements RepositorioDePeticiones {
             ORDER BY numero_de_peticion, codigo_de_prueba
             """;
 
+    private static final String BUSCAR_DE_PACIENTE = "SELECT " + COLUMNAS
+            + """
+             FROM dominio.peticion
+            WHERE paciente_id = :pacienteId
+            ORDER BY numero_de_peticion, codigo_de_prueba
+            """;
+
     private static final RowMapper<Peticion> FILA_A_PETICION = RepositorioDePeticionesSql::aPeticion;
 
     private final NamedParameterJdbcTemplate jdbc;
@@ -106,6 +113,11 @@ public class RepositorioDePeticionesSql implements RepositorioDePeticiones {
                         .addValue("numeros", numerosDePeticion)
                         .addValue("pacienteId", pacienteId),
                 FILA_A_PETICION);
+    }
+
+    @Override
+    public List<Peticion> buscarDePaciente(UUID pacienteId) {
+        return jdbc.query(BUSCAR_DE_PACIENTE, new MapSqlParameterSource("pacienteId", pacienteId), FILA_A_PETICION);
     }
 
     private static Peticion aPeticion(ResultSet fila, int numeroDeFila) throws SQLException {

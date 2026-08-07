@@ -7,6 +7,7 @@ import es.hispalis.backend.dominio.especimen.NumeroDeAcceso;
 import es.hispalis.backend.dominio.especimen.RepositorioDeEspecimenes;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.dao.DuplicateKeyException;
@@ -30,6 +31,14 @@ public class RepositorioDeEspecimenesSql implements RepositorioDeEspecimenes {
             SELECT id, numero_de_acceso, paciente_id, tipo, estado, motivo_de_rechazo
               FROM dominio.especimen
              WHERE id = :id
+            """;
+
+    private static final String BUSCAR_DE_PACIENTE =
+            """
+            SELECT id, numero_de_acceso, paciente_id, tipo, estado, motivo_de_rechazo
+              FROM dominio.especimen
+             WHERE paciente_id = :pacienteId
+             ORDER BY numero_de_acceso
             """;
 
     private static final RowMapper<Especimen> FILA_A_ESPECIMEN = RepositorioDeEspecimenesSql::aEspecimen;
@@ -65,6 +74,11 @@ public class RepositorioDeEspecimenesSql implements RepositorioDeEspecimenes {
     public Optional<Especimen> buscarPorId(UUID id) {
         return jdbc.query(BUSCAR_POR_ID, new MapSqlParameterSource("id", id), FILA_A_ESPECIMEN).stream()
                 .findFirst();
+    }
+
+    @Override
+    public List<Especimen> buscarDePaciente(UUID pacienteId) {
+        return jdbc.query(BUSCAR_DE_PACIENTE, new MapSqlParameterSource("pacienteId", pacienteId), FILA_A_ESPECIMEN);
     }
 
     private static Especimen aEspecimen(ResultSet fila, int numeroDeFila) throws SQLException {

@@ -24,6 +24,7 @@ import ca.uhn.fhir.rest.server.IResourceProvider;
 import ca.uhn.fhir.rest.server.RestfulServer;
 import ca.uhn.fhir.rest.server.provider.ResourceProviderFactory;
 import ca.uhn.fhir.rest.server.util.ISearchParamRegistry;
+import es.hispalis.backend.fhir.reconciliacion.ProveedorDeReconciliacion;
 import jakarta.persistence.EntityManagerFactory;
 import java.util.List;
 import java.util.Set;
@@ -186,6 +187,7 @@ public class ConfiguracionServidorFhir {
             IValidationSupport soporteDeValidacion,
             DatabaseBackedPagingProvider paginacion,
             List<ProveedorPropio> proveedoresPropios,
+            ProveedorDeReconciliacion proveedorDeReconciliacion,
             TraduccionDeErroresDeDominio traduccionDeErrores,
             IInterceptorService interceptoresDeAlmacenamiento,
             EscrituraSoloPorElNucleo escrituraSoloPorElNucleo) {
@@ -198,6 +200,10 @@ public class ConfiguracionServidorFhir {
         proveedoresPropios.forEach(proveedor -> proveedor.enlazarConSuDao(daos));
         servidor.registerProviders(proveedoresPropios);
         servidor.registerProvider(proveedorDeSistema);
+
+        // La reconciliación es una operación de sistema, no de un recurso: no cuelga de ningún tipo
+        // porque los recorre todos. Va como proveedor suelto, que es como HAPI publica `[base]/$…`.
+        servidor.registerProvider(proveedorDeReconciliacion);
 
         // Sin esto, un invariante de negocio incumplido saldría como 500.
         servidor.registerInterceptor(traduccionDeErrores);

@@ -8,6 +8,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -50,6 +51,15 @@ public class RepositorioDeResultadosSql implements RepositorioDeResultados {
             SELECT DISTINCT peticion_id
               FROM dominio.resultado
              WHERE peticion_id IN (:lineas)
+            """;
+
+    private static final String BUSCAR_DE_PACIENTE =
+            """
+            SELECT id, especimen_id, paciente_id, peticion_id, codigo_de_prueba, valor, unidad_ucum, valor_textual,
+                   medido_en, realizado_por, validado_por, validado_en
+              FROM dominio.resultado
+             WHERE paciente_id = :pacienteId
+             ORDER BY codigo_de_prueba, id
             """;
 
     private static final RowMapper<Resultado> FILA_A_RESULTADO = RepositorioDeResultadosSql::aResultado;
@@ -123,6 +133,11 @@ public class RepositorioDeResultadosSql implements RepositorioDeResultados {
         }
         return Set.copyOf(jdbc.queryForList(
                 LINEAS_CON_RESULTADO, new MapSqlParameterSource("lineas", lineasDePeticion), UUID.class));
+    }
+
+    @Override
+    public List<Resultado> buscarDePaciente(UUID pacienteId) {
+        return jdbc.query(BUSCAR_DE_PACIENTE, new MapSqlParameterSource("pacienteId", pacienteId), FILA_A_RESULTADO);
     }
 
     private static Resultado aResultado(ResultSet fila, int numeroDeFila) throws SQLException {

@@ -27,4 +27,11 @@ public interface RepositorioDePeticiones {
      *     no cambien de orden entre ejecuciones
      */
     List<Peticion> buscarLineasDeVolantes(Collection<String> numerosDePeticion, UUID pacienteId);
+
+    /**
+     * Todo lo de un paciente. Lo pide el reconciliador (§15), que regenera la proyección desde el
+     * dominio y necesita recorrerlo por persona: es lo que le permite ejecutarse sobre un subconjunto
+     * en vez de sobre el laboratorio entero.
+     */
+    List<Peticion> buscarDePaciente(UUID pacienteId);
 }

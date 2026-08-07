@@ -1,6 +1,7 @@
 package es.hispalis.backend.dominio.resultado;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -25,4 +26,11 @@ public interface RepositorioDeResultados {
      * determinaciones en veinte viajes a la base de datos.
      */
     Set<UUID> lineasConResultado(Collection<UUID> lineasDePeticion);
+
+    /**
+     * Todo lo de un paciente. Lo pide el reconciliador (§15), que regenera la proyección desde el
+     * dominio y necesita recorrerlo por persona: es lo que le permite ejecutarse sobre un subconjunto
+     * en vez de sobre el laboratorio entero.
+     */
+    List<Resultado> buscarDePaciente(UUID pacienteId);
 }
