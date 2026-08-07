@@ -82,21 +82,46 @@ cd HispaLIS
 docker compose -f infra/compose/docker-compose.yml up
 ```
 
-Levanta **PostgreSQL + backend + web profesional**, en ese orden y esperando a que cada uno esté
-sano. La primera vez tarda unos minutos: compila el backend con Maven y la web con Angular, y de
-paso **compila la terminología de la guía con SUSHI**, porque el catálogo de pruebas que ofrece la
-pantalla de alta sale del `CodeSystem` que publica la IG y no de una lista aparte (D15).
+Levanta **PostgreSQL + Kafka + registro de esquemas + backend + web profesional**, en ese orden y
+esperando a que cada uno esté sano. La primera vez tarda unos minutos: compila el backend con Maven
+y la web con Angular, y de paso **compila la terminología de la guía con SUSHI**, porque el catálogo
+de pruebas que ofrece la pantalla de alta sale del `CodeSystem` que publica la IG y no de una lista
+aparte (D15).
 
 - **Web profesional:** `http://localhost:4200`
 - **API FHIR:** `http://localhost:8080/fhir` — y también en `http://localhost:4200/fhir`, que es por
   donde entra la web: mismo origen, sin CORS.
+- **Kafka:** `localhost:29092` · **registro de esquemas:** `http://localhost:8085`
+
+**El bus no condiciona a la API.** Con Kafka parado, el laboratorio sigue aceptando escrituras: el
+hecho se queda apuntado en el `outbox`, dentro de la misma transacción que el dominio, y el relay lo
+publica cuando el broker vuelve. Si un `POST` fallara por esto, el outbox no estaría haciendo su
+trabajo — que es exactamente para lo que está.
 
 ```bash
 # comprobar que el servidor declara R5
 curl -s http://localhost:8080/fhir/metadata | jq '.fhirVersion'   # → "5.0.0"
 
-# empezar de cero (la base se conserva entre arranques en un volumen)
+# los cuatro tópicos y sus esquemas registrados
+curl -s http://localhost:8085/subjects | jq
+curl -s http://localhost:8085/config/lab.resultados.v1-value | jq '.compatibilityLevel'  # → "BACKWARD"
+
+# empezar de cero (la base y el log de Kafka se conservan entre arranques en volúmenes)
 docker compose -f infra/compose/docker-compose.yml down -v
+```
+
+**Recuperación.** Si alguna vez el dominio y lo publicado dejan de coincidir, la vía oficial es
+`$reconciliar`, que por defecto **solo mira**:
+
+```bash
+# qué está divergente, sin tocar nada
+curl -s -X POST http://localhost:8080/fhir/\$reconciliar \
+  -H 'Content-Type: application/fhir+json' -d '{"resourceType":"Parameters"}' | jq
+
+# y arreglarlo
+curl -s -X POST http://localhost:8080/fhir/\$reconciliar \
+  -H 'Content-Type: application/fhir+json' \
+  -d '{"resourceType":"Parameters","parameter":[{"name":"aplicar","valueBoolean":true}]}' | jq
 ```
 
 **La base arranca vacía.** No es un descuido: la pantalla de alta de petición busca al paciente por

@@ -1,10 +1,9 @@
-# La pila del hito 1: PostgreSQL + backend + web profesional.
+# La pila: PostgreSQL + Kafka + registro de esquemas + backend + web profesional.
 #
 #   docker compose -f infra/compose/docker-compose.yml up
 #
 # Todo lo que hace falta para recorrer el circuito de extremo a extremo desde un clon recién hecho.
-# Fuera del hito 1 quedan Kafka, Keycloak y el servidor de terminología (hito 2): sus carpetas están
-# en `infra/` pero vacías a propósito.
+# Quedan fuera Keycloak y el servidor de terminología, que son los ítems 32 y 34.
 
 name: hispalis
 
@@ -28,6 +27,87 @@ services:
       timeout: 5s
       retries: 20
 
+  kafka:
+    # KRaft, sin ZooKeeper: es lo que Kafka 3.9 recomienda y lo único que existe en Kafka 4.
+    # La versión acompaña a la del cliente que usa el backend (§12): cliente y broker se mueven
+    # juntos o el protocolo deja de entenderse.
+    image: confluentinc/cp-kafka:7.9.8
+    environment:
+      CLUSTER_ID: hispalis-kraft-000000000
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:29093'
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      # Dos escuchas porque hay dos redes: `INTERNA` es por donde entra el backend desde dentro del
+      # compose y `LOCAL` la que se publica al equipo. Con una sola, el broker anunciaría a los
+      # clientes de fuera una dirección que solo existe dentro — el fallo clásico de Kafka en Docker,
+      # que además no aparece al conectar sino al pedir metadatos.
+      KAFKA_LISTENERS: 'INTERNA://kafka:9092,LOCAL://0.0.0.0:29092,CONTROLLER://kafka:29093'
+      KAFKA_ADVERTISED_LISTENERS: 'INTERNA://kafka:9092,LOCAL://localhost:29092'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'INTERNA:PLAINTEXT,LOCAL:PLAINTEXT,CONTROLLER:PLAINTEXT'
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNA
+      # Un solo nodo: todo lo que por defecto asume tres réplicas hay que bajarlo a una.
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      # Los tópicos los crea `kafka-topics` con sus particiones y su retención. Con la creación
+      # automática encendida, un tópico mal escrito en un cliente nacería solo, con una partición y
+      # la configuración por defecto, y nadie se enteraría hasta que el orden dejara de cumplirse.
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'false'
+    ports:
+      - '29092:29092'
+    volumes:
+      - datos-kafka:/var/lib/kafka/data
+    healthcheck:
+      test: ['CMD', 'kafka-broker-api-versions', '--bootstrap-server', 'kafka:9092']
+      interval: 10s
+      timeout: 10s
+      start_period: 60s
+      retries: 20
+
+  # Los cuatro tópicos de §11, creados una vez y con su configuración explícita. Es un servicio de
+  # arranque, no un demonio: crea y termina, y quien depende de él espera a que termine bien.
+  kafka-topicos:
+    image: confluentinc/cp-kafka:7.9.8
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ['/bin/bash', '-c']
+    command:
+      - |
+        set -euo pipefail
+        for topico in lab.peticiones.v1 lab.especimenes.v1 lab.resultados.v1 lab.informes.v1; do
+          # Tres particiones para que la clave de reparto —el paciente— signifique algo: con una
+          # sola, el orden saldría bien por accidente y nadie notaría que la clave está mal puesta.
+          # `--if-not-exists` porque este servicio vuelve a correr en cada `up`.
+          kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists \
+            --topic "$$topico" --partitions 3 --replication-factor 1 \
+            --config retention.ms=604800000
+        done
+        kafka-topics --bootstrap-server kafka:9092 --list
+
+  registro-de-esquemas:
+    image: confluentinc/cp-schema-registry:7.9.8
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: registro-de-esquemas
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: 'kafka:9092'
+      SCHEMA_REGISTRY_LISTENERS: 'http://0.0.0.0:8085'
+      # Compatibilidad hacia atrás, que es lo que exige §11. Es además el valor por defecto de
+      # Confluent, y se escribe igual: un contrato que depende de un valor por defecto es un
+      # contrato que se pierde el día que alguien cambie la imagen.
+      SCHEMA_REGISTRY_SCHEMA_COMPATIBILITY_LEVEL: backward
+    ports:
+      - '8085:8085'
+    depends_on:
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'curl', '-fsS', 'http://localhost:8085/subjects']
+      interval: 10s
+      timeout: 5s
+      start_period: 40s
+      retries: 20
+
   backend:
     build:
       # El contexto es la raíz del repositorio, compartido con la web.
@@ -37,12 +117,21 @@ services:
       HISPALIS_BD_URL: jdbc:postgresql://postgres:5432/hispalis
       HISPALIS_BD_USUARIO: hispalis
       HISPALIS_BD_CLAVE: hispalis
+      HISPALIS_KAFKA: 'kafka:9092'
+      HISPALIS_REGISTRO_ESQUEMAS: 'http://registro-de-esquemas:8085'
     ports:
       # Se publica aunque la web no lo necesite —le llega por el proxy—, porque el circuito se
       # recorre con `curl` y el validador oficial también entra por aquí.
       - '8080:8080'
     depends_on:
       postgres:
+        condition: service_healthy
+      # El bus NO condiciona el arranque de la API: para eso está el outbox. Lo que sí se espera es
+      # a que existan los tópicos, porque si el backend arrancara antes, el relay publicaría contra
+      # un tópico inexistente y se pasaría los primeros segundos reintentando para nada.
+      kafka-topicos:
+        condition: service_completed_successfully
+      registro-de-esquemas:
         condition: service_healthy
     healthcheck:
       # `metadata` es la prueba honesta de que está listo: contesta cuando el servidor FHIR está
@@ -66,3 +155,6 @@ services:
 
 volumes:
   datos-postgres:
+  # El log de Kafka sobrevive a un `down`: sin volumen, parar la pila borraría lo publicado y el
+  # `_schemas` del registro con ello, que es donde vive el historial de versiones de los contratos.
+  datos-kafka:
