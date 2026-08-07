@@ -630,6 +630,45 @@ aceptable bajo ninguna de las tres opciones. Si algún día se implementa (a), e
   (`Thyroxine (T4) free…`). Como no se puede alterar el nombre publicado por LOINC, la tabla va
   entera. Un `ConceptMap` es datos, no lógica repetida: escribirlo explícito no es duplicación.
 
+### Decisiones tomadas al montar el servidor de terminología (ítems 32 y 33)
+
+- **2026-08-07 — La imagen del servidor no se construye.** `hapiproject/hapi:v8.10.0-3`, de serie, con
+  su configuración montada. Construir una imagen propia sería el primer paso hacia depender de algo
+  suyo; D14 dice justo lo contrario. Se fija la **misma línea 8.10** que la librería del backend: una
+  divergencia de versión entre cliente y servidor se paga en las formas de `$translate`.
+- **2026-08-07 — Solo la API estándar, también para cargar.** Los subconjuntos entran por
+  `PUT [base]/[tipo]/[id]`. **No se usa `$upload-external-code-system`**, que es la operación con la
+  que HAPI carga LOINC de fábrica: usarla ataría la carga al producto y haría falsa D14.
+- **2026-08-07 — El subconjunto curado se deduce de la guía.** `cargador/curado.py` recorre **todos**
+  los recursos que produce SUSHI y recoge cada pareja `system`/`code`, a cualquier profundidad. Una
+  lista escrita a mano sería la lista paralela del invariante 4 en el peor sitio posible. Se declara
+  `content: fragment`, que es lo que es.
+- **2026-08-07 — La versión de cada *release* se declara.** LOINC **2.82** (del nombre del paquete),
+  THO **7.3.0** (de su `package.json`) y, para SNOMED, la URI canónica
+  `http://snomed.info/sct/{módulo}/version/{AAAAMMDD}` **leída del propio release** —del *refset* de
+  dependencia de módulos—, no escrita a mano. Sin versión declarada, los `display` dejan de ser
+  reproducibles.
+- **2026-08-07 — El `display` español manda en `CodeableConcept.text`.** El del catálogo local va en
+  `coding.display` y en `text`, que es lo que enseña quien renderiza; el del LOINC llega en inglés y
+  se copia intacto (ADR-0009). Un informe español con el nombre largo de LOINC es un fallo de
+  producto (D7), y esto lo cierra sin alterar un campo con licencia.
+- **2026-08-07 — El backend degrada; el motor no.** Sin servidor, el laboratorio publica el código sin
+  nombre y no rechaza nada: el nombre es presentación y el código es el dato, y una terminología
+  caída no puede impedir que se registre un resultado. El motor hace lo contrario y también acierta:
+  lo que no puede traducir va a la bandeja de errores, que **es reprocesable** — aceptar un código sin
+  comprobarlo metería en el laboratorio una prueba que quizá no oferta, y eso no se deshace.
+- **2026-08-07 — Una prueba fuera del catálogo es `422`, no `400`.** El recurso está bien formado y el
+  código bien escrito; lo que pasa es que el laboratorio no oferta ese análisis. Es una regla de
+  negocio, y es además el código que FHIR reserva para un recurso que incumple su perfil.
+- **2026-08-07 — El `$expand` obliga a encender el índice de texto completo.** Sin Hibernate Search,
+  HAPI contesta `HSEARCH800001` a `$expand` y responde bien a las otras tres. El índice va a disco en
+  un volumen, no a la base. Es lo contrario que en el backend, donde sigue apagado (ADR-0011): allí no
+  hay búsqueda de texto libre en el alcance.
+- **2026-08-07 — El servicio de terminología no lleva `healthcheck`.** Su imagen es *distroless*: un
+  `test: [CMD, curl, …]` fallaría por no existir `curl`, no por estar el servidor mal. Quien necesita
+  terminología espera a que **termine el cargador**, que además es la condición correcta — un servidor
+  levantado y vacío responde `$validate-code` con «no» a todo.
+
 ## Estado actual
 
 ### De dónde se parte — hito 1 cerrado
@@ -647,7 +686,7 @@ cinco invariantes de §10 que el hito 1 alcanza viven en el núcleo de dominio, 
 | `ig/` | 9 perfiles, extensión `codigo-ine`, `CodeSystem` de 21 pruebas, `ConceptMap` a LOINC, 4 `ValueSet` y 18 ejemplos — **publicada** | `npx fsh-sushi .` → **0 errores, 0 warnings**; en CI, IG Publisher y validador oficial **en verde**; sitio desplegado comprobado (19 enlaces de la portada, `lang="es"`, los tres avisos) |
 | `backend/` | Servidor JPA empotrado · **los cinco agregados del hito 1** sobre el esquema `dominio` con Flyway · circuito completo `Patient` → `ServiceRequest` → `Specimen` → `Observation` → `DiagnosticReport` · concurrencia optimista con `If-Match` → `412` · búsqueda filtrada y paginada por `Bundle.link` · los siete caminos de error, cada uno con su código y su `OperationOutcome` · el resultado conserva cuándo se midió, quién lo hizo y entre qué cifras es normal · **búsqueda por `POST _search` sin datos del paciente en la URL**, enlace de paginación válido detrás de un proxy, **la transacción ya no se salta el núcleo** y **el informe no sale con el volante a medias** | `./mvnw verify` → **BUILD SUCCESS, 73 tests**; validador oficial sobre lo que publica el circuito → **0 errores** |
 | `web-profesional/` | Angular 22.1 + vitest + angular-eslint · capa de presentación FHIR · **cliente HTTP** (búsqueda por `POST _search`, paginación por el enlace del servidor, errores traducidos del `OperationOutcome`) · **alta de petición y consulta de informe** con sus ViewModels | `npm run lint`, `npm test` (**66 tests**), `npm run build`; API recorrida en vivo por el proxy, primero con `-Parranque-local` y después contra el `compose` |
-| `simuladores/` | **Generador de datos sintéticos completo**: terminología leída de la guía, **rangos de referencia leídos del fichero que publica el laboratorio**, identificadores españoles con dígito de control, paneles correlacionados, reflejas y muestras rechazadas | `ruff check`/`format`, `pytest` → **77 tests**; validador oficial sobre el corpus generado → **0 errores** |
+| `simuladores/` | **Generador de datos sintéticos completo**: terminología leída de la guía *(desde el ítem 33, preguntada al servidor)*, **rangos de referencia leídos del fichero que publica el laboratorio**, identificadores españoles con dígito de control, paneles correlacionados, reflejas y muestras rechazadas | `ruff check`/`format`, `pytest` → **77 tests**; validador oficial sobre el corpus generado → **0 errores** |
 | `infra/` | **`compose` del hito 1**: PostgreSQL 14 + backend + web tras nginx, encadenados por *healthcheck* | `docker compose … up` desde una copia limpia del árbol commiteado, y el circuito recorrido de extremo a extremo contra la pila |
 | `integracion/`, `app-ciudadano/` | **Sin andamiar a propósito** — se andamian en los ítems 20 y 38 | conservan su guarda de auto-omisión, y es lo único que su CI ejercita |
 
@@ -658,7 +697,7 @@ cinco invariantes de §10 que el hito 1 alcanza viven en el núcleo de dominio, 
 > `integracion`; `app-ciudadano` la conserva. Se empuja a `origin/main` por **SSH**: el PAT de HTTPS
 > no tiene *scope* `workflow` y GitHub rechaza el push de `.github/workflows/`.
 
-### Dónde estamos ahora — hito 2, ítem 32
+### Dónde estamos ahora — hito 2, ítem 33 a medias
 
 **Los tres huecos de dominio están cerrados (2026-08-06): ítems 17, 18 y 19.** Cada uno con su rojo
 en el historial —`81fdd0c`, `80b9ebf`, `abb1ddf`— y su verde detrás. `./mvnw verify` →
@@ -729,7 +768,23 @@ Verificado **contra un Kafka de verdad**, en proceso: el circuito escrito con el
 devolviendo `201`, no se publica nada, y al levantar el broker se entregan los cinco hechos con
 tópico. Reentregados dos veces más, el consumidor idempotente acaba igual.
 
-**El primer ítem no completado es el 32 — el servidor de terminología en el `compose`.**
+**Y el servidor de terminología está en pie (2026-08-07): ítem 32, y el 33 a medias.** Lo que hay
+encima de lo anterior:
+
+- **`terminologia/`**, componente nuevo: la imagen de HAPI **tal cual** (`hapiproject/hapi:v8.10.0-3`,
+  la misma línea que la librería del backend) más un cargador en Python **sin dependencias**, que
+  sube los subconjuntos curados por `PUT` de la API estándar. Ni una operación propietaria.
+- **Cargado con LOINC 2.82 y THO 7.3.0**, y con el `CodeSystem`, los `ValueSet` y el `ConceptMap` del
+  catálogo local. El subconjunto **se deduce recorriendo la guía entera**, no se escribe a mano: 22
+  códigos LOINC y 5 sistemas de THO salieron solos de los perfiles y los mapas.
+- **Las cuatro operaciones respondiendo**: `$expand`, `$lookup`, `$validate-code` y `$translate`,
+  ejercitadas en vivo contra el contenedor.
+- **Backend, motor y generador resuelven contra él.** El `CatalogoLeidoDeLaGuia` del motor
+  **desaparece**; el `terminologia.py` del generador ya no abre un fichero; el backend gana un puerto
+  `Terminologia` que **no tiene** método para pedir el catálogo entero, a propósito.
+- **El nombre de la prueba llega en español hasta el recurso publicado**, en `coding.display` y en
+  `CodeableConcept.text`; el `display` del LOINC se copia sin tocarlo, en inglés, porque su licencia
+  lo exige (ADR-0009).
 
 **Nada más se ha adelantado.** `app-ciudadano/` sigue sin andamiar, el motor **sigue sin estar en el
 `compose`**, y no hay ni una línea de Keycloak.
@@ -1147,8 +1202,8 @@ tópico. Reentregados dos veces más, el consumidor idempotente acaba igual.
   - `interoperabilidad/smart-on-fhir/convenciones.md` y `herramientas/autenticacion.md` en
     **`backend/CLAUDE.md`** al empezar Keycloak (ítem 34). **`app-ciudadano/CLAUDE.md` necesita el
     primero también** — hoy solo importa Dart, Flutter, almacenamiento local, MVVM y UX.
-  - `interoperabilidad/terminologia/convenciones.md` en **`backend/CLAUDE.md`** al montar el servidor
-    de terminología (ítem 32).
+  - ~~`interoperabilidad/terminologia/convenciones.md` en **`backend/CLAUDE.md`**~~ — **importado el
+    2026-08-07** (ítem 32), y también en el `terminologia/CLAUDE.md` nuevo.
   - **`integracion/CLAUDE.md` ya está completo** —verificado—: importa `hl7-v2`, `integracion`,
     `datos-distribuidos`, Java y Spring. No hay que tocarlo al andamiar.
 - ⚠️ **Cruzar la tabla 0354 entre V2.5 y V2.5.1 ANTES de generar código** (ítem 21). Su contenido
@@ -1531,14 +1586,23 @@ tópico. Reentregados dos veces más, el consumidor idempotente acaba igual.
 
 ### Terminología
 
-- [ ] **32 — Servidor de terminología en el `compose` (D14).**
+- [x] **32 — Servidor de terminología en el `compose` (D14).** *(2026-08-07)*
   *Criterio:* servidor de terminología de HAPI como **servicio aparte**, cargado con LOINC 2.82 y THO
   7.3.0 (archivados en la biblioteca), subconjuntos curados de SNOMED español y **el `CodeSystem` y
   el `ConceptMap` del catálogo local**. El backend lo consulta **por URL configurable**, y cambiarla
   por la de otro servidor es el único cambio necesario: es el argumento con el que se tomó D14 y hay
   que poder demostrarlo, no solo afirmarlo. Ningún fichero de terminología licenciada en el repo.
+  *Hecho:* `terminologia/` con la imagen de HAPI **sin construir** (`hapiproject/hapi:v8.10.0-3`) y
+  su cargador en Python, que sube los subconjuntos **por `PUT` de la API estándar** — ni una
+  operación propietaria, ni `$upload-external-code-system`. El subconjunto **se deduce de la guía**,
+  no se escribe. SNOMED: el camino está implementado y probado contra una mini-release RF2 sintética,
+  pero **no se ha cargado la Edición Española** — no está en este equipo y no se puede redistribuir
+  (ver *Notas / riesgos*).
 
 - [ ] **33 — Los tres contratos, y la web deja de empaquetar el catálogo.**
+  *Hecho (2026-08-07):* las **cuatro** operaciones respondiendo contra el HAPI del `compose`, y
+  **backend, motor y generador resolviendo contra él** en vez de contra ficheros. Falta la mitad de
+  la web y los tres códigos SNOMED del SNS.
   *Criterio:* `$expand`, `$validate-code` y `$translate` funcionando, con test por cada uno:
   `$expand` del `ValueSet` de pruebas del catálogo, `$validate-code` **rechazando** un código que no
   está, y `$translate` devolviendo el LOINC de un código local por el `ConceptMap` publicado —
@@ -1767,7 +1831,29 @@ tópico. Reentregados dos veces más, el consumidor idempotente acaba igual.
   la guía (D15), no una lista paralela, pero se congela al construir la web: añadir una prueba al
   catálogo obliga a reconstruirla. En el hito 2, con el servidor de terminología, pasa a pedirse con
   `$expand` y el problema desaparece; hasta entonces es lo más cercano a la fuente que puede hacer un
-  cliente que no tiene servidor de terminología al que preguntar. **Se cierra en el ítem 33.**
+  cliente que no tiene servidor de terminología al que preguntar. **Sigue abierta**: el servidor ya
+  está en pie y las otras tres piezas resuelven contra él (ítems 32 y 33), pero **la web no se ha
+  tocado** — es la mitad que le queda al ítem 33, junto con los tres códigos SNOMED del SNS en
+  `identifier.type`. Lo que hay que decidir al hacerlo es **por dónde entra**: el navegador habla con
+  el mismo origen a través de nginx, así que o el proxy publica una ruta hacia el servidor de
+  terminología, o se decide que el catálogo lo sirva el laboratorio.
+- **SNOMED CT Edición Española no está cargada.** El camino está entero —el cargador lee RF2, deduce
+  la versión del *refset* de dependencia de módulos, elige el término preferente en español y falla si
+  un concepto está retirado—, y está probado contra una mini-release sintética. Lo que falta es la
+  release: **es gratuita previo registro ante el Ministerio, pero no se puede redistribuir**, así que
+  no puede vivir en el repositorio ni descargarse en la CI. Sin ella, `HISPALIS_SNOMED` va vacío y el
+  cargador **avisa en voz alta** listando los conceptos que se quedan sin resolver, en vez de dejar el
+  servidor a medias en silencio. Consecuencia concreta: los tipos de muestra y los motivos de rechazo
+  validan contra el `ValueSet` de la guía, que sí está cargado, pero **un `$lookup` de un código
+  SNOMED no devuelve nombre**.
+- **El arnés de terminología de los tests lo hemos escrito nosotros, y eso tiene un límite.** Los
+  tests del motor y del generador corren contra un servidor de pega cargado con los artefactos de la
+  guía: es rápido y no necesita Docker, pero **no puede demostrar que el cliente hable como el
+  servidor real espera** — solo como uno cree que espera. El hueco se cierra con
+  `ContraElServidorRealTest`, que ejercita las cuatro operaciones contra el HAPI del `compose` y está
+  **apagado salvo que se le diga dónde mirar** (`HISPALIS_TERMINOLOGIA_REAL`). Si el arnés y el
+  servidor divergen, ese test es el único que lo va a notar: hay que acordarse de correrlo al subir la
+  versión de HAPI.
 - ~~**El invariante completo del informe está a medias.**~~ — **cerrado el 2026-08-06** (ítem 16), y
   el rojo está en el historial (`3a9bd7a`): un volante con glucosa y creatinina, solo la glucosa
   informada, y el `DiagnosticReport` con esa sola glucosa devolvía `201`. Es el más dañino de los tres

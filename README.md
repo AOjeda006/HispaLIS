@@ -62,7 +62,8 @@ degenerar en una historia clínica electrónica en miniatura.
 | `web-profesional/` | Web del laboratorio | Angular |
 | `app-ciudadano/` | App de resultados para el paciente | Flutter |
 | `simuladores/` | Generador de datos sintéticos, HIS y analizador | Python |
-| `infra/` | Compose, Keycloak, Kafka, terminología | Docker / YAML |
+| `terminologia/` | Servidor de terminología y su cargador | HAPI FHIR + Python |
+| `infra/` | Compose, Keycloak, Kafka | Docker / YAML |
 | `docs/` | Diseño, plan y ADR | Markdown |
 
 Cada subproyecto tiene su propio `CLAUDE.md` con las convenciones de su stack (ver `AGENTS.md`).
@@ -82,16 +83,30 @@ cd HispaLIS
 docker compose -f infra/compose/docker-compose.yml up
 ```
 
-Levanta **PostgreSQL + Kafka + registro de esquemas + backend + web profesional**, en ese orden y
-esperando a que cada uno esté sano. La primera vez tarda unos minutos: compila el backend con Maven
-y la web con Angular, y de paso **compila la terminología de la guía con SUSHI**, porque el catálogo
-de pruebas que ofrece la pantalla de alta sale del `CodeSystem` que publica la IG y no de una lista
-aparte (D15).
+Levanta **PostgreSQL + Kafka + registro de esquemas + servidor de terminología + backend + web
+profesional**, en ese orden y esperando a que cada uno esté listo. La primera vez tarda unos minutos:
+compila el backend con Maven y la web con Angular.
+
+⚠️ **Dos cosas viven fuera del repositorio y hay que tenerlas antes de levantar:**
+
+1. **La guía compilada** — `npx fsh-sushi .` dentro de `ig/`. No se versiona: la produce SUSHI, y con
+   ella se carga el catálogo de pruebas del servidor de terminología (D15).
+2. **Las *releases* de terminología** archivadas en `BibliotecaDocumentacion`, que se asume clonada
+   como carpeta hermana (`HISPALIS_RELEASES` apunta a otro sitio). **SNOMED CT Edición Española no se
+   redistribuye**: hay que descargarla con la licencia propia y señalarla con `HISPALIS_SNOMED`; sin
+   ella, el cargador avisa de qué conceptos se quedan sin resolver y sigue.
 
 - **Web profesional:** `http://localhost:4200`
 - **API FHIR:** `http://localhost:8080/fhir` — y también en `http://localhost:4200/fhir`, que es por
   donde entra la web: mismo origen, sin CORS.
+- **Servidor de terminología:** `http://localhost:8086/fhir`
 - **Kafka:** `localhost:29092` · **registro de esquemas:** `http://localhost:8085`
+
+**La terminología sí condiciona el arranque del laboratorio**, al revés que el bus: el laboratorio
+valida códigos y resuelve `display` contra ella desde la primera escritura, y arrancar antes de que
+esté cargada significaría publicar unos recursos con nombre y otros sin él. Lo que se espera no es a
+que el servidor conteste, sino a que el **cargador termine**: un servidor levantado y vacío responde
+`$validate-code` con «no» a todo, que es la peor forma de estar disponible.
 
 **El bus no condiciona a la API.** Con Kafka parado, el laboratorio sigue aceptando escrituras: el
 hecho se queda apuntado en el `outbox`, dentro de la misma transacción que el dominio, y el relay lo
@@ -105,6 +120,14 @@ curl -s http://localhost:8080/fhir/metadata | jq '.fhirVersion'   # → "5.0.0"
 # los cuatro tópicos y sus esquemas registrados
 curl -s http://localhost:8085/subjects | jq
 curl -s http://localhost:8085/config/lab.resultados.v1-value | jq '.compatibilityLevel'  # → "BACKWARD"
+
+# la terminología, por las cuatro operaciones estándar (nada propietario)
+BASE=http://localhost:8086/fhir
+IG=https://aojeda006.github.io/HispaLIS/fhir
+curl -s "$BASE/ValueSet/\$expand?url=$IG/ValueSet/pruebas-del-catalogo&count=0" | jq '.expansion.total'
+curl -s "$BASE/CodeSystem/\$lookup?system=$IG/CodeSystem/catalogo-pruebas&code=GLU" | jq
+curl -s "$BASE/ValueSet/\$validate-code?url=$IG/ValueSet/pruebas-del-catalogo&system=$IG/CodeSystem/catalogo-pruebas&code=NOEXISTE" | jq '.parameter[0]'
+curl -s "$BASE/ConceptMap/\$translate?url=$IG/ConceptMap/catalogo-a-loinc&system=$IG/CodeSystem/catalogo-pruebas&sourceCode=GLU&targetSystem=http://loinc.org" | jq
 
 # empezar de cero (la base y el log de Kafka se conservan entre arranques en volúmenes)
 docker compose -f infra/compose/docker-compose.yml down -v

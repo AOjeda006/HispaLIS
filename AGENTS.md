@@ -64,7 +64,8 @@ es `true`, **no commitees** y avisa (ver `CLAUDE.md` §3).
 |---|---|---|---|---|
 | `ig/` | `npx fsh-sushi .` + `java -jar publisher.jar -ig . -no-sushi` | validador oficial sobre `fsh-generated/resources/` | `npx fsh-sushi .` con **0 warnings** | — (salida en `ig/output/`) |
 | `backend/` | `./mvnw -q package` | `./mvnw verify` | `./mvnw spotless:check` · `./mvnw spotless:apply` | `./mvnw spring-boot:run` |
-| `integracion/` | *(sin andamiar — hito 2)* | | | |
+| `integracion/` | `./mvnw -q package` | `./mvnw verify` | `./mvnw spotless:check` · `./mvnw spotless:apply` | `./mvnw spring-boot:run` |
+| `terminologia/` | *(la imagen del servidor no se construye)* | `pytest` | `ruff check . && ruff format --check .` | `docker compose … up -d terminologia terminologia-carga` |
 | `web-profesional/` | `npm run build` | `npm test` | `npm run lint` · `npm run format` | `npm start` |
 | `app-ciudadano/` | *(sin andamiar — hito 2)* | | | |
 | `simuladores/` | — | `pytest` | `ruff check . && ruff format --check .` | `python -m generador --seed 42` |
@@ -78,7 +79,12 @@ Herramientas fijadas al andamiar (ítem 1), y lo que hay que saber de cada una:
 - **`web-profesional/`** — `ng lint` (angular-eslint) más `prettier --check`. Los tests corren con
   **vitest sobre jsdom**, el ejecutor por defecto de Angular 22: **no es Karma**, y
   `--browsers=ChromeHeadless` no es una opción válida. Requiere **Node 24**.
-- **`simuladores/`** — `ruff` para *lint* y formato. Requiere `pip install -e ".[dev]"` previo.
+- **`simuladores/`** — `ruff` para *lint* y formato. Requiere `pip install -e ".[dev]"` previo. Los
+  tests levantan su propio servidor de terminología, pero **generar de verdad necesita el del
+  `compose`**: `python -m generador` falla si no lo encuentra, y hace bien.
+- **`terminologia/`** — `ruff` y `pytest`, igual que `simuladores/`. El servidor es la imagen de HAPI
+  **sin construir**; lo que se construye es el cargador. Las *releases* de LOINC, THO y SNOMED viven
+  **fuera del repositorio** (`HISPALIS_RELEASES`, `HISPALIS_SNOMED`).
 - **`ig/`** — SUSHI por `npx`, sin instalación global. **SUSHI ya no genera `ig.ini`** (retiró la
   propiedad `template`), así que `ig/ig.ini` se mantiene a mano y **sí está versionado**.
 
