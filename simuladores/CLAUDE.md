@@ -18,8 +18,14 @@
 
 ## Reglas del generador (las que lo hacen útil o inútil)
 
-- **Consume el mismo `CodeSystem` y `ConceptMap` que el sistema, nunca una lista paralela.** Si se
-  desvía, genera datos que solo valen para sí mismo — y el `ConceptMap` deja de estar probado.
+- **Resuelve la terminología contra el mismo servidor que el backend y el motor** (D14, D15), nunca
+  una lista paralela ni un fichero propio. Si se desvía, genera datos que solo valen para sí mismo —
+  y el `ConceptMap` deja de estar probado. `$expand` da el catálogo, `$lookup` el nombre en español y
+  la unidad UCUM, `$translate` el LOINC, `$validate-code` los tipos de muestra. La URL sale de
+  `HISPALIS_TERMINOLOGIA` o de `--terminologia`; los tests levantan el suyo en `tests/conftest.py`,
+  cargado con lo que produce SUSHI.
+- **Sin servidor no se genera.** Un corpus con un catálogo a medias es peor que ninguno: nadie se
+  entera hasta mirarlo.
 - **Lo difícil no es la demografía, son los resultados clínicamente verosímiles:** paneles
   correlacionados (un hemograma cuyos campos cuadren entre sí), valores dentro y fuera de rango, y
   disparos de reflejas que ejerciten `Observation.triggeredBy` (TSH alterado → T4 libre).
@@ -52,5 +58,8 @@ python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 pytest
 ruff check . && ruff format --check .
+
+# Generar necesita el servidor de terminología levantado y cargado (D14):
+docker compose -f ../infra/compose/docker-compose.yml up -d terminologia terminologia-carga
 python -m generador --seed 42 --pacientes 100
 ```

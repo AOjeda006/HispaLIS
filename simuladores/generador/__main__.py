@@ -54,8 +54,8 @@ def construir_analizador() -> argparse.ArgumentParser:
         "--terminologia",
         default=None,
         help=(
-            "Directorio con los recursos que produce SUSHI. Por defecto, "
-            "«ig/fsh-generated/resources» del propio repositorio."
+            "Base FHIR del servidor de terminología. Por defecto, lo que indique "
+            "HISPALIS_TERMINOLOGIA, o «http://localhost:8086/fhir», que es el del compose."
         ),
     )
     return analizador
@@ -88,7 +88,7 @@ def main(argumentos: Sequence[str] | None = None) -> int:
         return 2
     except TerminologiaNoDisponibleError as error:
         # No se genera con un catálogo a medias ni con uno inventado: mejor no generar nada.
-        print(f"Falta la terminología de la guía: {error}", file=sys.stderr)
+        print(f"No hay terminología con la que generar: {error}", file=sys.stderr)
         return 3
 
     corpus = generar(configuracion, catalogo)

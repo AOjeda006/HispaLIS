@@ -8,9 +8,10 @@ on:
     paths:
       - 'simuladores/**'
       - '.github/workflows/ci-simuladores.yml'
-      # El generador lee su terminología del FSH de la guía (D15): consume el MISMO `CodeSystem` y
-      # el MISMO `ConceptMap` que el sistema, no una lista paralela. Sin esta ruta, añadir una
-      # prueba al catálogo no dispararía los tests que comprueban que el generador la conoce.
+      # El generador resuelve su terminología contra el servidor (D14, D15): consume el MISMO
+      # catálogo que el sistema, no una lista paralela. El servidor de los tests se carga con lo que
+      # produce SUSHI, así que sin esta ruta, añadir una prueba al catálogo no dispararía los tests
+      # que comprueban que el generador la conoce.
       - 'ig/input/fsh/**'
       # Y los rangos de referencia del mismo modo: el generador los lee del fichero que publica el
       # laboratorio, en el árbol del backend, para sortear valores verosímiles. Sin esta ruta,
@@ -46,10 +47,11 @@ jobs:
         with:
           node-version: '22'
 
-      # El catálogo de pruebas no está versionado: lo produce SUSHI a partir del FSH. Los tests del
-      # generador fallan a propósito si falta, en vez de arrancar con un catálogo a medias, así que
-      # este paso no es opcional. NO se construye la IG entera: eso es cosa de `ci-ig` y cuesta
-      # minutos, mientras que los artefactos de conformidad salen en segundos.
+      # El catálogo de pruebas no está versionado: lo produce SUSHI a partir del FSH, y con él se
+      # carga el servidor de terminología que levanta `tests/conftest.py`. Los tests del generador
+      # fallan a propósito si falta, en vez de arrancar con un catálogo a medias, así que este paso
+      # no es opcional. NO se construye la IG entera: eso es cosa de `ci-ig` y cuesta minutos,
+      # mientras que los artefactos de conformidad salen en segundos.
       - name: Compilar la terminología de la guía
         working-directory: ig
         run: npx --yes fsh-sushi .

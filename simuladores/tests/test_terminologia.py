@@ -1,9 +1,13 @@
-"""Pruebas de la terminología leída de la guía.
+"""Pruebas de la terminología preguntada al servidor.
 
 Lo que se comprueba aquí no es que el código funcione, sino que **la fuente sea la correcta**: que
-el catálogo salga de los artefactos que publica la IG y no de una lista escrita en Python. Es el
-invariante D15, y su forma de romperse es silenciosa —todo sigue pasando, con el catálogo de hace
-tres meses—, así que el test tiene que mirar la procedencia y no solo el resultado.
+el catálogo salga de la misma autoridad que usan el backend y el motor y no de una lista escrita en
+Python. Es el invariante D15, y su forma de romperse es silenciosa —todo sigue pasando, con el
+catálogo de hace tres meses—, así que el test tiene que mirar la procedencia y no solo el resultado.
+
+El servidor contra el que corren estos tests lo levanta `conftest.py` y responde las cuatro
+operaciones estándar. Que sea uno de prueba no cambia lo que se prueba: el generador habla FHIR por
+HTTP y no abre un solo fichero.
 """
 
 from __future__ import annotations
@@ -13,12 +17,13 @@ import pytest
 from generador.terminologia import (
     UNIDADES_IMPRESAS,
     TerminologiaNoDisponibleError,
+    admite_tipo_de_muestra,
     cargar_catalogo,
     cargar_tipos_de_muestra,
 )
 
 
-def test_el_catalogo_sale_de_los_artefactos_de_la_guia() -> None:
+def test_el_catalogo_sale_del_servidor_de_terminologia() -> None:
     catalogo = cargar_catalogo()
 
     assert catalogo.system.endswith("/CodeSystem/catalogo-pruebas")
@@ -78,8 +83,25 @@ def test_los_tipos_de_muestra_salen_del_valueset_de_la_guia() -> None:
     assert "122555007" in tipos, "sangre venosa, que es de la que sale casi todo"
 
 
-def test_sin_los_artefactos_falla_diciendo_que_hay_que_ejecutar_sushi(tmp_path) -> None:
+def test_un_tipo_de_muestra_se_puede_comprobar_de_uno_en_uno() -> None:
+    # `$validate-code` en vez de traerse la expansión: es lo que hay que hacer con un conjunto que
+    # algún día se defina por filtro, y no obliga al servidor a expandir nada.
+    assert admite_tipo_de_muestra("122555007")
+    assert not admite_tipo_de_muestra("000000")
+
+
+def test_el_display_de_una_prueba_llega_en_espanol_y_el_de_loinc_en_ingles() -> None:
+    # No es un detalle de presentación: un informe español con «Glucose [Mass/volume] in Serum or
+    # Plasma» donde debería decir «Glucosa» es un fallo de producto (D7). Y el de LOINC va en inglés
+    # porque su licencia prohíbe alterar el contenido del campo.
+    glucosa = cargar_catalogo()["GLU"]
+
+    assert glucosa.display == "Glucosa"
+    assert glucosa.loinc_display == "Glucose [Mass/volume] in Serum or Plasma"
+
+
+def test_sin_servidor_falla_diciendo_como_levantarlo() -> None:
     # Si esto devolviera un catálogo vacío en vez de fallar, el generador produciría un corpus sin
-    # una sola prueba y nadie se enteraría hasta mirarlo.
-    with pytest.raises(TerminologiaNoDisponibleError, match="fsh-sushi"):
-        cargar_catalogo(tmp_path)
+    # una sola prueba y nadie se enteraría hasta mirarlo. El puerto es uno que nadie escucha.
+    with pytest.raises(TerminologiaNoDisponibleError, match="docker compose"):
+        cargar_catalogo("http://127.0.0.1:1/fhir")
