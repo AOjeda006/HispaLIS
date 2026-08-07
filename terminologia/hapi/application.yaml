@@ -1,0 +1,76 @@
+# Configuración del servidor de terminología (D14).
+#
+# Es un `hapi-fhir-jpaserver-starter` de serie: la imagen no se construye, se configura. Lo único
+# nuestro es este fichero y lo que el cargador le mete por la API estándar.
+#
+# El servidor es INTERCAMBIABLE: nada del sistema conoce este fichero ni habla con nada que no sea
+# `$expand`, `$lookup`, `$validate-code` y `$translate`. Migrar a Snowstorm u Ontoserver es cambiar
+# `HISPALIS_TERMINOLOGIA` en el backend, el motor y el generador — y borrar este servicio.
+
+spring:
+  datasource:
+    url: ${HISPALIS_TERMINOLOGIA_BD:jdbc:postgresql://postgres:5432/terminologia}
+    username: ${HISPALIS_TERMINOLOGIA_BD_USUARIO:hispalis}
+    password: ${HISPALIS_TERMINOLOGIA_BD_CLAVE:hispalis}
+    driverClassName: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+  jpa:
+    properties:
+      # El dialecto de HAPI, no el de Hibernate a secas: con el genérico el servidor arranca pero
+      # avisa de que se salta su propia comprobación de esquema («dialect is not a HAPI FHIR
+      # dialect»), que es la que detecta una base migrada a medias.
+      hibernate.dialect: ca.uhn.fhir.jpa.model.dialect.HapiFhirPostgres94Dialect
+      hibernate.format_sql: false
+      hibernate.show_sql: false
+
+      # ⚠️ Sin el índice de texto completo, `$expand` NO funciona: HAPI resuelve la expansión sobre
+      # la tabla de conceptos indexada, y sin ella contesta un `OperationOutcome` con
+      # «HSEARCH800001: Hibernate Search was not initialized» — un mensaje que nombra la librería y
+      # no la causa. `$lookup`, `$validate-code` y `$translate` sí funcionan sin él, así que el
+      # servidor parece sano hasta que alguien pide una expansión. Medido, no supuesto.
+      hibernate.search.enabled: true
+      hibernate.search.backend.type: lucene
+      hibernate.search.backend.analysis.configurer: >-
+        class:ca.uhn.fhir.jpa.search.HapiHSearchAnalysisConfigurers$HapiLuceneAnalysisConfigurer
+      hibernate.search.backend.directory.type: local-filesystem
+      hibernate.search.backend.directory.root: /datos/lucene
+      hibernate.search.backend.lucene_version: LUCENE_CURRENT
+
+hapi:
+  fhir:
+    # R5 y no «FHIR» a secas: un servidor de terminología en R4 devolvería `ConceptMap` con
+    # `source`/`equivalence` en vez de `sourceScope`/`relationship`, y el catálogo no cargaría.
+    fhir_version: R5
+    server_address: ${HISPALIS_TERMINOLOGIA_PUBLICA:http://terminologia:8080/fhir}
+
+    # Lo que este servidor tiene que saber hacer.
+    pre_expand_value_sets: true
+    allow_external_references: true
+
+    # Un `ValueSet` que enumera códigos SNOMED de una edición que aún no está cargada, o un
+    # `ConceptMap` que apunta a LOINC antes de subir LOINC, son estados normales durante la carga.
+    # Con integridad referencial en escritura, el orden de subida pasaría a ser parte del contrato.
+    enforce_referential_integrity_on_write: false
+    enforce_referential_integrity_on_delete: false
+
+    # No es una historia clínica: aquí no entra ni un `Patient`. Se apaga todo lo que no es
+    # terminología para que no haya nada que proteger ni que mantener.
+    subscription:
+      resthook_enabled: false
+      websocket_enabled: false
+    bulk_export_enabled: false
+    mdm_enabled: false
+    narrative_enabled: false
+    cr:
+      enabled: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true

@@ -1,9 +1,18 @@
-# La pila: PostgreSQL + Kafka + registro de esquemas + backend + web profesional.
+# La pila: PostgreSQL + Kafka + registro de esquemas + servidor de terminología + backend + web.
 #
 #   docker compose -f infra/compose/docker-compose.yml up
 #
 # Todo lo que hace falta para recorrer el circuito de extremo a extremo desde un clon recién hecho.
-# Quedan fuera Keycloak y el servidor de terminología, que son los ítems 32 y 34.
+# Queda fuera Keycloak, que es el ítem 34.
+#
+# ⚠️ Dos cosas viven FUERA del repositorio y hay que tenerlas antes de levantar:
+#
+#   1. La guía compilada — `npx fsh-sushi .` dentro de `ig/`. No se versiona: la produce SUSHI.
+#   2. Las releases de terminología archivadas en `BibliotecaDocumentacion`, que se asume clonada
+#      como carpeta hermana. Con `HISPALIS_RELEASES` se puede apuntar a otro sitio.
+#
+# Sin ellas, el servidor de terminología levanta y el cargador para con un mensaje que dice cuál
+# falta — que es mejor que un laboratorio arrancando con un catálogo vacío.
 
 name: hispalis
 
@@ -21,6 +30,9 @@ services:
       POSTGRES_PASSWORD: hispalis
     volumes:
       - datos-postgres:/var/lib/postgresql/data
+      # Crea la base del servidor de terminología. Solo corre la primera vez que se inicializa el
+      # volumen: sobre una pila que ya existía hay que hacer `down -v`.
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U hispalis -d hispalis']
       interval: 5s
@@ -108,6 +120,69 @@ services:
       start_period: 40s
       retries: 20
 
+  # ─── Terminología (D14) ────────────────────────────────────────────────────
+  #
+  # Un `hapi-fhir-jpaserver-starter` de serie: la imagen NO se construye. Todo lo nuestro entra por
+  # la API estándar, así que este servicio es reemplazable por Snowstorm u Ontoserver cambiando la
+  # URL que usan el backend, el motor y el generador — y nada más.
+  # Un volumen recién creado es de `root`, y la imagen de HAPI corre sin privilegios (65532). Sin
+  # esto el servidor arranca, crea sus tablas y muere al montar el índice con un
+  # `AccessDeniedException: /datos/lucene` enterrado en cien líneas de traza. Se arregla aquí y no
+  # con `user: root` en el servicio: darle privilegios al servidor para que pueda escribir en un
+  # directorio es cambiar el problema de sitio.
+  terminologia-datos:
+    image: busybox:1.37
+    command: ['sh', '-c', 'mkdir -p /datos/lucene && chown -R 65532:65532 /datos']
+    volumes:
+      - datos-terminologia:/datos
+
+  terminologia:
+    image: hapiproject/hapi:v8.10.0-3
+    environment:
+      # Medido: con el ajuste por defecto, el servidor muere en silencio (código 255, sin traza)
+      # justo al cargar en memoria los paquetes de R5. No es un cuelgue: es que no le cabe.
+      JAVA_OPTS: '-Xmx4g -Xms512m'
+      HISPALIS_TERMINOLOGIA_BD: jdbc:postgresql://postgres:5432/terminologia
+      HISPALIS_TERMINOLOGIA_BD_USUARIO: hispalis
+      HISPALIS_TERMINOLOGIA_BD_CLAVE: hispalis
+      HISPALIS_TERMINOLOGIA_PUBLICA: http://localhost:8086/fhir
+    volumes:
+      - ../../terminologia/hapi/application.yaml:/app/config/application.yaml:ro
+      - datos-terminologia:/datos
+    ports:
+      - '8086:8080'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      terminologia-datos:
+        condition: service_completed_successfully
+    # Sin `healthcheck`, y no por descuido: la imagen de HAPI es *distroless* —solo lleva `java`—,
+    # así que un `test: [CMD, curl, …]` no falla por estar el servidor mal, falla por no existir
+    # `curl`, y el servicio se queda «unhealthy» con el log en verde. Quien espera a la terminología
+    # espera al cargador, que es además la condición correcta: lo que importa no es que el servidor
+    # conteste, sino que tenga dentro el catálogo.
+
+  # Servicio de arranque, como `kafka-topicos`: carga y termina. Quien necesita terminología espera
+  # a que TERMINE BIEN, no a que el servidor conteste — un servidor levantado y vacío responde
+  # `$validate-code` con «no» a todo, que es la peor forma de estar disponible.
+  terminologia-carga:
+    build:
+      context: ../..
+      dockerfile: terminologia/Dockerfile
+    environment:
+      HISPALIS_TERMINOLOGIA: http://terminologia:8080/fhir
+      # Sin la Edición Española no se carga SNOMED y el cargador lo avisa. No se puede
+      # redistribuir, así que no hay valor por defecto que pueda funcionar por accidente.
+      HISPALIS_SNOMED: ${HISPALIS_SNOMED:-}
+    volumes:
+      # La guía compilada: lo que produce SUSHI, que no está versionado.
+      - ../../ig/fsh-generated/resources:/guia:ro
+      # Las releases archivadas, FUERA del repositorio y en solo lectura.
+      - ${HISPALIS_RELEASES:-../../../BibliotecaDocumentacion/_fuente/_externos}:/releases:ro
+    depends_on:
+      terminologia:
+        condition: service_started
+
   backend:
     build:
       # El contexto es la raíz del repositorio, compartido con la web.
@@ -119,6 +194,7 @@ services:
       HISPALIS_BD_CLAVE: hispalis
       HISPALIS_KAFKA: 'kafka:9092'
       HISPALIS_REGISTRO_ESQUEMAS: 'http://registro-de-esquemas:8085'
+      HISPALIS_TERMINOLOGIA: 'http://terminologia:8080/fhir'
     ports:
       # Se publica aunque la web no lo necesite —le llega por el proxy—, porque el circuito se
       # recorre con `curl` y el validador oficial también entra por aquí.
@@ -133,6 +209,11 @@ services:
         condition: service_completed_successfully
       registro-de-esquemas:
         condition: service_healthy
+      # La terminología SÍ condiciona el arranque, al revés que el bus: el laboratorio valida
+      # códigos y resuelve `display` contra ella desde la primera escritura, y arrancar antes de
+      # que esté cargada significaría publicar unos recursos con `display` y otros sin él.
+      terminologia-carga:
+        condition: service_completed_successfully
     healthcheck:
       # `metadata` es la prueba honesta de que está listo: contesta cuando el servidor FHIR está
       # levantado de verdad, no cuando el proceso existe.
@@ -158,3 +239,6 @@ volumes:
   # El log de Kafka sobrevive a un `down`: sin volumen, parar la pila borraría lo publicado y el
   # `_schemas` del registro con ello, que es donde vive el historial de versiones de los contratos.
   datos-kafka:
+  # El índice de texto completo del servidor de terminología. Vive en disco y no en la base, así
+  # que sin volumen habría que reindexar en cada arranque — y hasta entonces `$expand` iría vacío.
+  datos-terminologia:

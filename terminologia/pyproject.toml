@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hispalis-cargador-terminologia"
+version = "0.1.0"
+description = "Carga del servidor de terminología de HispaLIS: subconjuntos curados por la API estándar de FHIR"
+requires-python = ">=3.11"
+license = "CC0-1.0"
+authors = [{ name = "Andrés Ojeda Rodríguez", email = "andresojedarodriguez@gmail.com" }]
+# Sin dependencias a propósito. Lo único que hace este cargador por la red es `PUT` de JSON, y
+# `urllib` basta: una dependencia HTTP aquí sería una versión más que vigilar en la imagen que
+# arranca antes que el laboratorio.
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff>=0.6"]
+
+[project.scripts]
+cargador = "cargador.__main__:main"
+
+[tool.setuptools]
+packages = ["cargador"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "SIM", "RUF"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

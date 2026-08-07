@@ -1,0 +1,64 @@
+# CI del cargador del servidor de terminología (Python).
+# Filtrado por `paths:` OBLIGATORIO (§13.1 del diseño).
+name: CI · terminologia
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'terminologia/**'
+      - '.github/workflows/ci-terminologia.yml'
+      # El subconjunto curado que se sube al servidor se DEDUCE de la guía: los códigos LOINC salen
+      # del `ConceptMap` y de los perfiles, los SNOMED de los `ValueSet`, y los sistemas de THO de
+      # cualquier `system` citado. Sin esta ruta, añadir un código a la guía no dispararía los tests
+      # que comprueban que el cargador lo recoge — y el servidor se quedaría sin él en silencio.
+      - 'ig/input/fsh/**'
+  pull_request:
+    paths:
+      - 'terminologia/**'
+      - '.github/workflows/ci-terminologia.yml'
+      - 'ig/input/fsh/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-terminologia-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    name: Lint + tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: terminologia/pyproject.toml
+
+      - name: Instalar dependencias
+        working-directory: terminologia
+        run: python -m pip install -e ".[dev]"
+
+      - name: Lint y formato
+        working-directory: terminologia
+        run: |
+          ruff check .
+          ruff format --check .
+
+      # Los tests corren contra mini-releases sintéticas construidas en el propio test: no descargan
+      # LOINC, no descargan THO y no tocan SNOMED. Es deliberado —la Edición Española no se puede
+      # redistribuir y LOINC pesa cientos de megas—, y es también lo que hace que este trabajo dure
+      # segundos. Que las releases de verdad se leen bien se comprueba al levantar el `compose`.
+      - name: Tests
+        working-directory: terminologia
+        run: pytest
+
+      # El servidor de terminología no se construye: es la imagen de HAPI tal cual. Lo que sí se
+      # construye es el cargador, y que su imagen se arme es parte del contrato del `compose`.
+      - name: Construir la imagen del cargador
+        run: docker build -f terminologia/Dockerfile -t hispalis-cargador-terminologia .
