@@ -18,8 +18,15 @@ import org.springframework.test.context.DynamicPropertySource;
  * <p>La instancia es <strong>una sola para toda la ejecución</strong>. Arrancar PostgreSQL cuesta
  * unos segundos y hacerlo por clase de test multiplicaría ese coste sin ganar aislamiento real: el
  * aislamiento entre tests lo da la transacción, no el proceso.
+ *
+ * <p><strong>El bus va apagado.</strong> Estos tests no van del bus, y con el relay encendido cada
+ * uno arrastraría un cliente de Kafka reintentando contra un broker que no existe. Se apaga aquí y
+ * no en la configuración de la aplicación a propósito: el valor por defecto de producción tiene que
+ * seguir siendo «encendido», y quien quiera el bus —{@code RelayDelOutboxTest}— lo enciende él.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(
+        webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+        properties = "hispalis.bus.habilitado=false")
 public abstract class TestDeIntegracion {
 
     private static final EmbeddedPostgres POSTGRES = arrancarPostgres();

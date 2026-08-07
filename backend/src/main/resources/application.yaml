@@ -50,6 +50,23 @@ spring:
     # hace la propia V1: por eso Flyway se apunta al esquema por defecto y no a `dominio`.
     locations: classpath:db/migration
 
+  # El bus de eventos. Lo demás del productor —serializadores, idempotencia, registro automático de
+  # esquemas apagado— se pone en `ConfiguracionDelBus`, donde cada ajuste puede ir con el motivo por
+  # el que no vale su valor por defecto.
+  kafka:
+    bootstrap-servers: ${HISPALIS_KAFKA:localhost:9092}
+
+hispalis:
+  bus:
+    # Encendido por defecto: que el laboratorio no publique lo que ya ha apuntado tiene que ser una
+    # decisión escrita, no un valor que falta. Con el broker caído no pasa nada — el hecho se queda
+    # en el `outbox` y la API FHIR sigue aceptando escrituras.
+    habilitado: ${HISPALIS_BUS_HABILITADO:true}
+    registro-de-esquemas: ${HISPALIS_REGISTRO_ESQUEMAS:http://localhost:8085}
+    intervalo: PT1S
+    tanda: 100
+    espera-de-envio: PT5S
+
 server:
   port: 8080
   # La API sirve nombres españoles: sin UTF-8 explícito, MUÑOZ y PEÑA salen corrompidos por la red

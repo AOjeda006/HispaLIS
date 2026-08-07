@@ -34,6 +34,21 @@
     <spotless.version>2.44.5</spotless.version>
 
     <!--
+      Las serdes de Confluent y el registro de esquemas. La línea 7.9.x es la que va con Kafka 3.9,
+      que es la que gestiona Spring Boot 3.5.16: la 8.x salta a Kafka 4.x y dejaría el cliente y el
+      serializador en versiones distintas del protocolo. Al subir Spring Boot hay que mover las dos.
+    -->
+    <confluent.version>7.9.8</confluent.version>
+
+    <!--
+      Avro no lo gestiona el BOM de Spring Boot, así que la versión se fija aquí. Es la misma que
+      trae `kafka-avro-serializer` 7.9.x, y tiene que serlo: el plugin que genera las clases y la
+      librería que las serializa comparten formato, y desalinearlos rompe en ejecución, no al
+      compilar.
+    -->
+    <avro.version>1.11.4</avro.version>
+
+    <!--
       Spring Boot 3.5.16 gestiona commons-lang3 en la 3.17.0 y HAPI 8.10.1 necesita la 3.18.0, que
       es donde aparece `ObjectUtils.getIfNull(T, T)`. Gana el `dependencyManagement` del padre, así
       que hay que subirla aquí a mano.
@@ -92,9 +107,58 @@
       <scope>runtime</scope>
     </dependency>
 
+    <!--
+      El bus de eventos (§11). El relay del `outbox` publica desde aquí, y solo desde aquí: Kafka NO
+      alimenta el modelo de lectura —la proyección FHIR se sigue escribiendo síncrona en la
+      transacción del dominio— y por eso esto es una dependencia de salida, no de arranque. Con el
+      broker caído la API tiene que seguir devolviendo `201`.
+    -->
+    <dependency>
+      <groupId>org.springframework.kafka</groupId>
+      <artifactId>spring-kafka</artifactId>
+    </dependency>
+
+    <!--
+      Avro más el serializador que habla con el registro de esquemas. Un tópico sin esquema es un
+      `Map<String,Object>` con más pasos: el esquema es el contrato, y las clases del bus se generan
+      de los `.avsc` de `src/main/avro` para que ese contrato sea un tipo compilado y no un mapa.
+    -->
+    <dependency>
+      <groupId>org.apache.avro</groupId>
+      <artifactId>avro</artifactId>
+      <version>${avro.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>io.confluent</groupId>
+      <artifactId>kafka-avro-serializer</artifactId>
+      <version>${confluent.version}</version>
+      <exclusions>
+        <!--
+          Arrastra un `slf4j-reload4j` que compite con el Logback de Spring Boot: dos enlaces de
+          SLF4J en el classpath y el arranque avisa de ello y elige uno al azar.
+        -->
+        <exclusion>
+          <groupId>org.slf4j</groupId>
+          <artifactId>slf4j-reload4j</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+
+    <!--
+      Kafka de verdad en los tests, en proceso y sin Docker — la misma decisión que el PostgreSQL
+      embebido. Hace falta un broker real y no un doble: la prueba que importa es la del broker
+      CAÍDO, y un doble en memoria no se cae de la misma manera.
+    -->
+    <dependency>
+      <groupId>org.springframework.kafka</groupId>
+      <artifactId>spring-kafka-test</artifactId>
       <scope>test</scope>
     </dependency>
 
@@ -110,11 +174,55 @@
     </dependency>
   </dependencies>
 
+  <repositories>
+    <!--
+      Las serdes de Avro contra el registro de esquemas no están en Maven Central: Confluent publica
+      solo en su propio repositorio. Es la única razón por la que este `pom` tiene un repositorio
+      añadido, y conviene que siga siéndolo.
+    -->
+    <repository>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+      <id>confluent</id>
+      <name>Confluent</name>
+      <url>https://packages.confluent.io/maven/</url>
+    </repository>
+  </repositories>
+
   <build>
     <plugins>
       <plugin>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-maven-plugin</artifactId>
+      </plugin>
+
+      <!--
+        Genera las clases del bus a partir de los `.avsc` de `src/main/avro`. El esquema es la
+        fuente: escribir la clase a mano y el `.avsc` aparte es tener el contrato dos veces y
+        descubrir que divergieron cuando un consumidor no pueda leer.
+      -->
+      <plugin>
+        <groupId>org.apache.avro</groupId>
+        <artifactId>avro-maven-plugin</artifactId>
+        <version>${avro.version}</version>
+        <configuration>
+          <stringType>String</stringType>
+          <!-- Los `.avsc` se registran y se validan tal cual se escriben; sin reordenar campos. -->
+          <enableDecimalLogicalType>true</enableDecimalLogicalType>
+        </configuration>
+        <executions>
+          <execution>
+            <id>generar-clases-del-bus</id>
+            <goals>
+              <goal>schema</goal>
+            </goals>
+            <phase>generate-sources</phase>
+            <configuration>
+              <sourceDirectory>${project.basedir}/src/main/avro</sourceDirectory>
+            </configuration>
+          </execution>
+        </executions>
       </plugin>
 
       <!--

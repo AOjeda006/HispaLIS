@@ -1,0 +1,38 @@
+{
+  "namespace": "es.hispalis.lab.v1",
+  "type": "record",
+  "name": "HechoDeEspecimen",
+  "doc": "Lo que se publica en `lab.especimenes.v1`. Referencias y nada más: ni el número de acceso, ni el tipo de muestra, ni cuándo se extrajo.",
+  "fields": [
+    {
+      "name": "hechoId",
+      "type": "string",
+      "doc": "UUID del hecho en el `outbox` del laboratorio. Clave de idempotencia del consumidor: la entrega es al menos una vez."
+    },
+    {
+      "name": "tipo",
+      "type": {
+        "type": "enum",
+        "name": "TipoDeHechoDeEspecimen",
+        "doc": "Qué le pasó a la muestra. Añadir un símbolo es compatible hacia atrás; quitarlo o renombrarlo, no.",
+        "symbols": ["ESPECIMEN_REGISTRADO"]
+      },
+      "doc": "Un hecho ocurrido, no una orden."
+    },
+    {
+      "name": "ocurridoEn",
+      "type": {"type": "long", "logicalType": "timestamp-millis"},
+      "doc": "Cuándo lo apuntó el laboratorio. El orden entre hechos lo da la partición, que es el paciente."
+    },
+    {
+      "name": "pacienteId",
+      "type": "string",
+      "doc": "UUID interno del paciente en este laboratorio, y clave de partición. Nunca el NHC, el DNI ni el NUHSA."
+    },
+    {
+      "name": "specimenRef",
+      "type": "string",
+      "doc": "Referencia FHIR de la muestra, `Specimen/{uuid}`."
+    }
+  ]
+}
