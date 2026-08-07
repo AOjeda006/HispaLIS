@@ -223,6 +223,57 @@ aceptable bajo ninguna de las tres opciones. Si algún día se implementa (a), e
   (`Organization/1002`, `Practitioner/analisis-clinicos`) tampoco pasa, así que publicarlo obliga a
   tomar la decisión en voz alta.
 
+### Decisiones tomadas al sacar el outbox al bus (ítems 29–31)
+
+- **Avro con clases generadas, no `GenericRecord` ni JSON.** El `.avsc` es la fuente y de él salen
+  las clases: el contrato acaba siendo un **tipo compilado**. Volcar el mapa de referencias del
+  `outbox` dentro de un mensaje habría sido un tópico sin contrato con más pasos. Efecto buscado:
+  publicar un dato nuevo obliga a tocar el `.avsc`, y tocarlo obliga a pasar por la compatibilidad
+  del registro — ahí es donde se debe pensar si algo puede salir al bus, no en el caso de uso.
+- **Registro automático de esquemas APAGADO** (`auto.register.schemas=false`), al revés del ajuste por
+  defecto de Confluent. Con él encendido, cambiar un `.avsc` y arrancar publica una versión nueva sin
+  que nadie la mire, y la primera noticia llega cuando falla un consumidor. Los registra
+  `EsquemasDelBus`, y no al arrancar sino en la primera vuelta del relay: si el registro está caído,
+  la aplicación tiene que levantar igual.
+- **Compatibilidad `BACKWARD` fijada también por sujeto**, no solo en el servidor. El ajuste global se
+  puede cambiar desde fuera del repositorio, y entonces estos cuatro tópicos dejarían de estar
+  protegidos sin que aquí constara.
+- **La filiación no sale al bus.** Los tópicos de §11 son los cuatro del laboratorio y ninguno es de
+  demografía: la manda el HIS y el laboratorio la recibe, no la anuncia. `PACIENTE_REGISTRADO` y
+  `PACIENTE_ACTUALIZADO` se apuntan igual —el `outbox` es la prueba de lo que pasó— y el relay los
+  cierra como **descartados**. Refuerza la decisión un motivo legal: el derecho de supresión no puede
+  borrar lo que la ley obliga a conservar, y un tópico replicado es lo más difícil de borrar que hay.
+- **`descartado_en` y `topico` en `outbox.hecho` (migración V10).** Con una sola columna
+  `publicado_en`, un hecho sin tópico solo podía quedarse pendiente para siempre —engordando el
+  índice parcial— o marcarse como publicado, que es mentira y se descubre el día que alguien audite.
+- **El enrutado es un `switch` exhaustivo sin `default`.** Añadir un `TipoDeHecho` deja de compilar
+  hasta que alguien diga a dónde va. Un `default` que devolviera «ninguno» dejaría el hecho nuevo
+  callado en el `outbox` sin que nadie se entere hasta que un consumidor pregunte por qué no le llega.
+- **Nada de `FOR UPDATE SKIP LOCKED` en el relay.** Bloquear la fila obligaría a mantener la
+  transacción abierta mientras se habla con el broker: E/S de red dentro de una transacción de base
+  de datos, con el broker caído hasta el *timeout*. El contrato declarado es **al menos una vez**, así
+  que dos relays publicando el mismo hecho es un duplicado, no una avería.
+- **El orden es por tópico, no entre tópicos.** Consecuencia de que la partición la determinen el
+  tópico *y* la clave. Lo que el diseño necesita se cumple —informado y validado comparten tópico—,
+  pero un consumidor que cruce tópicos tiene que resolverlo él. Escrito donde se ve, no descubierto en
+  producción.
+- **El bus no condiciona el arranque del backend en el `compose`.** `depends_on` espera a los tópicos
+  y al registro para no reintentar en vano los primeros segundos, pero con Kafka parado la API sigue
+  aceptando escrituras: para eso está el outbox.
+- **El reconciliador es una operación FHIR de sistema**, no un guion. §15 la pide como vía oficial, y
+  una vía oficial se ejecuta desde donde se administra el sistema, aparece en el
+  `CapabilityStatement` y responde con un recurso archivable.
+- **Fuera del reconciliador: `Organization` y `Practitioner`.** Son datos maestros sin agregado con el
+  que compararlos; mirarlos los daría todos por huérfanos y los borraría.
+- **El reconciliador busca, no lee recurso a recurso.** No es por el número de consultas: la DAO de
+  HAPI lanza `ResourceGoneException` al leer un recurso borrado, y esa excepción sale de un método
+  transaccional suyo, así que Spring marca la transacción de la pasada como *rollback-only* aunque se
+  capture. El reconciliador se quedaba sin poder reparar justo el caso para el que existe.
+- **Se acepta el salto de `versionId`** al reparar. Ver el ítem 31.
+- **`CircuitoDePrueba` como arnés compartido de los tests.** Tres clases construían los mismos
+  recursos mínimos; la cuarta habría sido la de romperlo. El test de aceptación conserva los suyos a
+  propósito: construye recursos más ricos porque lo que vuelca lo revisa el validador oficial.
+
 ### Decisiones tomadas al cerrar los canales del motor (ítems 25–28)
 
 - **2026-08-06 — La DLQ son las filas `RECHAZADO` del almacén, no una tabla aparte.** El original ya
@@ -607,7 +658,7 @@ cinco invariantes de §10 que el hito 1 alcanza viven en el núcleo de dominio, 
 > `integracion`; `app-ciudadano` la conserva. Se empuja a `origin/main` por **SSH**: el PAT de HTTPS
 > no tiene *scope* `workflow` y GitHub rechaza el push de `.github/workflows/`.
 
-### Dónde estamos ahora — hito 2, ítem 29
+### Dónde estamos ahora — hito 2, ítem 32
 
 **Los tres huecos de dominio están cerrados (2026-08-06): ítems 17, 18 y 19.** Cada uno con su rojo
 en el historial —`81fdd0c`, `80b9ebf`, `abb1ddf`— y su verde detrás. `./mvnw verify` →
@@ -661,18 +712,39 @@ de `Observation` antes y después**.
 (`adr-0019`) y el `Device` en `Observation.performer`. Los dos pasaban en verde contra el doble de la
 API y los dos fallaban contra el servidor.
 
-**El primer ítem no completado es el 29 — Kafka y Schema Registry en el `compose`.**
+**Y el bus de eventos y la recuperación están hechos (2026-08-07): ítems 29, 30 y 31.** Lo que hay
+encima de lo anterior:
 
-**Nada más se ha adelantado.** `app-ciudadano/` sigue sin andamiar, el `compose` sigue siendo el de
-tres servicios —el motor **no está en él**—, y no hay ni una línea de Kafka ni de Keycloak.
+- **Los cuatro tópicos de §11** con esquema Avro versionado, generado de los `.avsc` de
+  `backend/src/main/avro`, y compatibilidad **hacia atrás** fijada por sujeto y en el servidor.
+- **El relay del `outbox`**, con clave de partición = paciente, entrega **al menos una vez** y
+  productor idempotente. Kafka **no** alimenta el modelo de lectura: la proyección se sigue
+  escribiendo síncrona en la transacción del dominio.
+- **El reconciliador** (`POST /fhir/$reconciliar`), que detecta las dos direcciones —lo que falta y lo
+  que sobra sin agregado detrás— y por defecto **solo revisa**.
+- **Kafka y el registro de esquemas en el `compose`**, encadenados por *healthcheck*, con los tópicos
+  creados por un servicio de arranque y la creación automática apagada.
+
+Verificado **contra un Kafka de verdad**, en proceso: el circuito escrito con el broker caído sigue
+devolviendo `201`, no se publica nada, y al levantar el broker se entregan los cinco hechos con
+tópico. Reentregados dos veces más, el consumidor idempotente acaba igual.
+
+**El primer ítem no completado es el 32 — el servidor de terminología en el `compose`.**
+
+**Nada más se ha adelantado.** `app-ciudadano/` sigue sin andamiar, el motor **sigue sin estar en el
+`compose`**, y no hay ni una línea de Keycloak.
 
 > **Lo que queda sin verificar:**
 >
-> - **El workflow `ci-integracion` no ha corrido.** Esta tanda es `commit` sin push. Además ahora
->   **importa más**: el paso de SUSHI se movió **antes** del build porque los tests del motor leen
->   `ig/fsh-generated/resources`, y ese reordenamiento no se ha ejecutado en GitHub.
-> - **El guion de verificación del `compose` sigue sin pasarse** con el paso de validación dentro.
->   Viene del ítem 18 y sigue pendiente: la pila no se ha levantado con `docker compose`.
+> - **La pila no se ha levantado con `docker compose`.** En este equipo no hay Docker. El fichero es
+>   YAML válido y el encadenado está escrito, pero **nadie ha visto arrancar Kafka, el registro ni el
+>   servicio que crea los tópicos**. Es lo primero que hay que hacer en una máquina con Docker.
+> - **El registro de esquemas se probó en memoria**, no contra el servidor. Ver el ítem 29: la
+>   decisión de compatibilidad la toma el mismo comprobador que el servidor, pero el camino HTTP no
+>   se ha ejercitado.
+> - **Los workflows `ci-integracion` y el del backend no han corrido.** Esta tanda es `commit` sin
+>   push, y ahora el backend descarga de un repositorio nuevo (Confluent): si en la CI está
+>   restringido el acceso a repositorios externos, el build fallará ahí y no aquí.
 > - **El motor no está en el `compose`.** El arranque en local se hizo a mano, con el PostgreSQL
 >   embebido del backend y un almacén de claves generado al vuelo.
 > - **El `ORU^R01` saliente se probó en claro contra el simulador**, no sobre TLS. El camino TLS del
@@ -683,6 +755,11 @@ tres servicios —el motor **no está en él**—, y no hay ni una línea de Kaf
 >   proyecta a FHIR: apuntar ahí exige que el laboratorio tenga su inventario de analizadores como
 >   recursos `Device`, que hoy no existe. La identidad del analizador **no se pierde** —está en el
 >   original archivado—, pero el recurso no la lleva.
+> - **El reconciliador no se ha ejecutado sobre el laboratorio entero**, solo acotado a un paciente.
+>   Con la base de un test eso no dice nada del coste de una pasada completa, que es una transacción
+>   larga y un `search` sin filtro por tipo.
+> - **`$reconciliar` no tiene autenticación**, como todo lo demás hasta el ítem 35 — y esta operación
+>   **borra recursos**. Es la deuda de seguridad más cara de las abiertas.
 
 ---
 
@@ -1358,13 +1435,32 @@ tres servicios —el motor **no está en él**—, y no hay ni una línea de Kaf
 
 ### El bus de eventos
 
-- [ ] **29 — Kafka y Schema Registry en el `compose`, con los cuatro tópicos.**
+- [x] **29 — Kafka y Schema Registry en el `compose`, con los cuatro tópicos.**
   *Criterio:* `lab.peticiones.v1`, `lab.especimenes.v1`, `lab.resultados.v1` y `lab.informes.v1`
   creados, con su esquema **registrado** y la compatibilidad fijada **hacia atrás** (§11). La
   compatibilidad se **prueba**, no se declara: registrar una versión que la rompe tiene que ser
   **rechazada por el registro**, y hay un test que lo comprueba.
+  *Hecho (2026-08-07):* Kafka en **KRaft** (`cp-kafka:7.9.8`, la línea que va con los `kafka-clients`
+  3.9 que gestiona Spring Boot 3.5.16) y `cp-schema-registry:7.9.8`, encadenados por *healthcheck*.
+  Los cuatro tópicos los crea un servicio de arranque `kafka-topicos` con **3 particiones** —con una
+  sola, el orden saldría bien por accidente y nadie notaría una clave de reparto mal puesta— y la
+  creación automática de tópicos va **apagada**. Los esquemas son cuatro `.avsc` en
+  `backend/src/main/avro`, de los que el plugin de Avro genera las clases: el contrato es un tipo
+  compilado, no un mapa. `EsquemasDelBus` los registra al primer envío y fija `BACKWARD`
+  **por sujeto**, además del ajuste global del servidor.
+  *La compatibilidad, probada:* `CompatibilidadDeEsquemasTest` registra la v1 y pide al registro que
+  juzgue dos v2 — una con un campo obligatorio nuevo (**rechazada**) y otra con el mismo campo
+  opcional y con valor por defecto (**aceptada**)—. Y una tercera comprobación que no estaba pedida:
+  ningún `.avsc` puede declarar un campo que no sea `hechoId`, `tipo`, `ocurridoEn`, `pacienteId` o
+  algo terminado en `Ref`. El invariante 6 se incumple **escribiendo el esquema**, y ese es el momento
+  en el que el test tiene que estar en rojo.
+  *Lo no verificado:* contra un registro **en memoria** (`MockSchemaRegistryClient`), no contra el
+  servidor. Sin Docker en este equipo no hay forma de levantarlo, y empotrar el de Confluent en
+  proceso arrastra media pila HTTP. La decisión de compatibilidad la toma el **mismo**
+  `CompatibilityChecker` que ejecuta el servidor —no es una reimplementación—, pero el camino HTTP
+  hasta él no se ha ejercitado.
 
-- [ ] **30 — El relay publica el `outbox` en Kafka.**
+- [x] **30 — El relay publica el `outbox` en Kafka.**
   *Criterio:* el relay drena la tabla del ítem 19 y publica con **clave de partición = paciente**, de
   modo que los hechos de un mismo paciente **mantienen el orden**; test con dos pacientes
   intercalados. La entrega es **al menos una vez**, así que el consumidor de prueba es idempotente y
@@ -1374,10 +1470,31 @@ tres servicios —el motor **no está en él**—, y no hay ni una línea de Kaf
   *Y el caso que de verdad importa:* con el broker **parado**, la escritura FHIR sigue devolviendo
   `201` y el hecho queda en el `outbox`; al arrancar el broker se publica. Si un `POST` falla porque
   Kafka está caído, el outbox no está haciendo su trabajo — que es exactamente para lo que está.
+  *Hecho (2026-08-07):* `RelayDelOutbox` en `backend/infraestructura/bus/`, sondeando cada segundo.
+  Clave de partición = `pacienteId`, productor con `acks=all` e **idempotencia activada** —sin ella,
+  un reintento interno del cliente puede desordenar los mensajes de una misma clave, que es
+  justamente la garantía por la que la clave es el paciente—. `max.block.ms` corto para que el hilo
+  no se quede un minuto bloqueado por vuelta con el broker caído.
+  *El caso que importa, probado contra un Kafka de verdad:* `RelayDelOutboxTest` arranca el contexto
+  apuntando a un puerto **donde no hay nadie**, recorre el circuito entero —los seis `201`—, da una
+  vuelta al relay (0 publicados, 5 pendientes), **levanta el broker** y vuelve a drenar: los 5
+  publicados y recibidos. Es un broker real en proceso, no un doble: la prueba es la de la caída, y
+  un doble no se cae de la misma manera.
+  *Al menos una vez, probado por repetición:* se pone `publicado_en` a nulo dos veces —el estado
+  exacto en que se queda la base si el proceso muere entre publicar y marcar— y se vuelve a drenar.
+  Tres entregas del mismo hecho, un solo efecto en el consumidor.
+  *Sin PHI, sobre los bytes:* se leen los cuatro tópicos **en crudo**, sin deserializar, y se
+  comprueba que no aparecen ni el NHC, ni los apellidos, ni el DNI, ni el NUHSA.
+  *Corrección al criterio, encontrada al probarlo:* el orden es **por tópico**, no entre tópicos.
+  Kafka ordena dentro de una partición y la partición la determinan el tópico **y** la clave, así
+  que la muestra y el resultado de la misma persona viajan por tópicos distintos y entre ellos no hay
+  orden. La garantía que el diseño necesita —«no aplicar una validación antes que el resultado que
+  valida»— sí se cumple, porque los dos son hechos de resultado y comparten tópico. Dicho en el test
+  y en el javadoc del relay para que un consumidor no suponga de más.
 
 ### Recuperación
 
-- [ ] **31 — Reconciliador dominio → proyección, como vía oficial.**
+- [x] **31 — Reconciliador dominio → proyección, como vía oficial.**
   *Criterio:* una operación que recorre el dominio y **regenera la proyección**, con su test: se
   corrompe la proyección a propósito —se borra un `Observation` y se altera otro— y al reconciliar,
   dominio y proyección vuelven a coincidir. Detecta **las dos** divergencias, no una: lo que falta en
@@ -1388,6 +1505,29 @@ tres servicios —el motor **no está en él**—, y no hay ni una línea de Kaf
   *La decisión que hay que tomar y escribir:* reescribir por la DAO **incrementa `versionId`** y deja
   obsoletos los `ETag` de todos los clientes. O se preservan las versiones, o se acepta el salto y se
   documenta — una vía oficial que rompe la concurrencia optimista sin avisar no es una vía oficial.
+  *Hecho (2026-08-07):* `aplicacion/reconciliacion/Reconciliador`, publicado como
+  `POST /fhir/$reconciliar` con `paciente` y `aplicar`. **Por defecto no escribe:** la orden que se
+  teclea con prisa a las tres de la mañana tiene que ser la que solo mira. Revisar y reparar son el
+  **mismo recorrido** con una bandera, no dos rutas de código, para que no puedan decir cosas
+  distintas.
+  *Las dos direcciones:* se compara lo que el dominio dice que tendría que haber contra lo que la
+  proyección publica del paciente, y se clasifica en `AUSENTE`, `DISTINTO` y `HUERFANO`. El huérfano
+  —recurso publicado sin agregado detrás— es la forma que tenía el incidente del `Bundle transaction`
+  y la mitad que un reconciliador ingenuo no ve: regenerar desde el dominio arregla lo que falta y
+  deja intacto lo que sobra.
+  *Probado sobre una corrupción provocada,* escribiendo por las DAO de HAPI y saltándose la API —que
+  es reproducir el fallo, no hacer trampa: esta divergencia no la produce un cliente, la produce un
+  bug del propio laboratorio—. Las tres a la vez: informe borrado, cifra alterada a 999 y un
+  `Observation` publicado que no respalda ningún agregado. Una pasada las repara las tres, la cifra
+  vuelve a 92, el informe vuelve, el sobrante deja de estar publicado y la segunda pasada no
+  encuentra nada.
+  *El informe lleva referencias, no diferencias:* tipo de recurso, identidad y clase. Decir qué campo
+  cambió sería un volcado clínico viajando por una consola, un correo y un registro de incidencias.
+  *La decisión sobre el `versionId`, tomada:* **se acepta el salto.** El reconciliador escribe solo
+  los recursos que divergen —para eso está el modo revisión—, así que un cliente pierde su `ETag`
+  únicamente si lo que tenía era una copia equivocada, y que se le rechace la siguiente escritura con
+  un `412` es lo correcto. Lo que ya cuadraba conserva su versión: HAPI no crea versión nueva cuando
+  el contenido no cambia.
 
 ### Terminología
 
@@ -1502,6 +1642,27 @@ tres servicios —el motor **no está en él**—, y no hay ni una línea de Kaf
 
 ## Notas / riesgos
 
+- **El backend depende ahora de un repositorio Maven que no es Central.** Las serdes de Avro contra
+  el registro de esquemas las publica **solo** Confluent (`packages.confluent.io`), así que
+  `backend/pom.xml` declara ese repositorio. Es la única dependencia externa a Central de todo el
+  proyecto y conviene que siga siéndolo. **Riesgo concreto:** en una CI con acceso restringido a
+  repositorios de terceros, el build falla ahí y no aquí — y todavía no ha corrido.
+- **El broker embebido de los tests es el de ZooKeeper, y Kafka 4 lo retira.** No es preferencia:
+  `EmbeddedKafkaKraftBroker.kafkaPorts(…)` **se ignora** —medido: pidiendo el 40245 abrió el 40247—,
+  y fijar el puerto es lo único que permite arrancar la aplicación apuntando a un broker que todavía
+  no existe, que es el escenario del test del outbox. Al subir a Kafka 4 hay que buscar otra forma de
+  fijarlo: un *proxy* TCP delante, o repuntar el productor en caliente.
+- **El log del broker embebido no siempre se borra en Windows** (`Error deleting …\kafka-…`), así que
+  una segunda ejecución se encuentra los tópicos de la primera. Está tolerado en
+  `RelayDelOutboxTest`, pero es el tipo de estado en disco que hace que un test pase solo la primera
+  vez. Si aparece algo raro en el bus, mirar ahí antes que en el código.
+- **`$reconciliar` borra recursos y no tiene autenticación.** Como todo lo demás hasta el ítem 35 —
+  pero esta operación no solo lee: retira de la proyección lo que no tiene agregado detrás. Es la
+  deuda de seguridad más cara de las que hay abiertas y conviene cerrarla con el ítem 35, no después.
+- **La pila del `compose` con Kafka no se ha levantado nunca.** En este equipo no hay Docker. El
+  fichero es YAML válido, los *healthcheck* y el encadenado están escritos, pero la primera ejecución
+  real está por hacer y con ella los fallos típicos de Kafka en Docker: escuchas anunciadas mal,
+  `CLUSTER_ID` inconsistente con un volumen viejo, y el registro arrancando antes que el broker.
 - **Un doble de la API no prueba las propiedades del servidor real, y esta tanda lo demostró dos
   veces.** Los 72 tests del motor estaban en verde mientras dos cosas fallaban contra el laboratorio
   de verdad: el caché de búsquedas de HAPI, que hacía que la idempotencia fuese una ilusión
@@ -1538,10 +1699,11 @@ tres servicios —el motor **no está en él**—, y no hay ni una línea de Kaf
 - **Acoplamiento de transacción con HAPI.** Escribir en el esquema de HAPI dentro de la transacción del
   dominio funciona (mismo *datasource*) pero ata a sus DAOs — registrado en `adr-0002`. Vigilar en cada
   actualización de HAPI.
-- **Doble escritura del mismo hecho.** Dominio y proyección pueden divergir por un bug de mapeo. Hace
-  falta un **reconciliador** que recorra el dominio y regenere la proyección, como **vía de recuperación
-  oficial**, no como script de emergencia. **Planificado: ítem 31**, con su prueba y con la decisión
-  pendiente de qué hacer con el `versionId` al reescribir.
+- ~~**Doble escritura del mismo hecho.**~~ — **cerrado el 2026-08-07** por el ítem 31. El
+  reconciliador existe (`POST /fhir/$reconciliar`), detecta las dos direcciones, es idempotente y se
+  puede acotar a un paciente. La decisión del `versionId` está tomada: **se acepta el salto**, porque
+  solo se reescribe lo que diverge y un `ETag` que caduca era el de una copia equivocada. Lo que
+  queda es de operación, no de diseño: no se ha medido una pasada sobre el laboratorio entero.
 - **Se desarrolla en Windows y se construye en Linux**, y hay **dos** atributos de fichero que solo
   fallan en el runner. El de los finales de línea se previó (`.gitattributes`); el del **bit de
   ejecución no**, y tumbó la CI del backend en su primera ejecución: `backend/mvnw` estaba
