@@ -47,10 +47,11 @@ jobs:
           java-version: '21'
           cache: maven
 
-      # SUSHI va ANTES del build, no después: el motor lee el `CodeSystem` del catálogo y su
-      # `ConceptMap` a LOINC desde `ig/fsh-generated/resources` —la terminología es una caja
-      # obligatoria, no un `Map<String,String>`—, así que sin este paso los tests del canal ni
-      # siquiera arrancan. También deja compilados los perfiles que necesita el validador al final.
+      # SUSHI va ANTES del build, no después: el motor resuelve el catálogo contra un servidor de
+      # terminología (D14), y el que levanta el arnés de los tests se carga con lo que produce SUSHI
+      # —la terminología es una caja obligatoria, no un `Map<String,String>`—, así que sin este paso
+      # los tests del canal ni siquiera arrancan. También deja compilados los perfiles que necesita
+      # el validador al final.
       - name: Compilar la terminología y los perfiles de la guía
         working-directory: ig
         run: npx --yes fsh-sushi .

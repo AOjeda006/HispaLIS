@@ -49,6 +49,26 @@ poder auditarse — que es exactamente el fallo que este motor existe para evita
 - **Agrupa con bundles `transaction`** solo si aparece un cuello de botella medido, no por defecto.
 - Estructura del canal: `origen → filtro → transformador → destino`.
 
+## El catálogo se pregunta, no se lee (D14, D15)
+
+`OBR-4`, `OBX-3` y `SPM-4` pasan por `CatalogoDelLaboratorio`, que resuelve contra el **servidor de
+terminología** (`hispalis.terminologia.servidor`) con las cuatro operaciones estándar: `$lookup` para
+el nombre y la unidad UCUM —que el `CodeSystem` declara como propiedad `unidad-ucum`—,
+`$validate-code` para saber si una prueba o un tipo de muestra existen, `$translate` para el LOINC y
+su vuelta, y `$expand` para contar el catálogo al arrancar. **Ninguna tabla dentro del motor.**
+
+- **La vuelta del mapa solo se invierte donde hay equivalencia.** Con
+  `source-is-broader-than-target`, varios LOINC caerían en el mismo código local y elegir uno
+  inventaría una precisión que el mapa dice que no tiene.
+- **⚠️ La vuelta del `$translate` en R5 se pide con `targetCode`, y HAPI 8.10 no lo implementa**
+  (`HAPI-1154`). El cliente pide **las dos formas, la de R5 primero**, y cae a `reverse=true` de R4.
+- **Lo que no se traduce va a la bandeja de errores**, que es reprocesable. Aceptar un código sin
+  comprobarlo metería en el laboratorio una prueba que quizá no oferta, y eso no se deshace.
+- **Los tests corren contra `arnes/TerminologiaDePrueba`**, un servidor HTTP cargado con lo que
+  produce SUSHI. Ahí es donde vive la lectura de ficheros, y ahí es donde debe vivir. Que las cuatro
+  operaciones se comporten igual contra el HAPI real lo comprueba `ContraElServidorRealTest`, apagado
+  salvo que se le diga dónde mirar con `HISPALIS_TERMINOLOGIA_REAL`.
+
 ## Contratos
 
 | Entrante (MLLP/TLS) | Produce |

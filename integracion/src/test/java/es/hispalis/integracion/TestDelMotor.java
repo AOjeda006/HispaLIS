@@ -5,11 +5,11 @@ import es.hispalis.integracion.arnes.ClienteMllpDePrueba;
 import es.hispalis.integracion.arnes.HisDePrueba;
 import es.hispalis.integracion.arnes.LaboratorioDePrueba;
 import es.hispalis.integracion.arnes.OutboxDelBackend;
+import es.hispalis.integracion.arnes.TerminologiaDePrueba;
 import io.zonky.test.db.postgres.embedded.EmbeddedPostgres;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.ServerSocket;
-import java.nio.file.Path;
 import javax.sql.DataSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -39,6 +39,9 @@ public abstract class TestDelMotor {
     /** El HIS al que el motor devuelve el {@code ORU^R01} cuando se emite un informe. */
     protected static final HisDePrueba HIS = HisDePrueba.arrancado();
 
+    /** El servidor de terminología, cargado con los artefactos que publica la guía. */
+    protected static final TerminologiaDePrueba TERMINOLOGIA = TerminologiaDePrueba.arrancada();
+
     private static final EmbeddedPostgres POSTGRES = arrancarPostgres();
     private static final int PUERTO_MLLP = puertoLibre();
 
@@ -57,9 +60,10 @@ public abstract class TestDelMotor {
                 .toString());
         registro.add("hispalis.mllp.tls.clave", () -> CertificadoDePrueba.CLAVE);
 
-        // El catálogo se lee de la guía, como el generador en Python (D15). Si SUSHI no ha corrido,
-        // esto falla al arrancar el contexto y el mensaje dice qué ejecutar.
-        registro.add("hispalis.terminologia.directorio", TestDelMotor::directorioDeTerminologia);
+        // El catálogo se pregunta a un servidor de terminología, igual que en el `compose` (D14). El
+        // de aquí está cargado con los artefactos de la guía; si SUSHI no ha corrido, no arranca y el
+        // mensaje dice qué ejecutar.
+        registro.add("hispalis.terminologia.servidor", TERMINOLOGIA::url);
 
         registro.add("hispalis.his.servidor", () -> "127.0.0.1");
         registro.add("hispalis.his.puerto", HIS::puerto);
@@ -73,13 +77,6 @@ public abstract class TestDelMotor {
     /** El origen de datos de la base de pruebas, para los tests que consultan SQL directamente. */
     protected DataSource origenDeDatos() {
         return origenDeDatos;
-    }
-
-    private static String directorioDeTerminologia() {
-        String indicado = System.getenv("HISPALIS_TERMINOLOGIA");
-        return indicado != null && !indicado.isBlank()
-                ? indicado
-                : Path.of("..", "ig", "fsh-generated", "resources").toString();
     }
 
     /** Un emisor que habla TLS contra el listener de este test. */

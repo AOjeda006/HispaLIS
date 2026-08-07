@@ -7,20 +7,24 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
- * El catálogo que el motor usa sale de la guía, y traduce en los dos sentidos con el mismo mapa.
+ * El catálogo que el motor usa sale del servidor de terminología, no de ningún fichero suyo.
  *
  * <p>Es el invariante 4 comprobado: si alguien sustituyera esto por un {@code Map<String,String>}
  * escrito a mano, los tests seguirían pasando <strong>mientras la copia coincidiera</strong> — y
  * dejarían de pasar el día que la guía añadiera una prueba, que es exactamente cuando tienen que
  * avisar.
+ *
+ * <p>El servidor del arnés está cargado con los artefactos que produce SUSHI y responde las cuatro
+ * operaciones estándar. El motor no sabe que es de prueba: le habla por HTTP igual que le hablaría al
+ * HAPI del {@code compose}, que es lo que hace cierta D14.
  */
-class CatalogoLeidoDeLaGuiaTest extends TestDelMotor {
+class CatalogoDelServidorDeTerminologiaTest extends TestDelMotor {
 
     @Autowired
     private CatalogoDelLaboratorio catalogo;
 
     @Test
-    void el_catalogo_se_carga_de_la_guia_y_no_viene_vacio() {
+    void el_catalogo_se_cuenta_con_expand_y_no_viene_vacio() {
         assertThat(catalogo.tamano())
                 .as("las 21 pruebas que publica el CodeSystem de la guía")
                 .isEqualTo(21);
@@ -67,6 +71,9 @@ class CatalogoLeidoDeLaGuiaTest extends TestDelMotor {
      * método automatizado y el código local no—, así que la vuelta no vale: varios LOINC caerían en
      * el mismo código local, y elegir uno sería inventar una precisión que el mapa dice que no hay.
      * La hemoglobina, en cambio, sí es {@code equivalent} y sí se invierte.
+     *
+     * <p>Quien decide es el servidor, que devuelve la relación en la respuesta del {@code $translate};
+     * el motor solo se niega a invertir lo que no es equivalencia.
      */
     @Test
     void una_correspondencia_que_no_es_equivalencia_no_se_invierte() {
@@ -81,6 +88,12 @@ class CatalogoLeidoDeLaGuiaTest extends TestDelMotor {
                 .contains("HB");
     }
 
+    /**
+     * La unidad la declara el catálogo, y llega por {@code $lookup} como propiedad del concepto.
+     *
+     * <p>No se deduce del nombre de la prueba ni vive escrita en el motor: el {@code CodeSystem}
+     * declara una propiedad {@code unidad-ucum} y el servidor la devuelve como {@code Coding} de UCUM.
+     */
     @Test
     void la_unidad_de_una_prueba_la_declara_el_catalogo() {
         assertThat(catalogo.buscar("GLU").orElseThrow().unidad()).contains("mg/dL");
@@ -95,10 +108,23 @@ class CatalogoLeidoDeLaGuiaTest extends TestDelMotor {
     }
 
     @Test
-    void los_tipos_de_muestra_salen_del_valueset_de_la_guia() {
+    void el_nombre_de_la_prueba_llega_en_espanol() {
+        assertThat(catalogo.buscar("GLU").orElseThrow().display()).isEqualTo("Glucosa");
+        assertThat(catalogo.buscar("LEGIOAG").orElseThrow().display())
+                .as("con tilde y todo: el charset del cable también cuenta")
+                .isEqualTo("Antígeno de Legionella en orina");
+    }
+
+    @Test
+    void los_tipos_de_muestra_se_validan_contra_el_valueset_de_la_guia() {
         assertThat(catalogo.esTipoDeMuestraConocido("119364003"))
                 .as("suero, que es el tipo más común del laboratorio")
                 .isTrue();
         assertThat(catalogo.esTipoDeMuestraConocido("000000")).isFalse();
+    }
+
+    @Test
+    void una_prueba_que_el_catalogo_no_tiene_no_se_inventa() {
+        assertThat(catalogo.buscar("NOEXISTE")).isEmpty();
     }
 }
