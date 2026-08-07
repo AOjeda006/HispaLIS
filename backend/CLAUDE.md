@@ -9,6 +9,7 @@
 @../../BibliotecaDocumentacion/stacks/spring/convenciones.md
 @../../BibliotecaDocumentacion/bases-de-datos/sql/convenciones.md
 @../../BibliotecaDocumentacion/fundamentos/datos-distribuidos/convenciones.md
+@../../BibliotecaDocumentacion/interoperabilidad/terminologia/convenciones.md
 @../../BibliotecaDocumentacion/patrones/repository-y-dto.md
 @../../BibliotecaDocumentacion/patrones/inyeccion-dependencias.md
 @../../BibliotecaDocumentacion/herramientas/docker.md
@@ -79,6 +80,32 @@ LECTURA    cliente ──GET / search──► DAOs HAPI JPA ──► esquema `
 - **Nunca PHI en el bus**, ni siquiera de paso: un hecho lleva `pacienteId` interno y referencias. Lo
   garantizan el agregado `Hecho` al construirlo y el esquema Avro al declararlo — un tópico replicado
   es lo más difícil de borrar que hay el día que alguien ejerza el derecho de supresión.
+
+## La terminología es un servicio aparte (D14)
+
+El laboratorio **no es un servidor de terminología** y no publica `ValueSet/$expand` ni
+`$validate-code`: pregunta. El puerto es `fhir/terminologia/Terminologia` y su implementación habla
+`$lookup`, `$validate-code` y `$translate` contra `hispalis.terminologia.servidor` — **una URL, y
+nada más**. No hay tipo de servidor ni operación propietaria que configurar: apuntar a Snowstorm es
+cambiar esa línea.
+
+- **Nada de `Map<String,String>`.** El puerto no tiene un método que devuelva «el catálogo entero» a
+  propósito: con uno, lo primero que haría alguien es cachearlo al arrancar, y eso es la lista
+  paralela que prohíbe el invariante 4. Se pregunta por un código a la vez.
+- **Los `display` de un informe español van en español (D7).** El nombre del catálogo local manda y
+  va en `CodeableConcept.text`; el `display` del LOINC llega en inglés y **se copia sin tocarlo**,
+  porque su licencia prohíbe alterar el campo (ADR-0009).
+- **Solo se publica el LOINC declarado `equivalent`.** Donde el `ConceptMap` dice
+  `source-is-broader-than-target`, publicarlo como si fuera lo mismo afirmaría un método que el
+  laboratorio no ha declarado.
+- **Una prueba fuera del catálogo es `422`, no `400`:** el recurso está bien formado; lo que pasa es
+  que el laboratorio no oferta ese análisis. Es regla de negocio.
+- **Si el servidor no está, el laboratorio sigue:** código sin nombre y validación que no rechaza,
+  con un aviso por caída. El nombre es presentación, el código es el dato — un servidor de
+  terminología caído no puede impedir que se registre un resultado.
+- **⚠️ `$translate` en R5** manda `sourceCode`/`targetSystem`, no `code`/`targetsystem`. HAPI acepta
+  los dos, así que copiar un ejemplo de R4 *funciona aquí* y falla contra un servidor estricto. A la
+  vuelta pasa lo contrario: HAPI aún devuelve `match.equivalence` de R4, así que se leen las dos.
 
 ## Invariantes de negocio que FHIR no puede expresar (§10)
 

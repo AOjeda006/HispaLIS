@@ -5,11 +5,10 @@ import es.hispalis.backend.dominio.peticion.Peticion;
 import es.hispalis.backend.fhir.CatalogoDePruebas;
 import es.hispalis.backend.fhir.PerfilesDeLaGuia;
 import es.hispalis.backend.fhir.Referencias;
+import es.hispalis.backend.fhir.terminologia.Terminologia;
 import java.util.Date;
 import org.hl7.fhir.r5.model.Annotation;
-import org.hl7.fhir.r5.model.CodeableConcept;
 import org.hl7.fhir.r5.model.CodeableReference;
-import org.hl7.fhir.r5.model.Coding;
 import org.hl7.fhir.r5.model.Enumerations.RequestIntent;
 import org.hl7.fhir.r5.model.Enumerations.RequestStatus;
 import org.hl7.fhir.r5.model.Reference;
@@ -26,14 +25,25 @@ import org.springframework.stereotype.Component;
 @Component
 public class TraductorDePeticion {
 
+    private final Terminologia terminologia;
+
+    public TraductorDePeticion(Terminologia terminologia) {
+        this.terminologia = terminologia;
+    }
+
     /** Construye el agregado a partir del recurso recibido, validando de paso sus invariantes. */
     public Peticion aDominio(ServiceRequest recurso) {
+        String codigo = CatalogoDePruebas.codigoDe(recurso.getCode().getConcept())
+                .orElseThrow(() -> new DatoInvalido(
+                        "La petición tiene que decir qué prueba se pide, con un código del catálogo."));
+        // Lo pregunta el servidor de terminología, no una lista de aquí: el catálogo crece cuando
+        // el laboratorio incorpora una técnica, y eso pasa en la guía, no en este fichero.
+        terminologia.exigirQueLaPruebaExiste(codigo);
+
         return Peticion.registrar(
                 recurso.getRequisition().getValue(),
                 Referencias.identidadDe(recurso.getSubject(), "paciente"),
-                CatalogoDePruebas.codigoDe(recurso.getCode().getConcept())
-                        .orElseThrow(() -> new DatoInvalido(
-                                "La petición tiene que decir qué prueba se pide, con un código del catálogo.")),
+                codigo,
                 referenciaDe(recurso.getRequester()),
                 recurso.hasAuthoredOn() ? recurso.getAuthoredOn().toInstant() : null);
     }
@@ -57,9 +67,9 @@ public class TraductorDePeticion {
         recurso.setAuthoredOn(Date.from(peticion.solicitadaEn()));
 
         // `CodeableReference`, no `CodeableConcept`: es la diferencia de R5 que rompe todo lo
-        // copiado de R4.
-        recurso.setCode(new CodeableReference(new CodeableConcept()
-                .addCoding(new Coding().setSystem(CatalogoDePruebas.SYSTEM).setCode(peticion.codigoDePrueba()))));
+        // copiado de R4. El concepto de dentro lo arma la terminología —nombre en español y LOINC
+        // equivalente—, no este fichero.
+        recurso.setCode(new CodeableReference(terminologia.pruebaDelCatalogo(peticion.codigoDePrueba())));
         return recurso;
     }
 

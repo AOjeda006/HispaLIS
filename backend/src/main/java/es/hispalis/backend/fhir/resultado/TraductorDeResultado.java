@@ -9,6 +9,7 @@ import es.hispalis.backend.dominio.resultado.RangoDeReferencia;
 import es.hispalis.backend.dominio.resultado.Resultado;
 import es.hispalis.backend.fhir.CatalogoDePruebas;
 import es.hispalis.backend.fhir.PerfilesDeLaGuia;
+import es.hispalis.backend.fhir.terminologia.Terminologia;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Date;
@@ -35,9 +36,11 @@ public class TraductorDeResultado {
     private static final Map<String, String> SEXO_EN_SNOMED = Map.of("male", "248153007", "female", "248152002");
 
     private final CatalogoDeRangosDeReferencia rangos;
+    private final Terminologia terminologia;
 
-    public TraductorDeResultado(CatalogoDeRangosDeReferencia rangos) {
+    public TraductorDeResultado(CatalogoDeRangosDeReferencia rangos, Terminologia terminologia) {
         this.rangos = rangos;
+        this.terminologia = terminologia;
     }
 
     /**
@@ -91,8 +94,9 @@ public class TraductorDeResultado {
         // que solo ha pasado por el analizador es firmar por la máquina, y quien lo lee no tiene
         // forma de distinguirlo de un resultado revisado.
         recurso.setStatus(resultado.estaValidado() ? ObservationStatus.FINAL : ObservationStatus.PRELIMINARY);
-        recurso.setCode(new CodeableConcept()
-                .addCoding(new Coding().setSystem(CatalogoDePruebas.SYSTEM).setCode(resultado.codigoDePrueba())));
+        // El nombre en español y el LOINC equivalente los pone la terminología. Un `Observation` sin
+        // LOINC solo lo entiende este laboratorio; con él lo entiende cualquiera que lo reciba.
+        recurso.setCode(terminologia.pruebaDelCatalogo(resultado.codigoDePrueba()));
         recurso.setSubject(new Reference("Patient/" + resultado.pacienteId()));
         recurso.setSpecimen(new Reference("Specimen/" + resultado.especimenId()));
         resultado.peticionId().ifPresent(peticion -> recurso.addBasedOn(new Reference("ServiceRequest/" + peticion)));
@@ -163,9 +167,13 @@ public class TraductorDeResultado {
         return Medicion.de(cuando, quien);
     }
 
-    private static String codigoDelCatalogo(Observation recurso) {
-        return CatalogoDePruebas.codigoDe(recurso.getCode())
+    private String codigoDelCatalogo(Observation recurso) {
+        String codigo = CatalogoDePruebas.codigoDe(recurso.getCode())
                 .orElseThrow(() -> new DatoInvalido(
                         "El resultado tiene que decir qué prueba es, con un código del catálogo del laboratorio."));
+        // La misma autoridad que valida la petición valida el resultado. Si el catálogo aceptase por
+        // esta puerta lo que rechaza por la otra, publicaríamos un `Observation` intraducible a LOINC.
+        terminologia.exigirQueLaPruebaExiste(codigo);
+        return codigo;
     }
 }

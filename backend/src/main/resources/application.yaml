@@ -57,6 +57,14 @@ spring:
     bootstrap-servers: ${HISPALIS_KAFKA:localhost:9092}
 
 hispalis:
+  # El servidor de terminología (D14). Una URL y nada más: no hay tipo de servidor ni operación
+  # propietaria que configurar, así que apuntar a Snowstorm es cambiar esta línea. Vacío por defecto
+  # a propósito — sin él el laboratorio arranca y funciona, publicando el código sin nombre; el
+  # `compose` lo rellena con `HISPALIS_TERMINOLOGIA`.
+  terminologia:
+    servidor: ${HISPALIS_TERMINOLOGIA:}
+    tiempo-de-espera: PT5S
+
   bus:
     # Encendido por defecto: que el laboratorio no publique lo que ya ha apuntado tiene que ser una
     # decisión escrita, no un valor que falta. Con el broker caído no pasa nada — el hecho se queda
