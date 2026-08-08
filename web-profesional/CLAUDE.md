@@ -15,8 +15,8 @@
 ## Qué construye
 
 La web del **profesional del laboratorio**: alta de petición y consulta de informe, **contra la API
-FHIR real** (nada de *mocks* en el criterio de aceptación del hito 1). En el hito 2 se le añade
-lanzamiento **SMART EHR launch** con *scopes* `user/*.rs`.
+FHIR real** (nada de *mocks* en el criterio de aceptación del hito 1), con lanzamiento **SMART EHR
+launch** (ítem 37).
 
 ## Reglas
 
@@ -33,11 +33,37 @@ lanzamiento **SMART EHR launch** con *scopes* `user/*.rs`.
   primer y segundo apellido; si necesitas la descomposición, usa las extensiones
   `humanname-fathers-family` / `humanname-mothers-family`.
 - **Casos de prueba obligatorios de charset:** `MUÑOZ`, `ÁLVAREZ`, `PEÑA`.
-- **Sin secretos en el bundle.** En el hito 1 no hay Keycloak; cuando llegue (hito 2), el cliente es
-  público con **PKCE** y no lleva `client_secret`.
+- **Sin secretos en el bundle.** El cliente es **público, con PKCE `S256`** y no lleva
+  `client_secret`: todo lo que viaja en el paquete que se descarga el navegador lo puede leer
+  cualquiera, así que un secreto ahí no es un secreto.
 - **Accesibilidad y claridad no son opcionales:** es una herramienta de trabajo clínico, donde
   confundir un paciente o una unidad tiene consecuencias. Unidad **siempre** junto al valor, y el
   rango de referencia visible junto al resultado.
+
+## El lanzamiento SMART (`src/app/seguridad/`)
+
+`/launch` descubre, prepara el PKCE y redirige; `/callback` canjea el código y abre la sesión. Cinco
+cosas que no son opcionales:
+
+- **Nada se cablea.** De la base FHIR sale `.well-known/smart-configuration`, y de ahí el
+  `authorization_endpoint` y el `token_endpoint`.
+- **El `iss` se comprueba contra una lista.** Llega por la URL y decide a dónde se manda al usuario a
+  identificarse: aceptar cualquiera es **la** vulnerabilidad clásica del EHR launch.
+- **`state` de 256 bits y PKCE `S256`**, los dos con `crypto.getRandomValues`. Si el servidor no
+  ofrece `S256`, no se lanza: caer a `plain` es mandar el verificador en claro.
+- **`user/*.rs` no basta para el alta.** `.rs` es solo lectura; la pantalla de alta **crea** recursos.
+  Se piden además `user/Patient.c`, `user/Practitioner.c` y `user/ServiceRequest.c` — y ni uno más:
+  `user/*.cruds` daría de paso permiso para borrar informes.
+- **El testigo va en un interceptor y solo a las llamadas del laboratorio** (relativas y absolutas
+  del mismo origen, que es como vuelve `Bundle.link[relation=next]`). Un testigo enviado a quien no
+  le corresponde es un testigo entregado.
+
+La sesión vive en `sessionStorage`, no en una cookie: la cookie la manda el navegador sola en cada
+petición al origen —eso es CSRF— y aquí el testigo lo pone la aplicación a mano. Con XSS el testigo
+es legible y una cookie `httpOnly` tampoco lo salvaría; la respuesta es que no haya XSS.
+
+La guarda de ruta **no es control de acceso**: eso se aplica en el laboratorio. Solo evita una
+pantalla que iba a contestar `401` en cuanto pidiera algo.
 
 ## Decisiones ya tomadas — no las deshagas por costumbre
 
