@@ -1,0 +1,533 @@
+{
+  "realm": "hispalis",
+  "displayName": "HispaLIS — laboratorio clínico",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": false,
+  "editUsernameAllowed": false,
+  "loginWithEmailAllowed": false,
+  "duplicateEmailsAllowed": false,
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "failureFactor": 10,
+  "internationalizationEnabled": true,
+  "supportedLocales": ["es"],
+  "defaultLocale": "es",
+  "accessTokenLifespan": 900,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 28800,
+  "offlineSessionIdleTimeout": 1209600,
+  "revokeRefreshToken": true,
+  "refreshTokenMaxReuse": 0,
+
+  "clientScopes": [
+    {
+      "name": "basic",
+      "description": "Los claims que todo testigo lleva: sub y auth_time.",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "false", "display.on.consent.screen": "false" },
+      "protocolMappers": [
+        {
+          "name": "sub",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-sub-mapper",
+          "consentRequired": false,
+          "config": { "access.token.claim": "true", "introspection.token.claim": "true" }
+        },
+        {
+          "name": "auth_time",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usersessionmodel-note-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.session.note": "AUTH_TIME",
+            "claim.name": "auth_time",
+            "jsonType.label": "long",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "acr",
+      "description": "Nivel de autenticación alcanzado.",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "false", "display.on.consent.screen": "false" },
+      "protocolMappers": [
+        {
+          "name": "acr loa level",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-acr-mapper",
+          "consentRequired": false,
+          "config": {
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "web-origins",
+      "description": "Orígenes permitidos, para el CORS del propio Keycloak.",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "false", "display.on.consent.screen": "false" },
+      "protocolMappers": [
+        {
+          "name": "allowed web origins",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-allowed-origins-mapper",
+          "consentRequired": false,
+          "config": { "introspection.token.claim": "true", "access.token.claim": "true" }
+        }
+      ]
+    },
+    {
+      "name": "roles",
+      "description": "Los roles del realm, para lo que no es SMART.",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "false", "display.on.consent.screen": "false" },
+      "protocolMappers": [
+        {
+          "name": "realm roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "multivalued": "true",
+            "claim.name": "realm_access.roles",
+            "jsonType.label": "String",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "profile",
+      "description": "Nombre y usuario. No lleva el correo: en un laboratorio el correo ya es dato personal que nadie ha pedido.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "Su nombre y apellidos"
+      },
+      "protocolMappers": [
+        {
+          "name": "username",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "username",
+            "claim.name": "preferred_username",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "full name",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-full-name-mapper",
+          "consentRequired": false,
+          "config": {
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "fhirUser",
+      "description": "Quién es el usuario, como recurso FHIR. SMART lo define como una URL de Practitioner, Patient o RelatedPerson: la identidad se resuelve leyendo ese recurso, no deduciéndola del sub.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "Saber quién es usted dentro del laboratorio"
+      },
+      "protocolMappers": [
+        {
+          "name": "fhirUser",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "fhirUser",
+            "claim.name": "fhirUser",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "name": "launch",
+      "description": "Lanzamiento desde el EHR: el contexto acompaña al testigo.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "Abrirse sobre el paciente que usted tenga en pantalla"
+      },
+      "protocolMappers": [
+        {
+          "name": "patient en el contexto",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "patient",
+            "claim.name": "patient",
+            "jsonType.label": "String",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "need_patient_banner",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-hardcoded-claim-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "need_patient_banner",
+            "claim.value": "true",
+            "jsonType.label": "boolean",
+            "id.token.claim": "false",
+            "access.token.claim": "false",
+            "access.tokenResponse.claim": "true",
+            "introspection.token.claim": "false"
+          }
+        }
+      ]
+    },
+    {
+      "name": "launch/patient",
+      "description": "Lanzamiento autónomo pidiendo contexto de paciente.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "Abrirse sobre un paciente concreto"
+      },
+      "protocolMappers": [
+        {
+          "name": "patient en el contexto",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "patient",
+            "claim.name": "patient",
+            "jsonType.label": "String",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "need_patient_banner",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-hardcoded-claim-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "need_patient_banner",
+            "claim.value": "true",
+            "jsonType.label": "boolean",
+            "id.token.claim": "false",
+            "access.token.claim": "false",
+            "access.tokenResponse.claim": "true",
+            "introspection.token.claim": "false"
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "user/*.rs",
+      "description": "Leer y buscar todo lo que el usuario pueda ver. «rs» y en ese orden: los sufijos desordenados o inventados la norma permite rechazarlos.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "Consultar la información clínica a la que usted tiene acceso"
+      }
+    },
+    {
+      "name": "user/Patient.c",
+      "description": "Dar de alta pacientes. Escribir no implica leer: esto no permite consultar nada.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "Dar de alta pacientes nuevos"
+      }
+    },
+    {
+      "name": "user/Practitioner.c",
+      "description": "Dar de alta facultativos peticionarios que aún no están en el directorio.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "Dar de alta facultativos peticionarios"
+      }
+    },
+    {
+      "name": "user/ServiceRequest.c",
+      "description": "Registrar líneas de petición.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "Cursar peticiones de análisis"
+      }
+    },
+    {
+      "name": "patient/*.rs",
+      "description": "Leer y buscar los datos DEL PACIENTE EN CONTEXTO. El comodín es sobre el tipo de recurso, no sobre la persona: quién es la fija el testigo.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "Consultar sus propios resultados"
+      }
+    },
+
+    {
+      "name": "system/Patient.crus",
+      "description": "El motor da de alta y corrige filiación, y busca por NHC para no duplicarla. Sin «d»: el motor no borra pacientes.",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "false" }
+    },
+    {
+      "name": "system/ServiceRequest.cs",
+      "description": "El motor registra líneas del OML^O21 y busca antes para que reprocesar no duplique.",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "false" }
+    },
+    {
+      "name": "system/Specimen.cs",
+      "description": "El motor registra muestras y busca por número de acceso.",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "false" }
+    },
+    {
+      "name": "system/Observation.crs",
+      "description": "El motor informa resultados del analizador, y los relee para el ORU saliente.",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "false" }
+    },
+    {
+      "name": "system/DiagnosticReport.r",
+      "description": "El motor lee el informe emitido para armar el ORU^R01 que devuelve al HIS.",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "false" }
+    },
+    {
+      "name": "system/*.cruds",
+      "description": "Administración del laboratorio: es lo que exige $reconciliar, que BORRA recursos. Definido para que se pueda conceder, y a propósito sin cliente asignado: dárselo a alguien es un acto administrativo explícito, no una casilla que venía marcada.",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "false" }
+    }
+  ],
+
+  "defaultDefaultClientScopes": ["basic", "acr", "roles", "web-origins"],
+  "defaultOptionalClientScopes": [],
+
+  "components": {
+    "org.keycloak.userprofile.UserProfileProvider": [
+      {
+        "name": "declarative-user-profile",
+        "providerId": "declarative-user-profile",
+        "subComponents": {},
+        "config": {
+          "kc.user.profile.config": [
+            "{\"attributes\":[{\"name\":\"username\",\"displayName\":\"${username}\",\"validations\":{\"length\":{\"min\":3,\"max\":255},\"username-prohibited-characters\":{},\"up-username-not-idn-homograph\":{}},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\"]},\"multivalued\":false},{\"name\":\"email\",\"displayName\":\"${email}\",\"validations\":{\"email\":{},\"length\":{\"max\":255}},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\"]},\"multivalued\":false},{\"name\":\"firstName\",\"displayName\":\"${firstName}\",\"validations\":{\"length\":{\"max\":255},\"person-name-prohibited-characters\":{}},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\"]},\"multivalued\":false},{\"name\":\"lastName\",\"displayName\":\"${lastName}\",\"validations\":{\"length\":{\"max\":255},\"person-name-prohibited-characters\":{}},\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\"]},\"multivalued\":false},{\"name\":\"fhirUser\",\"displayName\":\"Recurso FHIR que representa al usuario\",\"validations\":{\"length\":{\"max\":255}},\"permissions\":{\"view\":[\"admin\"],\"edit\":[\"admin\"]},\"multivalued\":false},{\"name\":\"patient\",\"displayName\":\"Paciente en contexto de lanzamiento\",\"validations\":{\"length\":{\"max\":255}},\"permissions\":{\"view\":[\"admin\"],\"edit\":[\"admin\"]},\"multivalued\":false}],\"groups\":[]}"
+          ]
+        }
+      }
+    ]
+  },
+
+  "roles": {
+    "realm": [
+      {
+        "name": "facultativo",
+        "description": "Personal del laboratorio que trabaja con la web profesional."
+      },
+      {
+        "name": "ciudadano",
+        "description": "Paciente que consulta sus propios informes."
+      }
+    ]
+  },
+
+  "clients": [
+    {
+      "clientId": "hispalis-web",
+      "name": "HispaLIS — web del profesional",
+      "description": "SPA de Angular. Cliente PÚBLICO con PKCE: un secreto repartido con el paquete que se descarga el navegador no es un secreto.",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "frontchannelLogout": true,
+      "redirectUris": ["http://localhost:4200/callback", "http://localhost:4200/logout"],
+      "webOrigins": ["http://localhost:4200"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:4200/*",
+        "oauth2.device.authorization.grant.enabled": "false"
+      },
+      "defaultClientScopes": ["basic", "acr", "roles", "web-origins", "profile"],
+      "optionalClientScopes": [
+        "fhirUser",
+        "launch",
+        "launch/patient",
+        "user/*.rs",
+        "user/Patient.c",
+        "user/Practitioner.c",
+        "user/ServiceRequest.c"
+      ],
+      "protocolMappers": [
+        {
+          "name": "aud del laboratorio",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "http://localhost:4200/fhir",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "hispalis-app-ciudadano",
+      "name": "HispaLIS — app del ciudadano",
+      "description": "Cliente PÚBLICO con PKCE para el lanzamiento autónomo del paciente. La app Flutter llega en el ítem 39; el cliente está ya porque es el único titular legítimo de patient/*.rs.",
+      "enabled": true,
+      "publicClient": true,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["es.hispalis.ciudadano://callback", "http://localhost:8090/callback"],
+      "webOrigins": [],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "oauth2.device.authorization.grant.enabled": "false"
+      },
+      "defaultClientScopes": ["basic", "acr", "roles", "web-origins", "profile"],
+      "optionalClientScopes": ["fhirUser", "launch/patient", "patient/*.rs"],
+      "protocolMappers": [
+        {
+          "name": "aud del laboratorio",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "http://localhost:8080/fhir",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "hispalis-motor",
+      "name": "HispaLIS — motor de integración",
+      "description": "SMART Backend Services: sin usuario, con client_credentials y JWT firmado. La clave pública se registra por URL JWKS y no pegada, para poder rotarla sin volver a registrar el cliente.",
+      "enabled": true,
+      "publicClient": false,
+      "protocol": "openid-connect",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "clientAuthenticatorType": "client-jwt",
+      "attributes": {
+        "use.jwks.url": "true",
+        "jwks.url": "http://motor:8082/motor/jwks.json",
+        "token.endpoint.auth.signing.alg": "RS384",
+        "use.refresh.tokens": "false",
+        "client_credentials.use_refresh_token": "false",
+        "access.token.lifespan": "300"
+      },
+      "defaultClientScopes": [
+        "basic",
+        "roles",
+        "system/Patient.crus",
+        "system/ServiceRequest.cs",
+        "system/Specimen.cs",
+        "system/Observation.crs",
+        "system/DiagnosticReport.r"
+      ],
+      "optionalClientScopes": [],
+      "protocolMappers": [
+        {
+          "name": "aud del laboratorio",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "http://backend:8080/fhir",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+
+  "users": [
+    {
+      "username": "dra.alvarez",
+      "firstName": "Lucía",
+      "lastName": "Álvarez Peña",
+      "enabled": true,
+      "emailVerified": false,
+      "realmRoles": ["facultativo"],
+      "attributes": {
+        "fhirUser": ["Practitioner/dra-alvarez"]
+      }
+    },
+    {
+      "username": "paciente.demo",
+      "firstName": "Rosa",
+      "lastName": "Muñoz de la Torre",
+      "enabled": true,
+      "emailVerified": false,
+      "realmRoles": ["ciudadano"],
+      "attributes": {}
+    },
+    {
+      "username": "paciente.otro",
+      "firstName": "Antonio",
+      "lastName": "Peña Gil",
+      "enabled": true,
+      "emailVerified": false,
+      "realmRoles": ["ciudadano"],
+      "attributes": {}
+    }
+  ]
+}

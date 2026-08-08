@@ -1,18 +1,22 @@
-# La pila: PostgreSQL + Kafka + registro de esquemas + servidor de terminología + backend + web.
+# La pila: PostgreSQL + Kafka + registro de esquemas + terminología + Keycloak + backend + web.
 #
+#   cp infra/compose/.env.example infra/compose/.env   # y edítalo
 #   docker compose -f infra/compose/docker-compose.yml up
 #
 # Todo lo que hace falta para recorrer el circuito de extremo a extremo desde un clon recién hecho.
-# Queda fuera Keycloak, que es el ítem 34.
+# Queda fuera el motor de integración, que se arranca aparte (ítem 41).
 #
-# ⚠️ Dos cosas viven FUERA del repositorio y hay que tenerlas antes de levantar:
+# ⚠️ Tres cosas viven FUERA del repositorio y hay que tenerlas antes de levantar:
 #
 #   1. La guía compilada — `npx fsh-sushi .` dentro de `ig/`. No se versiona: la produce SUSHI.
 #   2. Las releases de terminología archivadas en `BibliotecaDocumentacion`, que se asume clonada
 #      como carpeta hermana. Con `HISPALIS_RELEASES` se puede apuntar a otro sitio.
+#   3. Un `.env` con las contraseñas de Keycloak. No hay valores por defecto a propósito: son
+#      secretos de verdad y `.env` está en `.gitignore`. La plantilla es `.env.example`.
 #
-# Sin ellas, el servidor de terminología levanta y el cargador para con un mensaje que dice cuál
-# falta — que es mejor que un laboratorio arrancando con un catálogo vacío.
+# Sin la primera o la segunda, el servidor de terminología levanta y el cargador para con un mensaje
+# que dice cuál falta — que es mejor que un laboratorio arrancando con un catálogo vacío. Sin la
+# tercera, `docker compose` para antes de crear nada y dice qué variable falta.
 
 name: hispalis
 
@@ -183,6 +187,78 @@ services:
       terminologia:
         condition: service_started
 
+  # ─── Identidad (ítem 34) ───────────────────────────────────────────────────
+  #
+  # El realm entra por `--import-realm` desde `infra/keycloak/`: configuración COMO CÓDIGO. Nada de
+  # esto se toca en la consola de administración — un realm clicado a mano no se revisa, no se
+  # despliega y no se puede reconstruir tras un `down -v`.
+  #
+  # ⚠️ Las dos contraseñas son OBLIGATORIAS y no tienen valor por defecto. Es deliberado: aquí sí hay
+  # secretos de verdad —la cuenta de administración del servidor de identidad y las de los usuarios
+  # de demostración—, y un valor por defecto en un fichero versionado es la forma habitual de que un
+  # secreto acabe en producción. Cópiate `.env.example` a `.env` (que está en `.gitignore`).
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.4
+    command: ['start-dev', '--import-realm']
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${HISPALIS_KEYCLOAK_ADMIN:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${HISPALIS_KEYCLOAK_ADMIN_CLAVE:?falta HISPALIS_KEYCLOAK_ADMIN_CLAVE — copia infra/compose/.env.example a .env}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: hispalis
+      KC_DB_PASSWORD: hispalis
+      KC_HEALTH_ENABLED: 'true'
+      # El emisor que ve el navegador y el que ve el backend tienen que ser EL MISMO literal: el
+      # `iss` del testigo se compara con el configurado, y `keycloak:8080` frente a `localhost:8081`
+      # son dos emisores distintos aunque sean el mismo servidor. Con el nombre de anfitrión fijado
+      # aquí, Keycloak firma y anuncia siempre `http://localhost:8081`, y el backend lo alcanza por
+      # ese mismo nombre gracias al `extra_hosts` de abajo.
+      KC_HOSTNAME: http://localhost:8081
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: 'false'
+    volumes:
+      - ../keycloak:/opt/keycloak/data/import:ro
+    ports:
+      - '8081:8080'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # La imagen de Keycloak tampoco lleva `curl`, pero sí trae un JRE: el propio Keycloak publica
+      # `/health/ready` en el puerto de administración (9000) y se consulta con `java`.
+      test:
+        [
+          'CMD-SHELL',
+          "exec 3<>/dev/tcp/localhost/9000 && echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q '\"status\": \"UP\"' <&3",
+        ]
+      interval: 10s
+      timeout: 5s
+      start_period: 60s
+      retries: 30
+
+  # Lo que no puede ir en el realm versionado porque son secretos: las contraseñas de los usuarios de
+  # demostración. Servicio de arranque, como `kafka-topicos`: pone y termina.
+  keycloak-usuarios:
+    image: quay.io/keycloak/keycloak:26.4
+    entrypoint: ['/bin/bash', '-c']
+    environment:
+      KC_ADMIN: ${HISPALIS_KEYCLOAK_ADMIN:-admin}
+      KC_ADMIN_CLAVE: ${HISPALIS_KEYCLOAK_ADMIN_CLAVE:?falta HISPALIS_KEYCLOAK_ADMIN_CLAVE}
+      KC_CLAVE_DEMO: ${HISPALIS_KEYCLOAK_CLAVE_DEMO:?falta HISPALIS_KEYCLOAK_CLAVE_DEMO — copia infra/compose/.env.example a .env}
+    command:
+      - |
+        set -euo pipefail
+        kcadm=/opt/keycloak/bin/kcadm.sh
+        $$kcadm config credentials --server http://keycloak:8080 --realm master \
+          --user "$$KC_ADMIN" --password "$$KC_ADMIN_CLAVE"
+        for usuario in dra.alvarez paciente.demo paciente.otro; do
+          id=$$($$kcadm get users -r hispalis -q username=$$usuario -q exact=true --fields id --format csv --noquotes)
+          $$kcadm set-password -r hispalis --userid "$$id" --new-password "$$KC_CLAVE_DEMO"
+          echo "contraseña puesta a $$usuario"
+        done
+    depends_on:
+      keycloak:
+        condition: service_healthy
+
   backend:
     build:
       # El contexto es la raíz del repositorio, compartido con la web.
@@ -195,6 +271,15 @@ services:
       HISPALIS_KAFKA: 'kafka:9092'
       HISPALIS_REGISTRO_ESQUEMAS: 'http://registro-de-esquemas:8085'
       HISPALIS_TERMINOLOGIA: 'http://terminologia:8080/fhir'
+      HISPALIS_OIDC_EMISOR: 'http://localhost:8081/realms/hispalis'
+      # Las bases FHIR por las que se llega a este mismo servidor. El navegador entra por el proxy
+      # (`:4200`) y el motor por la red interna (`backend:8080`), así que el `aud` legítimo de un
+      # testigo es uno u otro según quién lo pidiera. Fuera de una pila de desarrollo hay una sola.
+      HISPALIS_OIDC_AUDIENCIAS: 'http://localhost:4200/fhir,http://localhost:8080/fhir,http://backend:8080/fhir'
+    extra_hosts:
+      # El backend descubre y valida contra `http://localhost:8081`, que es el emisor que firma
+      # Keycloak. Dentro de un contenedor `localhost` es él mismo, así que se le enseña a dónde ir.
+      - 'localhost:host-gateway'
     ports:
       # Se publica aunque la web no lo necesite —le llega por el proxy—, porque el circuito se
       # recorre con `curl` y el validador oficial también entra por aquí.
@@ -213,6 +298,11 @@ services:
       # códigos y resuelve `display` contra ella desde la primera escritura, y arrancar antes de
       # que esté cargada significaría publicar unos recursos con `display` y otros sin él.
       terminologia-carga:
+        condition: service_completed_successfully
+      # La identidad ordena el arranque pero NO lo condiciona en el fondo: el backend levanta con
+      # Keycloak caído y descubre sus claves en la primera petición que traiga testigo. Sin él la API
+      # contesta 401 a todo, que es lo correcto — pero no se queda sin arrancar.
+      keycloak-usuarios:
         condition: service_completed_successfully
     healthcheck:
       # `metadata` es la prueba honesta de que está listo: contesta cuando el servidor FHIR está

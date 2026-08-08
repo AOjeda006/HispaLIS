@@ -1,0 +1,12 @@
+-- Keycloak también tiene su propia base, por el mismo motivo que la terminología: es un servicio de
+-- otro, con su propio esquema y sus propias migraciones, y comparte instancia con el laboratorio
+-- solo porque esto es una pila de desarrollo.
+--
+-- Y aquí pesa además un motivo que allí no: en esta base viven las credenciales y las sesiones de
+-- todo el que entra al sistema. Que el servidor FHIR no tenga forma de leerlas —ni por descuido, ni
+-- por un `search_path` mal puesto— es parte de lo que hace que separar identidad de datos clínicos
+-- signifique algo.
+--
+-- ⚠️ PostgreSQL solo ejecuta esto en la PRIMERA inicialización del volumen. Sobre una pila que ya
+-- existía hay que borrar el volumen (`docker compose down -v`) o crear la base a mano.
+CREATE DATABASE keycloak OWNER hispalis;
