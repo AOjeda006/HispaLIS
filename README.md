@@ -39,9 +39,12 @@ degenerar en una historia clínica electrónica en miniatura.
 > extremo a extremo con un `docker compose up`, con la guía FHIR propia publicada, la web del
 > profesional y el generador de datos sintéticos.
 >
-> **Hito 2 en curso.** Ya están el bus de eventos sobre Kafka, el motor de integración HL7 v2 sobre
-> MLLP, el servidor de terminología y **la identidad: Keycloak con SMART on FHIR** (ítems 34–37).
-> **La API FHIR exige testigo**: lo que antes se recorría con `curl` a pelo ahora necesita uno.
+> **Hito 2 cerrado.** El bus de eventos sobre Kafka, el motor de integración HL7 v2 sobre MLLP, el
+> servidor de terminología, **la identidad con SMART on FHIR** y **la app del ciudadano**. La pila
+> entera —ocho servicios— se levanta **con un solo comando**.
+>
+> **La API FHIR exige testigo**: lo que antes se recorría con `curl` a pelo ahora necesita uno, y el
+> laboratorio decide **recurso a recurso** de quién son los datos.
 
 ## Arquitectura en tres frases
 
@@ -83,12 +86,19 @@ Maven **no hace falta instalarlo**: el backend trae el *wrapper* (`./mvnw`), con
 ```bash
 git clone https://github.com/AOjeda006/HispaLIS.git
 cd HispaLIS
-docker compose -f infra/compose/docker-compose.yml up
+cd ig && npx --yes fsh-sushi . && cd ..            # la guía compilada (ver ⚠️ más abajo)
+cp infra/compose/.env.example infra/compose/.env   # y pon las dos contraseñas
+docker compose -f infra/compose/docker-compose.yml up -d
 ```
 
-Levanta **PostgreSQL + Kafka + registro de esquemas + servidor de terminología + backend + web
-profesional**, en ese orden y esperando a que cada uno esté listo. La primera vez tarda unos minutos:
-compila el backend con Maven y la web con Angular.
+Levanta **ocho servicios** —PostgreSQL, Kafka, registro de esquemas, servidor de terminología,
+Keycloak, backend, motor de integración y web profesional— más tres de arranque que hacen su trabajo
+y terminan: los tópicos de Kafka, la carga de terminología y el almacén de claves del MLLP. Van en
+ese orden y esperando a que cada uno esté listo. La primera vez tarda unos minutos: compila el
+backend y el motor con Maven y la web con Angular.
+
+Fuera del `compose` se quedan **solo los terceros**: el HIS y el analizador simulados
+(`simuladores/`), que son los sistemas del hospital y del laboratorio, no parte de HispaLIS.
 
 ⚠️ **Dos cosas viven fuera del repositorio y hay que tenerlas antes de levantar:**
 
@@ -108,6 +118,34 @@ compila el backend con Maven y la web con Angular.
   [`infra/keycloak/`](infra/keycloak/README.md). **Hace falta un `.env`**: cópialo de
   `infra/compose/.env.example` y pon las dos contraseñas, o `docker compose` para antes de crear nada
   y dice cuál falta.
+- **Motor de integración:** `localhost:2575` (MLLP sobre TLS). Su consola **no se publica**: todavía
+  no tiene autenticación, y una bandeja de errores con referencias a pacientes no se abre al equipo.
+
+### Vincular una identidad con su historia
+
+Antes de que la app del ciudadano pueda enseñar nada, la persona que se identifica tiene que estar
+**vinculada** a su historia del laboratorio. No está en el realm a propósito: el realm es
+configuración y esto es **dato**, y dato que no existe hasta que el laboratorio ha creado el
+`Patient` con un id que asigna el servidor.
+
+```bash
+# 1. Que exista la historia: el HIS manda su ADT por MLLP y el motor la crea.
+cd simuladores && python -m his --mensaje adt --evento A01 --nhc 70000001 && cd ..
+
+# 2. Averigua su id (con un testigo de profesional) y vincúlala.
+infra/keycloak/vincular-paciente.sh paciente.demo Patient/<id>
+```
+
+### La app del ciudadano
+
+```bash
+cd app-ciudadano
+flutter pub get
+flutter run -d chrome --web-port 8090   # el 8090 es el puerto registrado en el realm
+```
+
+En el emulador de Android no hace falta tocar nada: `localhost` allí es el emulador y el equipo es
+`10.0.2.2`, y la app lo resuelve sola.
 
 **La API exige testigo.** Lo que sigue siendo público es lo que tiene que serlo:
 
@@ -200,9 +238,9 @@ El estado real de cada pieza está en [`docs/PLAN.md`](docs/PLAN.md).
 |---|---|---|---|---|
 | `ig/` | `npx fsh-sushi .` · `java -jar publisher.jar -ig . -no-sushi` | validador oficial sobre `fsh-generated/resources/` | `npx fsh-sushi .` con **0 warnings** | salida en `ig/output/` |
 | `backend/` | `./mvnw -q package` | `./mvnw verify` | `./mvnw spotless:check` · `./mvnw spotless:apply` | `./mvnw spring-boot:run` · sin base de datos propia: `-Parranque-local` |
-| `integracion/` | `./mvnw -q package` | `./mvnw verify` | `./mvnw spotless:check` · `./mvnw spotless:apply` | `./mvnw spring-boot:run` — se arranca aparte del `compose` (ítem 41) |
+| `integracion/` | `./mvnw -q package` | `./mvnw verify` | `./mvnw spotless:check` · `./mvnw spotless:apply` | `./mvnw spring-boot:run` — o el servicio `motor` del `compose` |
 | `web-profesional/` | `npm run build` | `npm test` | `npm run lint` · `npm run format` | `npm start` |
-| `app-ciudadano/` | *(sin andamiar — hito 2)* | | | |
+| `app-ciudadano/` | `flutter build web` · `flutter build apk` | `flutter test` | `flutter analyze` (falla también con los avisos `info`) | `flutter run -d chrome --web-port 8090` |
 | `simuladores/` | — | `pytest` | `ruff check .` · `ruff format --check .` | `python -m generador --seed 42` |
 
 Notas de las cadenas de construcción, por si sorprenden:

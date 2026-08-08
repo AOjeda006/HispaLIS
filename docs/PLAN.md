@@ -852,48 +852,77 @@ Verificado: backend **184 tests** (`BUILD SUCCESS`), motor **84**, web **88**. Y
 Services con una clave RSA real y su JWKS servido por HTTP, y `system/*.cruds` **rechazado** con
 `400 invalid_scope` por no estar concedido a nadie.
 
-**Nada más se ha adelantado.** `app-ciudadano/` sigue sin andamiar y el motor **sigue sin estar en el
-`compose`**.
+**Y EL HITO 2 ESTÁ CERRADO (2026-08-08): ítems 33, 38, 39, 40 y 41.** La app del ciudadano existe,
+entra por SMART standalone con PKCE y enseña resultados con unidad, rango y estado de validación; el
+motor está en el `compose`; la web pregunta el catálogo en vez de congelarlo; y **la pila entera se
+levanta desde un clon limpio con un solo comando**.
 
-> **Lo que queda sin verificar:**
+Levantarla de verdad destapó **tres fallos que ningún test habría visto**, los tres corregidos:
+
+1. **`.dockerignore` excluía `integracion/`** del contexto de construcción. Tenía sentido cuando el
+   motor se arrancaba a mano; en cuanto entró en el `compose`, `COPY integracion/src src` falló con
+   «not found».
+2. **`extra_hosts: localhost:host-gateway` es un no-op.** No se puede dar un alias a `localhost`:
+   `/etc/hosts` ya lo resuelve a `127.0.0.1` en la primera línea y gana. Llevaba una tanda entera
+   escrito dando por hecho que funcionaba. El arreglo no es de Docker sino de arquitectura: **el
+   emisor por el que se llega no tiene por qué ser el que se anuncia**, y ahora hay una propiedad
+   `interno` en el backend y en el motor para el canal trasero.
+3. **La vinculación con `kcadm` no fallaba: mentía.** Decía «queda vinculado» y dejaba los atributos
+   vacíos. Va contra la API de administración, comprueba el `204` y **lee de vuelta** lo que escribió.
+
+### Los criterios del hito 2, uno a uno
+
+Cada fila es un ítem del checklist con **la prueba concreta** de que se cumple. «En vivo» significa
+contra la pila del `compose` levantada desde el clon limpio, no contra un doble.
+
+| # | Criterio | Prueba concreta |
+|---|---|---|
+| 17 | Anulación de línea de petición | Rojo `81fdd0c` → verde. Un volante con muestra rechazada deja de quedarse bloqueado para siempre |
+| 18 | Validación facultativa con `Provenance` | Rojo `80b9ebf` → verde. Un informe no sale con nada sin firmar |
+| 19 | `outbox` en la misma transacción, sin PHI | Rojo `abb1ddf`. **En vivo:** `select carga from outbox.hecho` → `{"pacienteId": "11d31a30-…"}`, y `0` filas casan contra `(MUÑOZ|PEÑA|ÁLVAREZ|Begoña|DNI)` |
+| 20 | `integracion/` andamiado, CI **sin** guarda | `git ls-files -s integracion/mvnw` → `100755`; el workflow construye de verdad |
+| 21 | Tabla 0354 cruzada entre V2.5 y V2.5.1 | `adr-0018`, con las dos versiones archivadas y la divergencia medida |
+| 22 | Original archivado y deduplicación **antes** de escribir | El mismo mensaje tres veces + tres reprocesos → **una fila, `intentos = 9`**, los mismos ids |
+| 23 | Listener MLLP sobre TLS, con acuses y charset | **En vivo:** `MSA\|AA` desde el `compose`, con `MSH-18 = 8859/1` de ida y de vuelta, sobre el certificado que genera `motor-claves` al levantar |
+| 24 | `ADT^A01`/`A08` → `Patient` por la API FHIR | **En vivo:** `Begoña María MUÑOZ DE LA TORRE`, y la `Ñ` comprobada **por punto de código** (`0xd1`), no por cómo se ve en una consola |
+| 25 | DLQ y reproceso idempotente | `GET /motor/dlq` y `POST /motor/dlq/{id}/reproceso` sobre las filas `RECHAZADO`; nunca devuelve el mensaje v2 |
+> **Lo que queda sin verificar, al cerrar el hito 2:**
 >
-> - **La pila con Keycloak no se ha levantado entera.** Lo que sí se hizo fue arrancar un Keycloak
->   26.4 de usar y tirar, importar este mismo realm y recorrer los flujos con `curl`; lo que no se ha
->   visto es el `compose` completo en marcha con el backend detrás.
-> - **La web no se ha lanzado contra el Keycloak real.** El flujo está probado con 22 tests contra un
->   servidor simulado, y el flujo equivalente se recorrió a mano contra Keycloak con `curl` — pero no
->   desde el navegador y desde esta web.
-> - **La renovación silenciosa del testigo no está** (ítem 37). Al caducar se relanza, y lo que el
->   usuario tuviera a medias en el formulario se pierde.
-> - **El JWKS del motor no lo alcanza Keycloak desde el `compose`.** El realm apunta a
->   `http://motor:8082/motor/jwks.json` y el motor se arranca aparte (ítem 41): hasta que esté en la
->   misma red, el canje devolverá `invalid_client`.
->
-> - **La pila no se ha levantado con `docker compose`.** En este equipo no hay Docker. El fichero es
->   YAML válido y el encadenado está escrito, pero **nadie ha visto arrancar Kafka, el registro ni el
->   servicio que crea los tópicos**. Es lo primero que hay que hacer en una máquina con Docker.
-> - **El registro de esquemas se probó en memoria**, no contra el servidor. Ver el ítem 29: la
->   decisión de compatibilidad la toma el mismo comprobador que el servidor, pero el camino HTTP no
->   se ha ejercitado.
-> - **Los workflows `ci-integracion` y el del backend no han corrido.** Esta tanda es `commit` sin
->   push, y ahora el backend descarga de un repositorio nuevo (Confluent): si en la CI está
->   restringido el acceso a repositorios externos, el build fallará ahí y no aquí.
-> - **El motor no está en el `compose`.** El arranque en local se hizo a mano, con el PostgreSQL
->   embebido del backend y un almacén de claves generado al vuelo.
-> - **El `ORU^R01` saliente se probó en claro contra el simulador**, no sobre TLS. El camino TLS del
->   emisor sí lo cubre el test `NotificadorAlHisTest`, que levanta un HIS con certificado; lo que no
->   se ha ejercitado a mano es el receptor Python con TLS, porque necesita un par PEM y el almacén
->   que se genera es un PKCS12.
+> - ⚠️ **El circuito v2 completo NO se ha cerrado contra la pila con seguridad.** La primera mitad
+>   sí: `ADT^A01` entra por MLLP/TLS, el motor se identifica con su clave y el `Patient` aparece con
+>   la `Ñ` intacta. El `OML^O21` se queda en `AE`: el `ServiceRequest` referencia
+>   `Practitioner/COL12345` y **ese recurso no existe ni se puede crear**. `user/Practitioner.c` es
+>   *crear*, no *actualizar*, así que un `PUT` con id elegido devuelve `403` — que es el
+>   comportamiento correcto del ítem 35—, y el motor solo tiene `system/` de los cinco tipos que
+>   escribe. Es un hueco **de diseño del camino de alta**, no un fallo: falta decidir quién da de
+>   alta a los facultativos peticionarios y con qué permiso. Hasta el ítem 36 el circuito se recorría
+>   con el backend sin seguridad y por eso no se había visto. Primer candidato del hito 3.
+> - **Los seis workflows no han corrido en GitHub.** Esta tanda es `commit` sin push. Se ejercitaron
+>   en local con la misma orden que corren ellos, pero la CI no los ha visto — y el backend descarga
+>   de un repositorio que no es Central (Confluent), que sigue siendo el riesgo anotado.
+> - **La app del ciudadano no se ha ejecutado en un dispositivo.** `flutter analyze` y `flutter test`
+>   pasan, y el flujo SMART se recorrió **con las mismas peticiones que hace la app** contra el
+>   Keycloak del `compose`, pero nadie ha visto la pantalla en un emulador ni en un móvil. La trampa
+>   del `10.0.2.2` está resuelta en el código y **no está comprobada en un emulador de verdad**.
+> - **`flutter build apk` y `flutter build web` no se han ejecutado.** La CI hace `analyze` y `test`;
+>   un fallo que solo aparezca al empaquetar —el manifiesto, el `network_security_config`— no lo
+>   vería ninguno de los dos.
+> - **El `ORU^R01` saliente sigue sin ejercitarse sobre TLS a mano.** El camino del emisor lo cubre
+>   `NotificadorAlHisTest`, que levanta un HIS con certificado; lo que no se ha hecho es el receptor
+>   Python con TLS, porque necesita un par PEM y lo que se genera es un PKCS#12 (`adr-0022`).
+> - **Los tres códigos SNOMED del SNS siguen fuera** (ítem 42 del hito 3). Bloqueo de datos, no de
+>   trabajo: la Edición Española no se redistribuye y no está en este equipo.
 > - **`Observation.device` sigue vacío.** El identificador del aparato llega en `OBX-18` y no se
->   proyecta a FHIR: apuntar ahí exige que el laboratorio tenga su inventario de analizadores como
->   recursos `Device`, que hoy no existe. La identidad del analizador **no se pierde** —está en el
->   original archivado—, pero el recurso no la lleva.
+>   proyecta: exige un inventario de analizadores como recursos `Device`, que hoy no existe. La
+>   identidad del analizador **no se pierde** —está en el original archivado—, pero el recurso no la
+>   lleva.
 > - **El reconciliador no se ha ejecutado sobre el laboratorio entero**, solo acotado a un paciente.
->   Con la base de un test eso no dice nada del coste de una pasada completa, que es una transacción
->   larga y un `search` sin filtro por tipo.
-> - ~~**`$reconciliar` no tiene autenticación**~~ — **saldada en el ítem 35.** Exige un testigo de
->   sistema con `system/*.cruds`, que no está concedido a ningún cliente del realm: dárselo a alguien
->   es un acto explícito.
+> - **El registro de esquemas se probó en memoria**, no contra el servidor. La decisión de
+>   compatibilidad la toma el mismo comprobador que el servidor, pero el camino HTTP no se ha
+>   ejercitado.
+> - **La consola del motor (8082) no tiene autenticación**, y por eso **no se publica** fuera de la
+>   red del `compose`. Es una decisión consciente, no un olvido: una bandeja de errores con
+>   referencias a pacientes no se abre al equipo.
 
 ---
 
