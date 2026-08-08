@@ -194,6 +194,7 @@
             "jsonType.label": "String",
             "id.token.claim": "false",
             "access.token.claim": "true",
+            "access.tokenResponse.claim": "true",
             "introspection.token.claim": "true"
           }
         },
@@ -235,6 +236,7 @@
             "jsonType.label": "String",
             "id.token.claim": "false",
             "access.token.claim": "true",
+            "access.tokenResponse.claim": "true",
             "introspection.token.claim": "true"
           }
         },
@@ -423,7 +425,7 @@
     {
       "clientId": "hispalis-app-ciudadano",
       "name": "HispaLIS — app del ciudadano",
-      "description": "Cliente PÚBLICO con PKCE para el lanzamiento autónomo del paciente. La app Flutter llega en el ítem 39; el cliente está ya porque es el único titular legítimo de patient/*.rs.",
+      "description": "Cliente PÚBLICO con PKCE para el lanzamiento autónomo del paciente. En móvil la vuelta es por el esquema propio; en web, por la página /auth.html que sirve la propia app, y por eso el origen 8090 está permitido.",
       "enabled": true,
       "publicClient": true,
       "protocol": "openid-connect",
@@ -431,8 +433,8 @@
       "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false,
-      "redirectUris": ["es.hispalis.ciudadano://callback", "http://localhost:8090/callback"],
-      "webOrigins": [],
+      "redirectUris": ["es.hispalis.ciudadano://callback", "http://localhost:8090/auth.html"],
+      "webOrigins": ["http://localhost:8090"],
       "attributes": {
         "pkce.code.challenge.method": "S256",
         "oauth2.device.authorization.grant.enabled": "false"

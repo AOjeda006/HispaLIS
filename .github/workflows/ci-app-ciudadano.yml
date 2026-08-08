@@ -28,34 +28,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Guarda de auto-omisión: RETIRAR al crear app-ciudadano/pubspec.yaml.
-      - name: Comprobar que la app está andamiada
-        id: guarda
-        run: |
-          if [ -f app-ciudadano/pubspec.yaml ]; then
-            echo "andamiada=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "andamiada=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::app-ciudadano/pubspec.yaml no existe todavía; se omite la construcción."
-          fi
-
+      # La guarda de auto-omisión que vivía aquí se retiró al andamiar la app (ítem 38). Un
+      # `if:` que decide si se compila deja pasar en verde un componente que no se ha construido,
+      # que es justo lo que un CI no debe hacer una vez el componente existe.
       - uses: subosito/flutter-action@v2
-        if: steps.guarda.outputs.andamiada == 'true'
         with:
           channel: stable
           cache: true
 
       - name: Dependencias
-        if: steps.guarda.outputs.andamiada == 'true'
         working-directory: app-ciudadano
         run: flutter pub get
 
+      # `flutter analyze` falla también con los avisos de nivel `info`, y el
+      # `analysis_options.yaml` de la app sube `public_member_api_docs` a error.
       - name: Analyze
-        if: steps.guarda.outputs.andamiada == 'true'
         working-directory: app-ciudadano
         run: flutter analyze
 
       - name: Tests
-        if: steps.guarda.outputs.andamiada == 'true'
         working-directory: app-ciudadano
         run: flutter test

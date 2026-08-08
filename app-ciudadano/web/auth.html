@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Identificación completada — HispaLIS</title>
+</head>
+<body>
+  <!--
+    La página a la que el servidor de identidad devuelve el control en la versión web.
+
+    En móvil la vuelta la recoge el sistema por el esquema propio `es.hispalis.ciudadano://`; en el
+    navegador no hay esquema que registrar, así que hace falta una página de verdad, servida desde el
+    MISMO origen que la app, que le pase la URL de vuelta a la ventana que abrió la autorización. Sin
+    este fichero el flujo web se queda colgado en una pestaña en blanco.
+
+    El `postMessage` va con `window.location.origin` como destinatario y nunca con `'*'`: la URL de
+    vuelta lleva el código de autorización, y mandarlo a cualquier origen es regalárselo a la primera
+    página que esté escuchando.
+  -->
+  <p>Ya está. Puedes cerrar esta ventana si no se cierra sola.</p>
+  <script>
+    (function () {
+      var mensaje = { 'flutter-web-auth-2': window.location.href };
+
+      if (window.opener) {
+        window.opener.postMessage(mensaje, window.location.origin);
+        window.close();
+      } else if (window.parent && window.parent !== window) {
+        window.parent.postMessage(mensaje, window.location.origin);
+      } else {
+        window.localStorage.setItem('flutter-web-auth-2', window.location.href);
+        window.close();
+      }
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,41 @@
+name: hispalis_ciudadano
+description: 'HispaLIS — la app del ciudadano: consulta de sus resultados de laboratorio.'
+# Es la app de una simulación y no se publica en pub.dev.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.0
+
+dependencies:
+  # SHA-256 para el reto PKCE. `dart:convert` da base64url, pero no el resumen.
+  crypto: ^3.0.7
+  # Cliente HTTP con interceptores, que es donde va el testigo (convención de Flutter del proyecto).
+  dio: ^5.11.0
+  flutter:
+    sdk: flutter
+  # Los textos que pone el propio Flutter («Cancelar», «Actualizar») también en español: si no, se
+  # cuelan en inglés en medio de una pantalla que está entera en español.
+  flutter_localizations:
+    sdk: flutter
+  # El almacén seguro de la plataforma: Keystore en Android, Keychain en iOS. Los testigos NO van a
+  # SharedPreferences ni a un fichero: son credenciales de acceso a una historia clínica.
+  flutter_secure_storage: ^11.0.0
+  # La vuelta del navegador al terminar la autorización: pestaña de sistema en móvil (nunca un
+  # WebView empotrado, que puede leer lo que el usuario teclea) y ventana emergente en web.
+  flutter_web_auth_2: ^5.0.3
+  get_it: ^9.2.1
+  go_router: ^17.4.0
+  # Fechas y números a la española. La app es monolingüe (invariante 9), así que `intl` entra por el
+  # formato y no por la traducción.
+  # La versión la fija `flutter_localizations`, que trae `intl` clavado: subirla rompe la resolución.
+  intl: ^0.20.2
+  provider: ^6.1.5+1
+
+dev_dependencies:
+  flutter_lints: ^6.0.0
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true

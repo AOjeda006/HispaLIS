@@ -10,6 +10,7 @@
 @../../BibliotecaDocumentacion/bases-de-datos/almacenamiento-local/convenciones.md
 @../../BibliotecaDocumentacion/patrones/mvvm.md
 @../../BibliotecaDocumentacion/ux-ipo/convenciones.md
+@../../BibliotecaDocumentacion/interoperabilidad/smart-on-fhir/convenciones.md
 
 ---
 

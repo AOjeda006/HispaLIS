@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  TLS obligatorio contra cualquier sitio, con una excepción nombrada una a una: la pila de
+  desarrollo que corre en el equipo de quien programa.
+
+  La alternativa fácil es `android:usesCleartextTraffic="true"` en el manifiesto, y es exactamente lo
+  que no se hace: eso abre el HTTP en claro contra TODO internet en el APK que se publica, para que
+  funcione un `localhost`. Aquí `cleartextTrafficPermitted` vale solo para tres nombres que no
+  existen fuera de una máquina de desarrollo — `10.0.2.2` es el equipo visto desde el emulador —, y
+  el resto del mundo sigue exigiendo HTTPS.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">10.0.2.2</domain>
+        <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">127.0.0.1</domain>
+    </domain-config>
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>

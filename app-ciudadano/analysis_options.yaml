@@ -1,0 +1,36 @@
+# Análisis estático de la app del ciudadano.
+#
+# `flutter_lints` es la base recomendada; encima va el conjunto estricto que piden las convenciones
+# de Dart del proyecto, que es el equivalente del modo `strict` de TypeScript en la web profesional.
+# `flutter analyze` trata como error todo lo que aparezca aquí, y la CI lo ejecuta sin `--no-fatal`.
+
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  language:
+    # Los tres que convierten en error lo que por defecto es una conversión implícita, un genérico
+    # sin argumentos o una inferencia a `dynamic`. Sin ellos, un `Map<String, dynamic>` de JSON se
+    # pasea por la aplicación entera y el primer error de tipo aparece en tiempo de ejecución, que
+    # en una pantalla de resultados clínicos es el peor sitio.
+    strict-casts: true
+    strict-raw-types: true
+    strict-inference: true
+  errors:
+    # Documentar la API pública es normativo en este proyecto, no una sugerencia.
+    public_member_api_docs: error
+
+linter:
+  rules:
+    - always_declare_return_types
+    - avoid_dynamic_calls
+    - avoid_print
+    - comment_references
+    - directives_ordering
+    - prefer_final_locals
+    - prefer_single_quotes
+    - public_member_api_docs
+    - require_trailing_commas
+    - sort_pub_dependencies
+    - unawaited_futures
+    - unnecessary_lambdas
+    - use_super_parameters
