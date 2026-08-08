@@ -1,10 +1,13 @@
-# La pila: PostgreSQL + Kafka + registro de esquemas + terminología + Keycloak + backend + web.
+# La pila entera: PostgreSQL + Kafka + registro de esquemas + terminología + Keycloak + backend +
+# motor de integración + web.
 #
 #   cp infra/compose/.env.example infra/compose/.env   # y edítalo
-#   docker compose -f infra/compose/docker-compose.yml up
+#   docker compose -f infra/compose/docker-compose.yml up -d
 #
-# Todo lo que hace falta para recorrer el circuito de extremo a extremo desde un clon recién hecho.
-# Queda fuera el motor de integración, que se arranca aparte (ítem 41).
+# Todo lo que hace falta para recorrer el circuito de extremo a extremo desde un clon recién hecho,
+# con **un solo comando**. Fuera del compose queda solo lo que representa a un tercero: el HIS
+# simulado y el analizador, que se arrancan a mano porque son los sistemas del hospital y del
+# laboratorio, no parte de HispaLIS.
 #
 # ⚠️ Tres cosas viven FUERA del repositorio y hay que tenerlas antes de levantar:
 #
@@ -314,6 +317,81 @@ services:
       start_period: 120s
       retries: 30
 
+  # ─── Motor de integración (D4, D5) ─────────────────────────────────────────
+  #
+  # El certificado del *listener* MLLP se genera **al levantar**, no se versiona. Un almacén PKCS#12
+  # con su clave privada dentro de un repositorio es una clave publicada, y da igual que sea de
+  # desarrollo: el día que alguien copie el patrón para producción, copiará también el fichero.
+  # Servicio de arranque, como `kafka-topicos`: genera y termina.
+  motor-claves:
+    image: eclipse-temurin:21-jre
+    entrypoint: ['/bin/sh', '-c']
+    environment:
+      MLLP_CLAVE: ${HISPALIS_MLLP_CLAVE:-hispalis}
+    command:
+      - |
+        set -eu
+        if [ -s /claves/mllp.p12 ]; then
+          echo "el almacén MLLP ya existe; no se toca"
+          exit 0
+        fi
+        keytool -genkeypair -alias mllp -keyalg RSA -keysize 3072 -validity 365 \
+          -dname "CN=motor, OU=HispaLIS, O=Laboratorio Clinico, L=Sevilla, C=ES" \
+          -ext "SAN=dns:motor,dns:localhost,ip:127.0.0.1" \
+          -keystore /claves/mllp.p12 -storetype PKCS12 \
+          -storepass "$$MLLP_CLAVE" -keypass "$$MLLP_CLAVE"
+        # El motor corre sin privilegios (uid 10002) y tiene que poder leerlo.
+        chmod 0644 /claves/mllp.p12
+        echo "almacén MLLP generado"
+    volumes:
+      - claves-motor:/claves
+
+  motor:
+    build:
+      context: ../..
+      dockerfile: integracion/Dockerfile
+    environment:
+      # Esquema propio dentro de la misma instancia: comparte servidor, no datos (D5).
+      HISPALIS_BD_URL: jdbc:postgresql://postgres:5432/hispalis
+      HISPALIS_BD_USUARIO: hispalis
+      HISPALIS_BD_CLAVE: hispalis
+      # El motor escribe por la API FHIR como un cliente más, nunca contra la base del laboratorio.
+      HISPALIS_API_FHIR: 'http://backend:8080/fhir'
+      HISPALIS_TERMINOLOGIA: 'http://terminologia:8080/fhir'
+      # Mismo literal que el que firma Keycloak y que valida el backend: si no coinciden, el `iss`
+      # del testigo no cuadra y el laboratorio lo rechaza aunque el testigo sea legítimo.
+      HISPALIS_OIDC_EMISOR: 'http://localhost:8081/realms/hispalis'
+      # Sin `HISPALIS_MOTOR_CLAVE`: el motor genera una clave efímera al arrancar y publica su JWKS
+      # en `/motor/jwks.json`, que es la URL que el realm tiene registrada. Keycloak la va a buscar
+      # por la red interna del compose. Al reiniciar el motor, la clave cambia y Keycloak la vuelve
+      # a leer — que es justo lo que se quería demostrar al registrarla por URL y no pegada.
+      HISPALIS_MLLP_ALMACEN: /claves/mllp.p12
+      HISPALIS_MLLP_CLAVE: ${HISPALIS_MLLP_CLAVE:-hispalis}
+      # A dónde manda el motor el ORU^R01 de cada informe emitido. El HIS simulado corre FUERA del
+      # compose —es el sistema del hospital, no nuestro—, así que se le apunta al equipo. Si no está
+      # arrancado, el hecho se anota FALLIDO con su motivo y no se reintenta solo: es lo correcto.
+      HISPALIS_HIS_SERVIDOR: localhost
+    extra_hosts:
+      # Para `localhost:8081` (el emisor) y para `localhost:2576` (el HIS simulado en el equipo).
+      - 'localhost:host-gateway'
+    ports:
+      # Solo el MLLP. La consola del motor (8082) se queda DENTRO de la red del compose: todavía no
+      # tiene autenticación, y una bandeja de errores con referencias a pacientes no se publica.
+      - '2575:2575'
+    volumes:
+      - claves-motor:/claves:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      motor-claves:
+        condition: service_completed_successfully
+      # El laboratorio SÍ condiciona: el motor escribe por su API desde el primer mensaje que reciba.
+      backend:
+        condition: service_healthy
+      # Y la identidad también, porque el motor se identifica antes de escribir (D5).
+      keycloak:
+        condition: service_healthy
+
   web:
     build:
       context: ../..
@@ -325,6 +403,8 @@ services:
         condition: service_healthy
 
 volumes:
+  # El almacén PKCS#12 del listener MLLP, generado al levantar y nunca versionado.
+  claves-motor:
   datos-postgres:
   # El log de Kafka sobrevive a un `down`: sin volumen, parar la pila borraría lo publicado y el
   # `_schemas` del registro con ello, que es donde vive el historial de versiones de los contratos.

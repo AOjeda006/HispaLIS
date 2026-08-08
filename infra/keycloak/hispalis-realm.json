@@ -194,7 +194,6 @@
             "jsonType.label": "String",
             "id.token.claim": "false",
             "access.token.claim": "true",
-            "access.tokenResponse.claim": "true",
             "introspection.token.claim": "true"
           }
         },
@@ -236,7 +235,6 @@
             "jsonType.label": "String",
             "id.token.claim": "false",
             "access.token.claim": "true",
-            "access.tokenResponse.claim": "true",
             "introspection.token.claim": "true"
           }
         },

@@ -31,9 +31,10 @@ pública**, y se la baja de `http://motor:8082/motor/jwks.json`. Pegar la clave 
 funcionaría y haría imposible rotarla sin una ventana de indisponibilidad; con la URL, Keycloak
 relee el JWKS cuando ve un `kid` que no conoce y la rotación se solapa sola.
 
-> ⚠️ Esa URL se resuelve **dentro de la red del `compose`**. El motor se arranca aparte (ítem 41):
-> mientras no esté en la misma red, Keycloak no podrá bajarse su JWKS y el canje devolverá
-> `invalid_client`. Con el motor en local, cámbiala por `http://host.docker.internal:8082/...`.
+> ⚠️ Esa URL se resuelve **dentro de la red del `compose`**, donde el motor ya está como servicio
+> `motor` (ítem 41). Si se arranca el motor a mano fuera del `compose`, Keycloak no podrá bajarse su
+> JWKS y el canje devolverá `invalid_client`: entonces hay que cambiarla por
+> `http://host.docker.internal:8082/motor/jwks.json`.
 
 ### Scopes
 
@@ -79,8 +80,17 @@ Las cuatro se descubrieron levantando un Keycloak de usar y tirar y recorriendo 
    `oidc-hardcoded-claim-mapper` sí funciona, así que no es un fallo de configuración. Consecuencia
    práctica: **el `patient` del contexto viaja como reclamación del testigo de acceso**, que además
    es lo correcto —es lo que el laboratorio comprueba, y fiarse de lo que diga la aplicación sería
-   fiarse de la parte que se puede manipular—. Una app de ciudadano averigua su sujeto por el
-   `fhirUser` del `id_token`.
+   fiarse de la parte que se puede manipular—. Se probó a añadir `access.tokenResponse.claim` al
+   mapeador de `patient` y **se revirtió**: la opción se guarda y no hace nada, y una línea de
+   configuración que no hace nada acaba explicando un comportamiento que no existe.
+
+   Consecuencia para la **app del ciudadano**: como el `patient` no llega en la respuesta del canje,
+   la app averigua su sujeto por el `fhirUser`, y lo pide al **`userinfo`** del emisor en vez de
+   abrir el `id_token`. Verificar la firma de un JWT en el cliente exigiría traerse el JWKS y hacer
+   RSA en el móvil; una llamada TLS directa al emisor, autenticada con el testigo recién obtenido,
+   da la misma garantía sin escribir criptografía en una app. La app sigue prefiriendo el `patient`
+   de la respuesta si algún día llega: lo correcto según la norma primero, lo que este servidor
+   sostiene después.
 
 ## Cambiar el realm
 
