@@ -274,15 +274,18 @@ services:
       HISPALIS_KAFKA: 'kafka:9092'
       HISPALIS_REGISTRO_ESQUEMAS: 'http://registro-de-esquemas:8085'
       HISPALIS_TERMINOLOGIA: 'http://terminologia:8080/fhir'
+      # El emisor PÚBLICO: es el `iss` que firma Keycloak, el que el backend valida y el que publica
+      # a los clientes. Tiene que ser el que ve el navegador.
       HISPALIS_OIDC_EMISOR: 'http://localhost:8081/realms/hispalis'
+      # Y por dónde llega el backend, que no es lo mismo. Dentro de un contenedor `localhost` es el
+      # propio contenedor, y un `extra_hosts: localhost:host-gateway` NO lo arregla: `/etc/hosts` ya
+      # trae `127.0.0.1 localhost` en la primera línea y gana. Se validó `extra_hosts` así durante
+      # una tanda entera y no funcionó hasta que se levantó la pila completa.
+      HISPALIS_OIDC_INTERNO: 'http://keycloak:8080/realms/hispalis'
       # Las bases FHIR por las que se llega a este mismo servidor. El navegador entra por el proxy
       # (`:4200`) y el motor por la red interna (`backend:8080`), así que el `aud` legítimo de un
       # testigo es uno u otro según quién lo pidiera. Fuera de una pila de desarrollo hay una sola.
       HISPALIS_OIDC_AUDIENCIAS: 'http://localhost:4200/fhir,http://localhost:8080/fhir,http://backend:8080/fhir'
-    extra_hosts:
-      # El backend descubre y valida contra `http://localhost:8081`, que es el emisor que firma
-      # Keycloak. Dentro de un contenedor `localhost` es él mismo, así que se le enseña a dónde ir.
-      - 'localhost:host-gateway'
     ports:
       # Se publica aunque la web no lo necesite —le llega por el proxy—, porque el circuito se
       # recorre con `curl` y el validador oficial también entra por aquí.
@@ -359,8 +362,11 @@ services:
       HISPALIS_API_FHIR: 'http://backend:8080/fhir'
       HISPALIS_TERMINOLOGIA: 'http://terminologia:8080/fhir'
       # Mismo literal que el que firma Keycloak y que valida el backend: si no coinciden, el `iss`
-      # del testigo no cuadra y el laboratorio lo rechaza aunque el testigo sea legítimo.
+      # del testigo no cuadra y el laboratorio lo rechaza aunque el testigo sea legítimo. El `aud` de
+      # la aserción del motor sigue siendo el `token_endpoint` anunciado desde aquí.
       HISPALIS_OIDC_EMISOR: 'http://localhost:8081/realms/hispalis'
+      # Y por dónde va el motor a buscarlo, que no es lo mismo (ver el backend).
+      HISPALIS_OIDC_INTERNO: 'http://keycloak:8080/realms/hispalis'
       # Sin `HISPALIS_MOTOR_CLAVE`: el motor genera una clave efímera al arrancar y publica su JWKS
       # en `/motor/jwks.json`, que es la URL que el realm tiene registrada. Keycloak la va a buscar
       # por la red interna del compose. Al reiniciar el motor, la clave cambia y Keycloak la vuelve
@@ -370,10 +376,13 @@ services:
       # A dónde manda el motor el ORU^R01 de cada informe emitido. El HIS simulado corre FUERA del
       # compose —es el sistema del hospital, no nuestro—, así que se le apunta al equipo. Si no está
       # arrancado, el hecho se anota FALLIDO con su motivo y no se reintenta solo: es lo correcto.
-      HISPALIS_HIS_SERVIDOR: localhost
+      #
+      # `host.docker.internal` y no `localhost`: un alias para `localhost` es imposible de añadir
+      # —`/etc/hosts` ya lo resuelve a 127.0.0.1 en la primera línea—, y este nombre no está, así que
+      # el `extra_hosts` de abajo sí surte efecto.
+      HISPALIS_HIS_SERVIDOR: host.docker.internal
     extra_hosts:
-      # Para `localhost:8081` (el emisor) y para `localhost:2576` (el HIS simulado en el equipo).
-      - 'localhost:host-gateway'
+      - 'host.docker.internal:host-gateway'
     ports:
       # Solo el MLLP. La consola del motor (8082) se queda DENTRO de la red del compose: todavía no
       # tiene autenticación, y una bandeja de errores con referencias a pacientes no se publica.

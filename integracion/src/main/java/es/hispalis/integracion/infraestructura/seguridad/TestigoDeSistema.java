@@ -113,8 +113,11 @@ public class TestigoDeSistema {
             return Optional.empty();
         }
         try {
+            // El `aud` de la aserción es el `token_endpoint` ANUNCIADO —así se llama el servidor a
+            // sí mismo, y así lo compara al validarla—; el `POST` va a la dirección por la que el
+            // motor puede alcanzarlo, que en una red de contenedores no es la misma.
             String cuerpo = formulario(punto.get());
-            HttpRequest peticion = HttpRequest.newBuilder(URI.create(punto.get()))
+            HttpRequest peticion = HttpRequest.newBuilder(URI.create(propiedades.alcanzable(punto.get())))
                     .timeout(propiedades.tiempoDeEspera())
                     .header("Content-Type", "application/x-www-form-urlencoded")
                     .header("Accept", "application/json")
@@ -200,7 +203,7 @@ public class TestigoDeSistema {
         if (yaLeido != null) {
             return Optional.of(yaLeido);
         }
-        String url = propiedades.emisor().replaceAll("/+$", "") + "/.well-known/openid-configuration";
+        String url = propiedades.baseInterna() + "/.well-known/openid-configuration";
         try {
             HttpRequest peticion = HttpRequest.newBuilder(URI.create(url))
                     .timeout(propiedades.tiempoDeEspera())

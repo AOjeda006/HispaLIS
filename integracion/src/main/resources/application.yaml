@@ -41,6 +41,10 @@ hispalis:
     habilitada: ${HISPALIS_IDENTIDAD:true}
     # La URL del realm. El `token_endpoint` no se cablea: se descubre de aquí.
     emisor: ${HISPALIS_OIDC_EMISOR:}
+    # Por dónde llega EL MOTOR al servidor de identidad, cuando no es por donde llega el navegador.
+    # Vacío casi siempre; dentro del `compose`, no: el emisor público es `localhost:8081` y dentro de
+    # un contenedor `localhost` es el propio contenedor.
+    interno: ${HISPALIS_OIDC_INTERNO:}
     cliente: ${HISPALIS_MOTOR_CLIENTE:hispalis-motor}
     # Se piden los que hacen falta y ni uno más: el testigo que se obtiene es el que se va a usar, y
     # pedir de más es conceder de más a quien lo robe. `$reconciliar` NO está aquí a propósito.

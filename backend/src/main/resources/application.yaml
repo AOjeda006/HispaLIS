@@ -72,6 +72,10 @@ hispalis:
     # Apagarla vale para los tests y para el desarrollo local, y el arranque lo avisa en voz alta.
     habilitada: ${HISPALIS_SEGURIDAD:true}
     emisor: ${HISPALIS_OIDC_EMISOR:}
+    # Por dónde llega ESTE servidor al de identidad, cuando no es por donde llega el navegador. Vacío
+    # casi siempre. En el `compose` no: el emisor que firma Keycloak es `localhost:8081` porque es lo
+    # que tiene que ver el navegador, y dentro de un contenedor `localhost` es el propio contenedor.
+    interno: ${HISPALIS_OIDC_INTERNO:}
     # Las bases FHIR por las que se llega a este servidor. Sin `aud` un testigo emitido para otro
     # servidor de recursos, con la misma firma y el mismo emisor, valdría aquí.
     audiencias: ${HISPALIS_OIDC_AUDIENCIAS:}

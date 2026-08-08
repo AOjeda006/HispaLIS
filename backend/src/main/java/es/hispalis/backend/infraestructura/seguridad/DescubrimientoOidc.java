@@ -83,13 +83,19 @@ public class DescubrimientoOidc {
         });
     }
 
-    /** La URL del JWKS, que es lo que necesita el validador de firmas. */
+    /**
+     * La URL del JWKS <strong>por donde este servidor puede llegar</strong>.
+     *
+     * <p>No es la misma que se publica a los clientes. El documento de descubrimiento anuncia
+     * direcciones pensadas para el navegador, y este servidor puede estar en otra red: lo que se
+     * publica sigue siendo lo anunciado, y lo que se va a buscar pasa por {@code baseInterna}.
+     */
     public Optional<String> jwks() {
-        return documento().map(Documento::jwks);
+        return documento().map(documento -> propiedades.alcanzable(documento.jwks()));
     }
 
     private Optional<Documento> leer() {
-        String url = propiedades.emisor().replaceAll("/+$", "") + "/.well-known/openid-configuration";
+        String url = propiedades.baseInterna() + "/.well-known/openid-configuration";
         try {
             HttpRequest peticion = HttpRequest.newBuilder(URI.create(url))
                     .timeout(propiedades.tiempoDeEspera())
