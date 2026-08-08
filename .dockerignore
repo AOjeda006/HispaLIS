@@ -31,7 +31,10 @@ ig/validator_cli.jar
 simuladores/corpus
 **/salida-generador
 docs
+# `app-ciudadano/` sigue fuera: no hay ninguna imagen que compile la app del ciudadano. El día que la
+# haya, esta línea tiene que caerse — igual que se cayó la de `integracion/` al entrar el motor en el
+# `compose`, que es el fallo que este fichero provocó y que solo se vio construyendo desde un clon
+# limpio: el motor construía a mano y fallaba en el `COPY integracion/src` de la imagen.
 app-ciudadano
-integracion
 **/*.md
 !README.md
