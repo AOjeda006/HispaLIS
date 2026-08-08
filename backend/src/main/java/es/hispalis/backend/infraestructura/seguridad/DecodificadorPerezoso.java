@@ -53,8 +53,10 @@ class DecodificadorPerezoso implements JwtDecoder {
                         () -> new JwtException("No se ha podido leer el descubrimiento del servidor de identidad en "
                                 + propiedades.emisor() + ": no hay con qué comprobar la firma."));
 
-        NimbusJwtDecoder nimbus =
-                NimbusJwtDecoder.withJwkSetUri(documento.jwks()).build();
+        // El JWKS se va a buscar por donde ESTE servidor puede llegar; el `iss` que se valida sigue
+        // siendo el público, que es el que firma el testigo. Son dos direcciones y una identidad.
+        NimbusJwtDecoder nimbus = NimbusJwtDecoder.withJwkSetUri(propiedades.alcanzable(documento.jwks()))
+                .build();
         nimbus.setJwtValidator(new DelegatingOAuth2TokenValidator<>(
                 new JwtTimestampValidator(), new JwtIssuerValidator(documento.emisor()), validadorDeAudiencia()));
 

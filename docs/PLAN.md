@@ -1678,10 +1678,21 @@ Services con una clave RSA real y su JWKS servido por HTTP, y `system/*.cruds` *
   pero **no se ha cargado la Edición Española** — no está en este equipo y no se puede redistribuir
   (ver *Notas / riesgos*).
 
-- [ ] **33 — Los tres contratos, y la web deja de empaquetar el catálogo.**
+- [x] **33 — Los tres contratos, y la web deja de empaquetar el catálogo.** *(2026-08-08)*
   *Hecho (2026-08-07):* las **cuatro** operaciones respondiendo contra el HAPI del `compose`, y
-  **backend, motor y generador resolviendo contra él** en vez de contra ficheros. Falta la mitad de
-  la web y los tres códigos SNOMED del SNS.
+  **backend, motor y generador resolviendo contra él** en vez de contra ficheros.
+  *Hecho (2026-08-08):* **la web deja de congelar el catálogo en el build.** Pide `$expand` del
+  `ValueSet` de la guía al servidor de terminología, por una URL **canónica** y por el mismo origen
+  (`/terminologia` en nginx, y su entrada en el proxy de desarrollo). Con ello se van
+  `scripts/traer-terminologia.mjs`, `public/terminologia/` y sus dos ganchos de npm — y la imagen de
+  la web se queda **sin SUSHI, sin Java y sin `ig/`**, igual que su workflow. Verificado en vivo
+  contra la pila: `GET http://localhost:4200/terminologia/ValueSet/$expand?url=…` → `200`, 21 pruebas.
+  *Reprogramado a hito 3 (con motivo):* los **tres códigos SNOMED del SNS en `identifier.type`**
+  (`1551000122105`, `1571000122102`, `22851000122109`). No es trabajo pendiente, es un **bloqueo de
+  datos**: viven en la extensión española de SNOMED CT, que **no se puede redistribuir** y no está en
+  este equipo (§5, y *Notas / riesgos*). Añadirlos a la guía sin poder validarlos rompería `ci-ig`,
+  que valida contra `tx.fhir.org` — que solo sirve la edición internacional. Los de THO siguen
+  puestos y siguen validando, y `JHN` describe el CIP autonómico bien.
   *Criterio:* `$expand`, `$validate-code` y `$translate` funcionando, con test por cada uno:
   `$expand` del `ValueSet` de pruebas del catálogo, `$validate-code` **rechazando** un código que no
   está, y `$translate` devolviendo el LOINC de un código local por el `ConceptMap` publicado —
@@ -1757,13 +1768,37 @@ Services con una clave RSA real y su JWKS servido por HTTP, y `system/*.cruds` *
 
 ### La app del ciudadano
 
-- [ ] **38 — Andamiar `app-ciudadano/`.**
+- [x] **38 — Andamiar `app-ciudadano/`.** *(2026-08-08)*
+  *Hecho:* Flutter 3.41 / Dart 3.11, Material 3, MVVM con `ChangeNotifier` + Provider, GetIt y
+  go_router. `analysis_options.yaml` con `strict-casts`, `strict-inference` y
+  **`public_member_api_docs` subido a error**. `flutter analyze` sin un solo aviso y `flutter test`
+  con **65 pruebas** en verde. **La guarda de auto-omisión de `ci-app-ciudadano.yml` se retira en el
+  mismo commit.** Bit de ejecución repasado (`adr-0008`): `backend/mvnw` e `integracion/mvnw` están a
+  `100755` y el `gradlew` de la app **no llega al índice** —el `.gitignore` de Flutter lo excluye—,
+  así que no hay nada que arreglar ahí; el guion nuevo `infra/keycloak/vincular-paciente.sh` sí se
+  añadió con `git update-index --chmod=+x`. De propina, dos cosas que se descubren al compilar para
+  publicar y no antes: `INTERNET` al manifiesto principal —Flutter solo lo pone en debug y perfil— y
+  un `network_security_config.xml` que nombra los tres anfitriones de desarrollo uno a uno en vez de
+  abrir el HTTP en claro contra todo internet (`adr-0025`).
   *Criterio:* `app-ciudadano/pubspec.yaml` con el proyecto Flutter, `flutter analyze` y `flutter test`
   en verde, **guarda de auto-omisión de `ci-app-ciudadano.yml` retirada en el mismo commit**, y el
   bit de ejecución comprobado en cualquier script que la CI ejecute (`android/gradlew` si el
   andamiaje lo trae). Igual que el ítem 20: un `::notice::` de omisión en el log es un fallo del ítem.
 
-- [ ] **39 — SMART standalone + PKCE.**
+- [x] **39 — SMART standalone + PKCE.** *(2026-08-08)*
+  *Hecho:* cliente **público, sin `client_secret`**; reto `S256` con verificador de 256 bits y
+  `state` de 256 bits comprobado a la vuelta **antes** de mirar el código; `aud` en la petición de
+  autorización; `launch-standalone`, `permission-patient` y `S256` **exigidos antes** de abrir el
+  navegador. El testigo se trata como **opaco**. Los testigos van al almacén cifrado de la plataforma
+  y `cerrar()` llama a `borrarTodo`. Renovación silenciosa con rotación del testigo de refresco y
+  **sin `offline_access`** — que además salda la deuda que el ítem 37 dejó abierta para la web.
+  Navegador del sistema con sesión efímera, nunca un `WebView`. Verificado contra el Keycloak del
+  `compose`, no contra un doble: el flujo entero recorrido con las **mismas peticiones** que hace la
+  app.
+  *Trampa que se confirmó:* el `patient` **no llega** en la respuesta del canje, porque el
+  `oidc-usermodel-attribute-mapper` de Keycloak 26.4 no honra `access.tokenResponse.claim` (trampa 4
+  del README del realm). La app pide lo que dice la norma y **cae al `fhirUser` del `userinfo`**, sin
+  abrir el `id_token`: `adr-0024`.
   *Criterio:* el ciudadano se autentica desde la app —cliente **público**, sin secreto, PKCE con
   `S256`— y obtiene un token con contexto de paciente. El token **no se guarda en claro**:
   almacenamiento seguro de la plataforma. Probado contra el Keycloak del `compose`, no contra un doble.
@@ -1772,7 +1807,17 @@ Services con una clave RSA real y su JWKS servido por HTTP, y `system/*.cruds` *
   en todas partes. Y el retorno de la autorización necesita esquema propio o *app link* declarado en
   la plataforma.
 
-- [ ] **40 — La pantalla de informes del ciudadano, contra la API real.**
+- [x] **40 — La pantalla de informes del ciudadano, contra la API real.** *(2026-08-08)*
+  *Hecho:* **ningún resultado sale sin unidad ni sin rango.** El tipo del dominio no deja construir
+  una cantidad sin unidad —no hay camino por el que una cifra llegue sola a la pantalla— y cuando el
+  laboratorio no publica rango, la pantalla lo **dice** («No consta rango de referencia para esta
+  prueba») en vez de dejar el hueco. **Una analítica sin validar lo dice con todas las letras y
+  arriba del todo**, con un test que comprueba que el aviso va por encima del primer valor. Los
+  rangos se eligen por sexo (SNOMED `248153007` / `248152002`) y con el sexo sin constar **no se
+  enseña ninguno de los dos**. Apellidos enteros: `MUÑOZ ÁLVAREZ`, `PEÑA MUÑOZ`, `ÁLVAREZ PEÑA` y «de
+  la Torre Gómez» en los tests. Ni un `mock` dentro de la app: todo sale de la API. El negativo del
+  ítem 35 desde el cliente: `403` → «Solo puedes ver tus propios resultados», y un test que comprueba
+  que **no se pinta ni el nombre ni una cifra de nadie**.
   *Criterio:* el paciente ve **sus** informes, con los resultados presentados con **unidad y rango de
   referencia** y los apellidos enteros —`MUÑOZ`, `ÁLVAREZ` y `PEÑA` legibles en el dispositivo—. Sin
   *mocks* en el código de la aplicación: todo sale de la API. Y **solo los suyos**: el mismo test
@@ -1780,7 +1825,11 @@ Services con una clave RSA real y su JWKS servido por HTTP, y `system/*.cruds` *
 
 ### Cierre del hito
 
-- [ ] **41 — Hito 2 cerrado.**
+- [x] **41 — Hito 2 cerrado.** *(2026-08-08)*
+  *Hecho:* la tabla de los criterios, uno por fila y con su prueba, está en *Estado actual*. La pila
+  entera se levantó **desde un clon limpio y con un solo comando**, y en el intento aparecieron dos
+  fallos que ningún test habría visto (`.dockerignore` y el alias de `localhost`), los dos
+  corregidos. Cinco ADR nuevos, `docs/adr/0021`–`0025`.
   *Criterio:* el circuito v2 recorrido de extremo a extremo contra el `compose` —`ADT` → `OML` →
   `ORU` → validación facultativa → informe → `ORU` saliente—, con los hechos apareciendo en Kafka y
   **sin PHI en ellos**; los ocho servicios levantados con un solo comando; **los seis workflows en
@@ -1792,23 +1841,138 @@ Services con una clave RSA real y su JWKS servido por HTTP, y `system/*.cruds` *
 
 ---
 
-## Hito 3 — lo que solo existe en R5, lo masivo y lo legal (esbozo)
+## Prerrequisitos operativos del hito 3
 
-- `SubscriptionTopic` + `Subscription` con el tópico `resultado-validado`.
-- `Observation.triggeredBy` para las **reflejas** (TSH alterado → T4 libre), repeticiones y re-ejecuciones.
-- **Notificador EDO** a SVEA/Redalerta: resultado validado cuyo código está en el catálogo EDO ⇒
-  notificación obligatoria (`Task`). Obligación legal real, también para privados.
-- **Doble validación del resultado crítico** (§10), la mitad del invariante que el ítem 18 dejó
-  fuera. Va aquí y no antes porque necesita lo mismo que el notificador EDO: un **catálogo de valores
-  de pánico**, que no es el fichero de rangos de normalidad — un potasio de 6,2 está fuera de rango y
-  no es crítico; uno de 7,5 sí. Con el catálogo hecho, el gancho ya está puesto en
-  `Resultado.validar`, y la otra mitad del invariante —la notificación obligatoria— es este mismo
-  hito. Hacerlo antes habría exigido inventarse los umbrales, que es precisión falsa en lo único
-  donde el error mata.
-- **Bulk Data** `$export` + `Group` para vigilancia epidemiológica, vía SMART Backend Services.
-- `AuditEvent` completo (justificación de trazabilidad de D17). El `Provenance` de **quién validó el
-  resultado** ya no espera aquí: entra en el hito 2, ítem 18, porque de él cuelga el notificador EDO.
-- Imports a añadir entonces: `interoperabilidad/bulk-data/convenciones.md`.
+> Lo que se sabe que va a doler, escrito antes de tropezar. **No son ítems**: son condiciones que hay
+> que cumplir dentro del ítem que las toca.
+
+- ⚠️ **Los umbrales de pánico no se inventan.** Es la condición que hizo que la doble validación se
+  aplazara del hito 2 a este. Un potasio de 6,2 mmol/L está fuera de rango y **no** es crítico; uno
+  de 7,5 sí. La fuente tiene que ser una lista publicada y citable —sociedad científica o protocolo
+  de laboratorio— y quedar **anotada con su procedencia dentro del propio catálogo**, no en un
+  comentario. Sin fuente, el ítem no se empieza: precisión falsa en lo único donde el error mata.
+- ⚠️ **El catálogo EDO y el formato del SVEA se modelan de forma verosímil, no fiel** (README, §5).
+  Es un no-objetivo declarado conectarse de verdad con Salud Pública. Lo que sí es real es **la
+  obligación**: alcanza también a los laboratorios privados. Lo que se simula es el destinatario, no
+  el deber.
+- **`SubscriptionTopic` es R5 y no tiene equivalente en R4.** Cualquier ejemplo, tutorial o respuesta
+  de IA sobre `Subscription` que no sea explícitamente de R5 describe el modelo viejo —`criteria` con
+  una cadena de búsqueda— y **no vale aquí**: en R5 el criterio vive en el `SubscriptionTopic`, que
+  es un recurso de conformidad aparte, y la `Subscription` lo referencia. Es la misma clase de trampa
+  que §2.1: mirar el paquete canónico antes de escribir la primera línea.
+- **La entrega de una `Subscription` es una llamada saliente a un tercero**, y eso son tres cosas que
+  hoy no existen: reintentos con corte, un secreto compartido con el receptor y —sobre todo— la
+  decisión de **qué va en la notificación**. La respuesta ya está tomada por el invariante 6: una
+  referencia y un hecho, nunca el resultado. Una notificación que lleve el valor dentro es PHI
+  viajando a un sistema que no lo ha pedido.
+- **Bulk Data exige repensar la autorización, no solo añadir una operación.** `$export` lo pide un
+  cliente `system/` y devuelve **muchas historias a la vez**: el consentimiento recurso a recurso del
+  ítem 35 no aplica igual. Hay que decidir por escrito quién puede exportar, sobre qué `Group` y qué
+  se hace con el fichero al terminar — un NDJSON con doscientos pacientes en un disco es exactamente
+  lo que el proyecto lleva dos hitos evitando.
+- **`AuditEvent` es el recurso que más fácil se llena de PHI.** Registra quién hizo qué sobre qué, y
+  la tentación es guardar «qué» con detalle. El invariante 6 se aplica igual: referencias, no
+  volcados, y **nunca el criterio de búsqueda** — que es donde va el número de historia.
+- **Imports de `CLAUDE.md` que faltan**, cada uno cuando llegue su ítem:
+  `interoperabilidad/bulk-data/convenciones.md` en **`backend/CLAUDE.md`** al empezar `$export`.
+- **El `compose` no crece más sin perfiles.** Son once servicios contando los de arranque; el
+  receptor de notificaciones y el simulador del SVEA harían trece. A partir de ahí se reparte con
+  perfiles de `compose`, y no se quitan *healthchecks*.
+
+---
+
+## Checklist — Hito 3 (esbozo)
+
+> Mismo estándar que los dos anteriores: un ítem = una unidad pequeña con **criterio de aceptación
+> verificable**, ordenados para que cada uno deje algo demostrable.
+> `[ ]` pendiente · `[x]` hecho (cumple criterio + verificado + commiteado).
+
+### La terminología que faltaba — va primero, porque de ella cuelgan tres ítems
+
+- [ ] **42 — Los tres códigos SNOMED del SNS en `identifier.type`.**
+  Lo que el ítem 33 tuvo que dejar fuera: `1551000122105` (CIP-SNS), `1571000122102` (CIP autonómico)
+  y `22851000122109` (DNI). Viven en la extensión española de SNOMED CT.
+  *Criterio:* la Edición Española cargada en el servidor de terminología, los tres códigos
+  resolviendo con `$lookup`, y los `identifier.type` de la guía llevando **las dos codificaciones** —
+  la de THO, que valida en `tx.fhir.org`, y la del SNS—. `ci-ig` sigue en verde.
+  *Bloqueo declarado:* requiere registro ante el Ministerio de Sanidad y **no se redistribuye**. El
+  ítem no se puede empezar sin la release en la máquina; el camino de carga ya está implementado y
+  probado contra una mini-release RF2 sintética (ítem 32).
+
+- [ ] **43 — Catálogo de valores críticos, con su procedencia.**
+  No es el fichero de rangos de normalidad: son los umbrales que obligan a avisar por teléfono.
+  *Criterio:* `CodeSystem`/`ValueSet` propios en la guía con el umbral por prueba y sexo, **cada
+  entrada con su fuente citada dentro del propio recurso**; el backend los resuelve por el servidor
+  de terminología como todo lo demás (invariante 4: nada de `Map<String,String>`); y un test que
+  comprueba que un potasio de 6,2 **no** es crítico y uno de 7,5 sí.
+
+### Lo que solo existe en R5
+
+- [ ] **44 — `SubscriptionTopic` + `Subscription` del resultado validado.**
+  *Criterio:* un `SubscriptionTopic` publicado en la guía con el disparador «`Observation` pasa a
+  `final`», una `Subscription` activa contra él y la entrega llegando a un receptor de pruebas. El
+  `notification-event` lleva **referencias, no valores** (invariante 6). `$status` y `$events`
+  responden, y una entrega fallida deja la `Subscription` en `error` con su motivo — no en silencio.
+  *Trampa:* el modelo de R4 no vale (ver prerrequisitos). Y `payload` a `id-only`, nunca
+  `full-resource`: un `full-resource` manda la historia por el canal.
+
+- [ ] **45 — `Observation.triggeredBy`: reflejas, repeticiones y re-ejecuciones.**
+  El elemento **es nuevo en R5** y es exactamente lo que hace falta: TSH alterado ⇒ T4 libre, y que
+  el informe enseñe **por qué** existe esa segunda determinación.
+  *Criterio:* el dominio decide la refleja con una regla del catálogo —no cableada—, la `Observation`
+  resultante apunta a la que la disparó con `type = reflex`, y la web y la app lo enseñan con
+  palabras («derivada de un TSH alterado»), no con un icono. Los otros dos valores del elemento
+  —`repeat` y `re-run`— con su caso: una repetición por muestra hemolizada y una re-ejecución por
+  control de calidad fuera.
+
+### Lo clínico que el hito 2 dejó a medias
+
+- [ ] **46 — Doble validación del resultado crítico (§10).**
+  La otra mitad del invariante que el ítem 18 dejó fuera, y que necesitaba el ítem 43.
+  *Criterio:* un resultado cuyo valor cae en el catálogo de críticos **no se puede validar con una
+  sola firma**: exige una segunda de un facultativo **distinto**, con su `Provenance` propio. El
+  gancho ya está puesto en `Resultado.validar`. Test rojo primero: el mismo facultativo firmando dos
+  veces **no** cuenta como doble validación.
+
+### La obligación legal española
+
+- [ ] **47 — Catálogo EDO y detección sobre el resultado validado.**
+  *Criterio:* el catálogo de enfermedades de declaración obligatoria en la guía, con el mapeo desde
+  el código de prueba y el criterio de positividad; y un caso de uso que, al validarse un resultado,
+  decide si es declarable **sin mirar el nombre del paciente**. Un `Legionella` positivo dispara; uno
+  negativo, no.
+
+- [ ] **48 — Notificador EDO al SVEA, con `Task`.**
+  *Criterio:* la notificación se modela como `Task` con su estado, su destinatario y su acuse, y se
+  dispara **desde el hecho del `outbox`**, igual que el `ORU` saliente (ítem 28) — no desde un `if`
+  dentro del caso de uso. Con el destinatario caído, el resultado se valida igual y el `Task` queda
+  pendiente. Y **el plazo importa**: la declaración urgente tiene ventana legal, así que el `Task`
+  lleva su vencimiento y se ve cuál se ha pasado.
+  *Trampa:* el destinatario es un tercero modelado de forma verosímil, no fiel (prerrequisitos).
+
+### Lo masivo
+
+- [ ] **49 — `Group` + `$export` (Bulk Data) por SMART Backend Services.**
+  *Criterio:* `POST /fhir/Group/{id}/$export` asíncrono con `202` + `Content-Location`, el sondeo del
+  estado y NDJSON por tipo de recurso. Lo pide un cliente `system/` **con un scope propio que no
+  tiene nadie por defecto** —la misma regla que `system/*.cruds` del ítem 35—. El fichero caduca y se
+  borra, y eso se prueba. Nada de PHI en la URL de descarga.
+
+### Trazabilidad
+
+- [ ] **50 — `AuditEvent` completo (justificación de D17).**
+  *Criterio:* toda lectura y escritura de la API deja un `AuditEvent` con quién, qué, cuándo y desde
+  dónde; **con referencias, nunca con volcados**, y sin el criterio de búsqueda —que es donde va el
+  número de historia (`adr-0016`)—. Un test que recorre el circuito y comprueba que la traza está
+  completa **y** que no hay PHI en ella.
+
+### Cierre del hito
+
+- [ ] **51 — Hito 3 cerrado.**
+  *Criterio:* el circuito completo con reflejas, doble validación de un crítico y notificación EDO,
+  recorrido de extremo a extremo contra el `compose`; una `Subscription` entregando; un `$export`
+  descargado y caducado; los seis workflows en verde; `PLAN.md`, `README.md` y `docs/diseno.md`
+  coherentes; y los aprendizajes transversales como ADR nuevos.
 
 ---
 
