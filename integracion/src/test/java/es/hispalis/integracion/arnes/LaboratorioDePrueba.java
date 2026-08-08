@@ -58,6 +58,16 @@ public final class LaboratorioDePrueba implements AutoCloseable {
     /** El tipo cuya próxima escritura fallará con un 500, o {@code null}. */
     private final AtomicReference<String> saboteado = new AtomicReference<>();
 
+    /**
+     * La cabecera {@code Authorization} de la última petición recibida, o {@code null}.
+     *
+     * <p>El laboratorio de prueba <strong>no exige testigo</strong>: los tests de canal van de qué JSON
+     * sale por el cable, y hacerles depender de un servidor de identidad sería atarlos a algo que no
+     * están probando. Lo que sí hace es <em>apuntar</em> lo que llega, para que
+     * {@code BackendServicesTest} pueda comprobar que el motor firma sus peticiones de verdad.
+     */
+    private final AtomicReference<String> ultimaAutorizacion = new AtomicReference<>();
+
     private LaboratorioDePrueba(HttpServer servidor) {
         this.servidor = servidor;
     }
@@ -132,10 +142,16 @@ public final class LaboratorioDePrueba implements AutoCloseable {
         return recurso;
     }
 
+    /** Con qué se identificó quien escribió lo último. {@code null} si vino sin cabecera. */
+    public String ultimaAutorizacion() {
+        return ultimaAutorizacion.get();
+    }
+
     public void olvidarTodo() {
         almacen.clear();
         escrituras.clear();
         saboteado.set(null);
+        ultimaAutorizacion.set(null);
     }
 
     @Override
@@ -166,6 +182,7 @@ public final class LaboratorioDePrueba implements AutoCloseable {
 
     private void atender(String tipo, HttpExchange intercambio) throws IOException {
         try {
+            ultimaAutorizacion.set(intercambio.getRequestHeaders().getFirst("Authorization"));
             String ruta = intercambio.getRequestURI().getPath();
             String metodo = intercambio.getRequestMethod();
 

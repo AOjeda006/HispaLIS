@@ -17,11 +17,6 @@ public class ConfiguracionDelClienteFhir {
         return FhirContext.forR5();
     }
 
-    @Bean
-    public AutenticacionDelMotor autenticacionDelMotor() {
-        return new AutenticacionDelMotor.SinIdentidadTodavia();
-    }
-
     /**
      * @param url la base de la API del laboratorio, p. ej. {@code http://backend:8080/fhir}
      */

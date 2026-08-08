@@ -33,6 +33,26 @@ hispalis:
   laboratorio:
     url: ${HISPALIS_API_FHIR:http://localhost:8080/fhir}
 
+  # Cómo se identifica el motor ante el laboratorio: SMART Backend Services (D5). No hay usuario ni
+  # navegador — el motor firma una aserción con su clave y la canja por un testigo `system/`.
+  identidad:
+    # Encendida por defecto: escribir en un laboratorio clínico sin identificarse tiene que ser una
+    # decisión escrita. La misma regla que el TLS del MLLP.
+    habilitada: ${HISPALIS_IDENTIDAD:true}
+    # La URL del realm. El `token_endpoint` no se cablea: se descubre de aquí.
+    emisor: ${HISPALIS_OIDC_EMISOR:}
+    cliente: ${HISPALIS_MOTOR_CLIENTE:hispalis-motor}
+    # Se piden los que hacen falta y ni uno más: el testigo que se obtiene es el que se va a usar, y
+    # pedir de más es conceder de más a quien lo robe. `$reconciliar` NO está aquí a propósito.
+    scopes: >-
+      system/Patient.crus system/ServiceRequest.cs system/Specimen.cs
+      system/Observation.crs system/DiagnosticReport.r
+    # Nunca una clave en el repositorio: llega por variable de entorno, en PKCS#8 y base64. Vacía en
+    # desarrollo — el motor genera una efímera, publica su JWKS y el arranque lo avisa en voz alta.
+    clave-privada: ${HISPALIS_MOTOR_CLAVE:}
+    margen: PT30S
+    tiempo-de-espera: PT5S
+
   # El catálogo de pruebas se PREGUNTA al servidor de terminología, no se copia dentro del motor ni se
   # lee de un fichero (D14, D15, invariante 4). La variable de entorno se llama igual que la del
   # backend y la del generador a propósito: los tres resuelven contra la misma autoridad.

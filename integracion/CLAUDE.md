@@ -49,6 +49,31 @@ poder auditarse — que es exactamente el fallo que este motor existe para evita
 - **Agrupa con bundles `transaction`** solo si aparece un cuello de botella medido, no por defecto.
 - Estructura del canal: `origen → filtro → transformador → destino`.
 
+## Cómo se identifica el motor (D5, ítem 36)
+
+SMART **Backend Services**: no hay usuario, no hay navegador y **no hay secreto compartido**. El
+motor firma con su clave privada una aserción de cliente y la canjea por un testigo `system/`.
+Vive en `infraestructura/seguridad/` y entra en el cliente FHIR por `AutenticacionDelMotor`.
+
+- **La clave privada llega por `HISPALIS_MOTOR_CLAVE`** (PKCS#8, base64) y **nunca** está en el
+  repositorio. Sin ella se genera una efímera y el arranque lo avisa en voz alta: vale para levantar
+  la pila de desarrollo de un tirón y para nada más.
+- **El JWKS se publica en `GET /motor/jwks.json`, y Keycloak se lo baja de ahí.** Pegar la clave
+  dentro del cliente del *realm* haría imposible rotarla sin una ventana de indisponibilidad; con la
+  URL, la rotación se solapa sola. Solo sale la parte pública, y hay un test que lo comprueba.
+- **Cuatro cosas de la norma que se incumplen con facilidad:** la aserción dura **cinco minutos como
+  mucho**, el `jti` es **nuevo en cada una**, el `aud` es el **`token_endpoint`** (no el laboratorio)
+  y **no hay testigo de refresco** — cuando caduca se firma otra aserción.
+- **El testigo se guarda** y se renueva con margen; un `401` del laboratorio lo tira, porque un
+  testigo puede morir antes de su `exp`.
+- **Los `scope` se piden explícitamente**, los cinco `system/` que escriben los canales.
+  `system/*.cruds` —lo que exige `$reconciliar`, que **borra**— no se pide.
+- El `token_endpoint` **no se cablea**: se descubre del `.well-known/openid-configuration` del emisor.
+
+`IdentidadDePrueba` (en `arnes/`) **verifica la aserción de verdad**: se baja el JWKS del motor por
+HTTP y comprueba la firma RS384. Un doble que devolviera un testigo sin mirar dejaría sin probar justo
+la parte que cuesta acertar.
+
 ## El catálogo se pregunta, no se lee (D14, D15)
 
 `OBR-4`, `OBX-3` y `SPM-4` pasan por `CatalogoDelLaboratorio`, que resuelve contra el **servidor de

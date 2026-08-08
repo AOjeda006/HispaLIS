@@ -3,6 +3,7 @@ package es.hispalis.integracion;
 import es.hispalis.integracion.arnes.CertificadoDePrueba;
 import es.hispalis.integracion.arnes.ClienteMllpDePrueba;
 import es.hispalis.integracion.arnes.HisDePrueba;
+import es.hispalis.integracion.arnes.IdentidadDePrueba;
 import es.hispalis.integracion.arnes.LaboratorioDePrueba;
 import es.hispalis.integracion.arnes.OutboxDelBackend;
 import es.hispalis.integracion.arnes.TerminologiaDePrueba;
@@ -11,8 +12,10 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.ServerSocket;
 import javax.sql.DataSource;
+import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
@@ -42,11 +45,35 @@ public abstract class TestDelMotor {
     /** El servidor de terminología, cargado con los artefactos que publica la guía. */
     protected static final TerminologiaDePrueba TERMINOLOGIA = TerminologiaDePrueba.arrancada();
 
+    /**
+     * El servidor de identidad, que comprueba de verdad la aserción del motor (D5).
+     *
+     * <p>Va encendido en <strong>todos</strong> los tests del motor y no solo en el suyo: así cada
+     * canal que escribe demuestra de paso que sale firmado. El laboratorio de prueba no exige el
+     * testigo —eso lo haría el de verdad—, pero lo apunta, y {@code BackendServicesTest} lo mira.
+     */
+    protected static final IdentidadDePrueba IDENTIDAD = IdentidadDePrueba.arrancada();
+
     private static final EmbeddedPostgres POSTGRES = arrancarPostgres();
     private static final int PUERTO_MLLP = puertoLibre();
 
     @Autowired
     private DataSource origenDeDatos;
+
+    @LocalServerPort
+    private int puertoDeLaConsola;
+
+    /**
+     * El servidor de identidad se baja el JWKS del motor, y para eso tiene que saber dónde escucha.
+     *
+     * <p>Se le dice aquí y no al construirlo porque el puerto es aleatorio y no existe hasta que el
+     * contexto arranca — que es justo la situación del {@code compose}, donde la URL se resuelve por
+     * el nombre del servicio y no está en ninguna configuración del motor.
+     */
+    @BeforeEach
+    void decirleAlaIdentidadDondeMirar() {
+        IDENTIDAD.elMotorPublicaSuJwksEn("http://127.0.0.1:" + puertoDeLaConsola + "/motor/jwks.json");
+    }
 
     @DynamicPropertySource
     static void apuntarAlArnes(DynamicPropertyRegistry registro) {
@@ -54,6 +81,13 @@ public abstract class TestDelMotor {
         registro.add("spring.datasource.username", () -> "postgres");
         registro.add("spring.datasource.password", () -> "postgres");
         registro.add("hispalis.laboratorio.url", LABORATORIO::url);
+
+        // La identidad va encendida: el motor firma su aserción con una clave efímera y publica su
+        // JWKS, igual que en el `compose`. La clave privada no se configura a propósito — probar la
+        // ruta de la clave por variable de entorno es cosa de `BackendServicesTest`, que la genera.
+        registro.add("hispalis.identidad.habilitada", () -> true);
+        registro.add("hispalis.identidad.emisor", IDENTIDAD::emisor);
+        registro.add("hispalis.identidad.cliente", () -> "hispalis-motor");
         registro.add("hispalis.mllp.puerto", () -> PUERTO_MLLP);
         registro.add("hispalis.mllp.tls.habilitado", () -> true);
         registro.add("hispalis.mllp.tls.almacen-de-claves", () -> CertificadoDePrueba.almacenDeClaves()
