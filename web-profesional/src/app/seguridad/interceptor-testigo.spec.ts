@@ -47,18 +47,17 @@ describe('el interceptor que firma las peticiones', () => {
   });
 
   it('NO manda el testigo a ninguna otra URL', () => {
-    // Un testigo enviado a quien no le corresponde es un testigo entregado. El canje del código y el
-    // catálogo son del mismo paquete y no son el laboratorio.
+    // Un testigo enviado a quien no le corresponde es un testigo entregado. El canje del código va
+    // al servidor de identidad y la terminología a otro servidor: ninguno de los dos es el
+    // laboratorio, y ninguno de los dos tiene por qué ver el testigo del laboratorio.
     http.post('https://identidad.pruebas/token', 'grant_type=authorization_code').subscribe();
-    http.get('terminologia/CodeSystem-catalogo-pruebas.json').subscribe();
+    http.get('/terminologia/ValueSet/$expand').subscribe();
 
     expect(
       servidor.expectOne('https://identidad.pruebas/token').request.headers.has('Authorization'),
     ).toBe(false);
     expect(
-      servidor
-        .expectOne('terminologia/CodeSystem-catalogo-pruebas.json')
-        .request.headers.has('Authorization'),
+      servidor.expectOne('/terminologia/ValueSet/$expand').request.headers.has('Authorization'),
     ).toBe(false);
     servidor.match(() => true).forEach((peticion) => peticion.flush({}));
   });

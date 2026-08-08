@@ -8,10 +8,11 @@ import { ConsultaInformeVm } from './consulta-informe.vm';
 
 const SYSTEM = 'https://aojeda006.github.io/HispaLIS/fhir/CodeSystem/catalogo-pruebas';
 
-const CODESYSTEM = {
-  resourceType: 'CodeSystem',
-  url: SYSTEM,
-  concept: [{ code: 'HB', display: 'Hemoglobina' }],
+const EXPANSION = {
+  resourceType: 'ValueSet',
+  expansion: {
+    contains: [{ system: SYSTEM, code: 'HB', display: 'Hemoglobina' }],
+  },
 };
 
 const PACIENTE: Patient = {
@@ -125,7 +126,7 @@ describe('la consulta de informe', () => {
     // El recurso trae `HB` y nada más, a propósito: el `display` de terminología lo resuelve quien
     // la tiene. Sin esto el informe se leería «HB 13 g/dL».
     const catalogo = vm.cargarCatalogo();
-    servidor.expectOne('terminologia/CodeSystem-catalogo-pruebas.json').flush(CODESYSTEM);
+    servidor.expectOne((r) => r.url === '/terminologia/ValueSet/$expand').flush(EXPANSION);
     await catalogo;
 
     expect(vm.nombreDePrueba(HEMOGLOBINA)).toBe('Hemoglobina');
@@ -133,7 +134,7 @@ describe('la consulta de informe', () => {
 
   it('una prueba que el catálogo no conoce se enseña por su código, no en blanco', async () => {
     const catalogo = vm.cargarCatalogo();
-    servidor.expectOne('terminologia/CodeSystem-catalogo-pruebas.json').flush(CODESYSTEM);
+    servidor.expectOne((r) => r.url === '/terminologia/ValueSet/$expand').flush(EXPANSION);
     await catalogo;
 
     const rara: Observation = {

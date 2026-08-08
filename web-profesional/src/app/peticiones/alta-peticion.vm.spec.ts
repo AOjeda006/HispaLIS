@@ -8,13 +8,14 @@ import { AltaPeticionVm } from './alta-peticion.vm';
 
 const SYSTEM = 'https://aojeda006.github.io/HispaLIS/fhir/CodeSystem/catalogo-pruebas';
 
-const CODESYSTEM = {
-  resourceType: 'CodeSystem',
-  url: SYSTEM,
-  concept: [
-    { code: 'GLU', display: 'Glucosa' },
-    { code: 'TSH', display: 'Tirotropina' },
-  ],
+const EXPANSION = {
+  resourceType: 'ValueSet',
+  expansion: {
+    contains: [
+      { system: SYSTEM, code: 'GLU', display: 'Glucosa' },
+      { system: SYSTEM, code: 'TSH', display: 'Tirotropina' },
+    ],
+  },
 };
 
 const PACIENTE: Patient = {
@@ -59,7 +60,7 @@ describe('el alta de petición', () => {
   /** Deja la pantalla como estaría tras identificar al paciente y al facultativo. */
   async function conTodoIdentificado(): Promise<void> {
     const catalogo = vm.cargarCatalogo();
-    servidor.expectOne('terminologia/CodeSystem-catalogo-pruebas.json').flush(CODESYSTEM);
+    servidor.expectOne((r) => r.url === '/terminologia/ValueSet/$expand').flush(EXPANSION);
     await catalogo;
 
     const paciente = vm.buscarPaciente('00000042');

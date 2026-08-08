@@ -3,5 +3,11 @@
     "target": "http://localhost:8080",
     "secure": false,
     "xfwd": true
+  },
+  "/terminologia": {
+    "target": "http://localhost:8086/fhir",
+    "secure": false,
+    "xfwd": true,
+    "pathRewrite": { "^/terminologia": "" }
   }
 }

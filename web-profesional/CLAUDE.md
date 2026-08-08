@@ -71,10 +71,12 @@ pantalla que iba a contestar `401` en cuanto pidiera algo.
   historia, y una URL con eso dentro se queda en la barra del navegador, en su historial, en el log
   del proxy y en la traza del servidor. FHIR admite los mismos criterios en el cuerpo, y hay un test
   del backend (`BusquedaSinPhiEnLaUrlTest`) que comprueba que el servidor lo acepta.
-- **El catálogo de pruebas no se escribe aquí.** Lo trae `scripts/traer-terminologia.mjs` de
-  `ig/fsh-generated/` (D15) a `public/terminologia/`, que está en `.gitignore`. Si falta, el build
-  para y dice que ejecutes `npx fsh-sushi .`. Una lista de códigos en TypeScript sería una cuarta
-  versión de la verdad. En el hito 2, cuando exista el servidor de terminología, esto pasa a `$expand`.
+- **El catálogo de pruebas no se escribe aquí, y tampoco se congela al construir.** Se le pregunta
+  al **servidor de terminología** con `$expand` del `ValueSet` de la guía (D14, D15). Una lista de
+  códigos en TypeScript sería una cuarta versión de la verdad; una copia metida en el paquete al
+  construir es la misma verdad, pero con la fecha del último despliegue. Lo que la web mande al
+  servidor es una **URL canónica**: quién la resuelve es cosa del servidor de terminología, y por eso
+  cambiarlo por otro no toca ni una línea del cliente.
 - **`proxy.conf.json` lleva `"xfwd": true`, y no es decorativo.** El servidor firma
   `Bundle.link[relation=next]` con la dirección por la que le llegó la petición; sin las cabeceras
   `X-Forwarded-*` la página siguiente apuntaría a `localhost:8080` y el navegador no la alcanzaría.
@@ -88,8 +90,8 @@ pantalla que iba a contestar `401` en cuanto pidiera algo.
 ```bash
 cd web-profesional
 npm ci
-npm start          # servidor de desarrollo (proxy /fhir → localhost:8080)
+npm start          # servidor de desarrollo (proxy /fhir → :8080 y /terminologia → :8086)
 npm test           # tests
 npm run lint
-npm run build      # trae antes la terminología de la guía
+npm run build
 ```

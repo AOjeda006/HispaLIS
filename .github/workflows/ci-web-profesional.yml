@@ -41,14 +41,9 @@ jobs:
           cache: npm
           cache-dependency-path: web-profesional/package-lock.json
 
-      # El catálogo de pruebas que ofrece la pantalla de alta no está versionado: lo produce SUSHI a
-      # partir del FSH, y `npm run build` lo trae con `scripts/traer-terminologia.mjs`. NO se
-      # construye la IG entera —eso es cosa de `ci-ig` y cuesta minutos—: los artefactos de
-      # conformidad salen en segundos.
-      - name: Compilar la terminología de la guía
-        working-directory: ig
-        run: npx --yes fsh-sushi .
-
+      # Aquí había un paso que compilaba la terminología con SUSHI, porque el catálogo de pruebas se
+      # congelaba dentro del paquete al construir. Desde el ítem 33 la web se lo pregunta al servidor
+      # de terminología con `$expand`, así que la CI de la web ya no necesita ni SUSHI ni `ig/`.
       - name: Instalar dependencias
         working-directory: web-profesional
         run: npm ci

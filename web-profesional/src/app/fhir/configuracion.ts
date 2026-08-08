@@ -18,12 +18,24 @@ export const BASE_FHIR = new InjectionToken<string>('base de la API FHIR', {
 });
 
 /**
- * Dónde está el catálogo de pruebas que publica la guía.
+ * Dónde está el **servidor de terminología**, que es quien contesta qué pruebas oferta el catálogo.
  *
- * Lo trae `scripts/traer-terminologia.mjs` de `ig/fsh-generated/`: es el **mismo** `CodeSystem` que
- * usan el backend y el generador, no una copia editada a mano (D15).
+ * Relativa por lo mismo que {@link BASE_FHIR}, y detrás del mismo proxy. Lo que hay al otro lado es
+ * un servidor de terminología FHIR cualquiera: la web le habla con `$expand` de la API estándar, así
+ * que cambiarlo por Snowstorm o por Ontoserver no toca ni una línea de este cliente (D14).
  */
-export const URL_CATALOGO = new InjectionToken<string>('catálogo de pruebas', {
+export const BASE_TERMINOLOGIA = new InjectionToken<string>('servidor de terminología', {
   providedIn: 'root',
-  factory: () => 'terminologia/CodeSystem-catalogo-pruebas.json',
+  factory: () => '/terminologia',
+});
+
+/**
+ * El `ValueSet` que enumera las pruebas que se pueden pedir.
+ *
+ * Es una URL **canónica**, no una ruta: identifica el conjunto, no dónde está guardado. Quien lo
+ * resuelve es el servidor de terminología, y por eso el mismo literal vale contra cualquiera.
+ */
+export const VS_PRUEBAS_DEL_CATALOGO = new InjectionToken<string>('ValueSet de pruebas', {
+  providedIn: 'root',
+  factory: () => 'https://aojeda006.github.io/HispaLIS/fhir/ValueSet/pruebas-del-catalogo',
 });
