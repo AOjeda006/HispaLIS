@@ -37,8 +37,11 @@ degenerar en una historia clínica electrónica en miniatura.
 
 > **Hito 1 cerrado.** El circuito básico —petición → espécimen → resultado → informe— funciona de
 > extremo a extremo con un `docker compose up`, con la guía FHIR propia publicada, la web del
-> profesional y el generador de datos sintéticos. **Sin Kafka, sin HL7 v2 y sin Keycloak**, que son
-> el hito 2.
+> profesional y el generador de datos sintéticos.
+>
+> **Hito 2 en curso.** Ya están el bus de eventos sobre Kafka, el motor de integración HL7 v2 sobre
+> MLLP, el servidor de terminología y **la identidad: Keycloak con SMART on FHIR** (ítems 34–37).
+> **La API FHIR exige testigo**: lo que antes se recorría con `curl` a pelo ahora necesita uno.
 
 ## Arquitectura en tres frases
 
@@ -101,6 +104,30 @@ compila el backend con Maven y la web con Angular.
   donde entra la web: mismo origen, sin CORS.
 - **Servidor de terminología:** `http://localhost:8086/fhir`
 - **Kafka:** `localhost:29092` · **registro de esquemas:** `http://localhost:8085`
+- **Identidad (Keycloak):** `http://localhost:8081` — realm `hispalis`, definido en
+  [`infra/keycloak/`](infra/keycloak/README.md). **Hace falta un `.env`**: cópialo de
+  `infra/compose/.env.example` y pon las dos contraseñas, o `docker compose` para antes de crear nada
+  y dice cuál falta.
+
+**La API exige testigo.** Lo que sigue siendo público es lo que tiene que serlo:
+
+```bash
+# el descubrimiento SMART: por donde empieza cualquier aplicación, antes de tener testigo
+curl -s http://localhost:8080/fhir/.well-known/smart-configuration | jq
+
+# y el CapabilityStatement, que además declara dónde se autoriza
+curl -s http://localhost:8080/fhir/metadata | jq '.rest[0].security'
+
+# todo lo demás, sin testigo, es 401 con su OperationOutcome
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8080/fhir/Patient   # → 401
+```
+
+**No hay atajo de consola para conseguir un testigo de profesional, y es a propósito:** el
+*password grant* está deshabilitado en los dos clientes públicos, que es lo que manda SMART. Se entra
+por el navegador en <http://localhost:4200> — la web lanza el flujo de autorización con PKCE — y el
+testigo se puede copiar de `sessionStorage` con las herramientas del navegador si hace falta para un
+`curl`. El único que se autentica sin persona es el motor de integración, con su clave
+(SMART Backend Services).
 
 **La terminología sí condiciona el arranque del laboratorio**, al revés que el bus: el laboratorio
 valida códigos y resuelve `display` contra ella desde la primera escritura, y arrancar antes de que
@@ -134,7 +161,9 @@ docker compose -f infra/compose/docker-compose.yml down -v
 ```
 
 **Recuperación.** Si alguna vez el dominio y lo publicado dejan de coincidir, la vía oficial es
-`$reconciliar`, que por defecto **solo mira**:
+`$reconciliar`, que por defecto **solo mira**. Exige `system/*.cruds` —porque **borra** recursos
+publicados de cualquier tipo— y ese *scope* está definido en el realm pero **no asignado a ningún
+cliente**: dárselo a alguien es un acto explícito, no una consecuencia de una plantilla.
 
 ```bash
 # qué está divergente, sin tocar nada
@@ -171,7 +200,7 @@ El estado real de cada pieza está en [`docs/PLAN.md`](docs/PLAN.md).
 |---|---|---|---|---|
 | `ig/` | `npx fsh-sushi .` · `java -jar publisher.jar -ig . -no-sushi` | validador oficial sobre `fsh-generated/resources/` | `npx fsh-sushi .` con **0 warnings** | salida en `ig/output/` |
 | `backend/` | `./mvnw -q package` | `./mvnw verify` | `./mvnw spotless:check` · `./mvnw spotless:apply` | `./mvnw spring-boot:run` · sin base de datos propia: `-Parranque-local` |
-| `integracion/` | *(sin andamiar — hito 2)* | | | |
+| `integracion/` | `./mvnw -q package` | `./mvnw verify` | `./mvnw spotless:check` · `./mvnw spotless:apply` | `./mvnw spring-boot:run` — se arranca aparte del `compose` (ítem 41) |
 | `web-profesional/` | `npm run build` | `npm test` | `npm run lint` · `npm run format` | `npm start` |
 | `app-ciudadano/` | *(sin andamiar — hito 2)* | | | |
 | `simuladores/` | — | `pytest` | `ruff check .` · `ruff format --check .` | `python -m generador --seed 42` |

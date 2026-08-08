@@ -668,6 +668,46 @@ aceptable bajo ninguna de las tres opciones. Si algún día se implementa (a), e
   `test: [CMD, curl, …]` fallaría por no existir `curl`, no por estar el servidor mal. Quien necesita
   terminología espera a que **termine el cargador**, que además es la condición correcta — un servidor
   levantado y vacío responde `$validate-code` con «no» a todo.
+- **2026-08-08 — La autorización y el consentimiento son dos ficheros, no uno.** `AutorizacionSmart`
+  responde a «¿puede este cliente leer `Observation`?» y `ConsentimientoDelPaciente` a «¿puede ver
+  *esta* `Observation`?». Separarlos es lo que hace demostrable la afirmación del proyecto —**un
+  *scope* concedido no garantiza los datos**—: en el test del consentimiento cruzado se ve el *scope*
+  pasando y el consentimiento reteniendo, con el mismo testigo y dos respuestas distintas.
+- **2026-08-08 — El compartimento del paciente vive en un solo sitio.** HAPI sabe aplicarlo también
+  desde las reglas de autorización (`inCompartment`), y ponerlo en los dos parecería defensa en
+  profundidad: sería la misma regla en dos ficheros que hay que cambiar a la vez, y el día que
+  discreparan mandaría el que nadie estaba leyendo. Y no se escribe a mano: se pregunta al
+  `ISearchParamRegistry` cuáles de sus parámetros dan pertenencia al compartimento `Patient`.
+- **2026-08-08 — A una lectura directa se le dice `403`; de una búsqueda se omite en silencio.**
+  Contestar «hay tres que no te enseño» ya cuenta algo de quien no lo autorizó, y con unas cuantas
+  búsquedas bien elegidas se reconstruye lo que se quería ocultar. En una lectura directa, en cambio,
+  el cliente pidió algo concreto y merece saber que no puede tenerlo.
+- **2026-08-08 — Un *scope* que no se entiende no concede nada.** La norma permite ignorar, sustituir
+  o rechazar un sufijo desordenado o inventado; de las tres, la única segura es no conceder. Si
+  `.dus` se reordenara «con buena voluntad» a `.uds`, un cliente que pidió actualizar habría
+  conseguido borrar.
+- **2026-08-08 — El descubrimiento y el decodificador son perezosos.** El laboratorio y Keycloak
+  levantan a la vez; con `NimbusJwtDecoder.withIssuerLocation(...)` el arranque del laboratorio
+  dependería de haber ganado la carrera. Sin identidad disponible se contesta `401` a todo, que es lo
+  correcto — pero el proceso existe.
+- **2026-08-08 — El JWKS del motor se publica por URL, no se pega en el realm.** Con la clave copiada
+  dentro del cliente, rotarla exige tocar el servidor de identidad en el mismo instante en que el
+  motor cambia la suya, y entre los dos momentos el motor no escribe. Bajándosela, Keycloak la relee
+  al ver un `kid` desconocido y la rotación se solapa sola.
+- **2026-08-08 — La web pide tres *scopes* `.c` además de `user/*.rs`.** El criterio del encargo decía
+  `user/*.rs`, y `.rs` es **solo lectura**: el alta de petición crea `Patient`, `Practitioner` y
+  `ServiceRequest`. Se piden esos tres y ni uno más — `user/*.cruds` daría de paso permiso para
+  borrar informes.
+- **2026-08-08 — El testigo de la web va en `sessionStorage`, no en una cookie.** Una cookie la manda
+  el navegador sola en cada petición al origen —eso es CSRF, y defenderse exigiría montar la
+  maquinaria entera contra algo que aquí no aplica: el testigo lo pone la aplicación a mano, en la
+  cabecera—. Con XSS el testigo es legible, y una cookie `httpOnly` tampoco lo salvaría: el atacante
+  haría las peticiones desde la propia página.
+- **2026-08-08 — Los tests de seguridad levantan un servidor de identidad de verdad.** Sustituir el
+  `JwtDecoder` por uno de test habría dejado sin probar el descubrimiento, la validación de `aud` y
+  el manejo de la identidad caída, y el test pasaría en verde con esa parte rota. Un `HttpServer` del
+  JDK cuesta milisegundos y no añade dependencias. Lo mismo en el motor, donde el servidor de
+  identidad de prueba **se baja el JWKS del motor y verifica la firma RS384**.
 
 ## Estado actual
 
@@ -697,7 +737,7 @@ cinco invariantes de §10 que el hito 1 alcanza viven en el núcleo de dominio, 
 > `integracion`; `app-ciudadano` la conserva. Se empuja a `origin/main` por **SSH**: el PAT de HTTPS
 > no tiene *scope* `workflow` y GitHub rechaza el push de `.github/workflows/`.
 
-### Dónde estamos ahora — hito 2, ítem 33 a medias
+### Dónde estamos ahora — hito 2: la identidad puesta, el ítem 33 a medias
 
 **Los tres huecos de dominio están cerrados (2026-08-06): ítems 17, 18 y 19.** Cada uno con su rojo
 en el historial —`81fdd0c`, `80b9ebf`, `abb1ddf`— y su verde detrás. `./mvnw verify` →
@@ -786,10 +826,48 @@ encima de lo anterior:
   `CodeableConcept.text`; el `display` del LOINC se copia sin tocarlo, en inglés, porque su licencia
   lo exige (ADR-0009).
 
-**Nada más se ha adelantado.** `app-ciudadano/` sigue sin andamiar, el motor **sigue sin estar en el
-`compose`**, y no hay ni una línea de Keycloak.
+**Y la identidad está puesta (2026-08-08): ítems 34, 35, 36 y 37.** La API FHIR **ya no responde a
+quien no se identifica**. Lo que hay encima de lo anterior:
+
+- **Keycloak 26.4 en el `compose` con su realm versionado** en `infra/keycloak/hispalis-realm.json`:
+  tres clientes —la web y la app del ciudadano **públicos con PKCE `S256`**, el motor confidencial con
+  `private_key_jwt` RS384 y **JWKS por URL**—, los *scopes* de SMART v2 y los *mappers* de `fhirUser`
+  y de contexto. **Ni una credencial en el fichero**: las de los tres usuarios de demostración las
+  pone un servicio de arranque desde el `.env`, que está en `.gitignore`.
+- **`/fhir/.well-known/smart-configuration` y `rest.security` con sus `oauth-uris`**, los dos
+  públicos y los dos con lo que se cumple de verdad: solo `S256`, y sin `permission-offline` ni
+  `context-ehr-patient`, que esta instalación no da.
+- **Dos capas de control en el backend, y no son intercambiables.** Spring Security comprueba firma,
+  emisor, caducidad y **`aud`**; los interceptores de HAPI deciden qué se puede hacer
+  (`AutorizacionSmart`) y **de quién son los datos** (`ConsentimientoDelPaciente`). El compartimento
+  se pregunta al registro de parámetros de búsqueda, no se escribe a mano.
+- **El motor escribe firmado.** SMART Backend Services con clave por variable de entorno, JWKS propio
+  en `GET /motor/jwks.json`, aserción RS384 con `jti` único y `exp` ≤ 5 min, testigo cacheado con
+  margen. **D5 queda cerrada del todo.**
+- **La web entra por EHR launch**, con `iss` comprobado contra lista, `state` de 256 bits y el testigo
+  puesto por un interceptor solo en las llamadas al laboratorio.
+
+Verificado: backend **184 tests** (`BUILD SUCCESS`), motor **84**, web **88**. Y contra un Keycloak
+26.4 de verdad, levantado y tirado: el flujo de código con PKCE completo, el canje de Backend
+Services con una clave RSA real y su JWKS servido por HTTP, y `system/*.cruds` **rechazado** con
+`400 invalid_scope` por no estar concedido a nadie.
+
+**Nada más se ha adelantado.** `app-ciudadano/` sigue sin andamiar y el motor **sigue sin estar en el
+`compose`**.
 
 > **Lo que queda sin verificar:**
+>
+> - **La pila con Keycloak no se ha levantado entera.** Lo que sí se hizo fue arrancar un Keycloak
+>   26.4 de usar y tirar, importar este mismo realm y recorrer los flujos con `curl`; lo que no se ha
+>   visto es el `compose` completo en marcha con el backend detrás.
+> - **La web no se ha lanzado contra el Keycloak real.** El flujo está probado con 22 tests contra un
+>   servidor simulado, y el flujo equivalente se recorrió a mano contra Keycloak con `curl` — pero no
+>   desde el navegador y desde esta web.
+> - **La renovación silenciosa del testigo no está** (ítem 37). Al caducar se relanza, y lo que el
+>   usuario tuviera a medias en el formulario se pierde.
+> - **El JWKS del motor no lo alcanza Keycloak desde el `compose`.** El realm apunta a
+>   `http://motor:8082/motor/jwks.json` y el motor se arranca aparte (ítem 41): hasta que esté en la
+>   misma red, el canje devolverá `invalid_client`.
 >
 > - **La pila no se ha levantado con `docker compose`.** En este equipo no hay Docker. El fichero es
 >   YAML válido y el encadenado está escrito, pero **nadie ha visto arrancar Kafka, el registro ni el
@@ -813,8 +891,9 @@ encima de lo anterior:
 > - **El reconciliador no se ha ejecutado sobre el laboratorio entero**, solo acotado a un paciente.
 >   Con la base de un test eso no dice nada del coste de una pasada completa, que es una transacción
 >   larga y un `search` sin filtro por tipo.
-> - **`$reconciliar` no tiene autenticación**, como todo lo demás hasta el ítem 35 — y esta operación
->   **borra recursos**. Es la deuda de seguridad más cara de las abiertas.
+> - ~~**`$reconciliar` no tiene autenticación**~~ — **saldada en el ítem 35.** Exige un testigo de
+>   sistema con `system/*.cruds`, que no está concedido a ningún cliente del realm: dárselo a alguien
+>   es un acto explícito.
 
 ---
 
@@ -1617,7 +1696,7 @@ encima de lo anterior:
 
 ### Seguridad
 
-- [ ] **34 — Keycloak en el `compose` y `.well-known/smart-configuration`.**
+- [x] **34 — Keycloak en el `compose` y `.well-known/smart-configuration`.** *(2026-08-08)*
   *Criterio:* Keycloak levantado con su *realm* **como código** —no configurado a mano en la
   consola—, y el backend publicando `/.well-known/smart-configuration` con los *endpoints* de
   autorización y token, las `capabilities` que soporta y los métodos de autenticación de cliente. El
@@ -1627,25 +1706,54 @@ encima de lo anterior:
   lanzamiento —el `patient` que acompaña al token— no es OIDC estándar y necesita un *mapper*; y el
   parámetro `aud`, que SMART exige que apunte a la base FHIR, Keycloak no lo valida por su cuenta.
   Las dos cosas hay que construirlas y probarlas.
+  *Hecho:* `infra/keycloak/hispalis-realm.json` (~600 líneas) con tres clientes, los *scopes* de
+  SMART v2 con su barra y su asterisco, los *mappers* de `fhirUser` y de contexto, y **ninguna
+  credencial** — las de los usuarios de demostración las pone `keycloak-usuarios` desde el `.env`. El
+  descubrimiento lo sirve un servlet propio en `/fhir/.well-known/smart-configuration` (regla exacta,
+  que gana a `/fhir/*` de HAPI) y declara **solo** las `capabilities` que se cumplen y **solo `S256`**.
+  El `aud` **lo valida el backend**, que es de quien es el trabajo. Las **cuatro trampas de Keycloak
+  26.4** medidas en vivo están en `infra/keycloak/README.md`.
 
-- [ ] **35 — Los scopes SMART gobiernan de verdad.**
+- [x] **35 — Los scopes SMART gobiernan de verdad.** *(2026-08-08)*
   *Criterio:* los tres tipos de §7 se aplican: `user/*.rs` para la web del profesional, `patient/*.rs`
   **acotado al paciente del contexto**, y `system/*.r` para los clientes no humanos. **Test por el
   lado de la negativa**, que es el único que prueba algo: un token `patient/` de un paciente **no**
   alcanza los resultados de otro → `403` con su `OperationOutcome`, y un token de solo lectura no
   escribe. Sin token, la API deja de responder a lo que hoy responde.
+  *Hecho:* dos capas —Spring Security valida firma, emisor, caducidad y `aud`; `AutorizacionSmart` y
+  `ConsentimientoDelPaciente` deciden qué y de quién—. 34 tests: `AmbitoSmartTest` (22) sobre el
+  intérprete de *scopes* y `SeguridadSmartTest` (12) contra un servidor de identidad de verdad
+  levantado en el propio test, para ejercitar el descubrimiento y el JWKS de producción. El
+  compartimento se pregunta al `ISearchParamRegistry`, no se escribe a mano, y vive en un solo sitio.
+  *Trampa encontrada, y cara:* `securityMatcher("/fhir/**")` **no casa** cuando la API la sirve un
+  servlet que no es el `DispatcherServlet` — la cadena se construye, el log la anuncia y la API queda
+  abierta **sin un solo error**. ADR-0020.
 
-- [ ] **36 — El motor se autentica como cliente `system/` — D5, cerrada del todo.**
+- [x] **36 — El motor se autentica como cliente `system/` — D5, cerrada del todo.** *(2026-08-08)*
   *Criterio:* el motor obtiene su token por **SMART Backend Services** (`client_credentials` con JWT
   firmado) y todas sus escrituras llevan `Authorization`.
-  *Deuda declarada dentro del hito:* hasta este ítem **el motor escribe sin token**. Está dicho aquí
-  para que no se olvide — D5 no está cumplida del todo mientras este ítem siga abierto.
+  *Hecho:* `infraestructura/seguridad/` con la clave por variable de entorno —efímera y con aviso si
+  falta—, el JWKS **publicado por URL** en `GET /motor/jwks.json` para que la rotación se solape, la
+  aserción RS384 con `jti` único y `exp` ≤ 5 min, y el testigo guardado con margen y tirado ante un
+  `401`. El arnés `IdentidadDePrueba` **se baja el JWKS del motor y verifica la firma de verdad**: un
+  doble que devolviera el testigo sin mirar dejaría sin probar lo que cuesta acertar. Los 84 tests del
+  motor corren ya con la identidad encendida, así que cada canal demuestra de paso que escribe firmado.
 
-- [ ] **37 — La web profesional pasa a EHR launch.**
+- [x] **37 — La web profesional pasa a EHR launch.** *(2026-08-08)*
   *Criterio:* la web deja de hablar con la API a pecho descubierto y arranca por el flujo de
   lanzamiento SMART, con su token y su contexto; la sesión caduca y se renueva **sin que el usuario
   pierda lo que estaba haciendo**. Los tests de la web siguen en verde y el `compose` sigue
   levantando el circuito entero.
+  *Hecho:* `src/app/seguridad/` con `/launch` y `/callback`, descubrimiento desde el `iss`
+  —**comprobado contra una lista**, que es la vulnerabilidad clásica de este flujo—, `state` de 256
+  bits, PKCE `S256` obligatorio y el testigo puesto por un interceptor **solo** en las llamadas al
+  laboratorio. 88 tests (66 antes, 22 nuevos), `lint` y formato en verde.
+  *Ojo con el criterio:* el prompt pedía `user/*.rs`, y `.rs` **es solo lectura**. Se piden además
+  `user/Patient.c`, `user/Practitioner.c` y `user/ServiceRequest.c`, porque el alta de petición crea
+  recursos; con `user/*.rs` a secas la pantalla contestaría `403` al guardar.
+  *Pendiente dentro del ítem:* **la renovación silenciosa no está**. Cuando el testigo caduca, la
+  guarda manda a `/launch` y se vuelve a lanzar; el usuario no pierde datos ya guardados pero sí lo
+  que tuviera a medias en el formulario. Ver *Notas / riesgos*.
 
 ### La app del ciudadano
 
@@ -1720,9 +1828,26 @@ encima de lo anterior:
   una segunda ejecución se encuentra los tópicos de la primera. Está tolerado en
   `RelayDelOutboxTest`, pero es el tipo de estado en disco que hace que un test pase solo la primera
   vez. Si aparece algo raro en el bus, mirar ahí antes que en el código.
-- **`$reconciliar` borra recursos y no tiene autenticación.** Como todo lo demás hasta el ítem 35 —
-  pero esta operación no solo lee: retira de la proyección lo que no tiene agregado detrás. Es la
-  deuda de seguridad más cara de las que hay abiertas y conviene cerrarla con el ítem 35, no después.
+- ~~**`$reconciliar` borra recursos y no tiene autenticación.**~~ **Cerrada en el ítem 35**
+  (2026-08-08): exige un testigo de sistema con `system/*.cruds`, y ese *scope* está definido en el
+  realm pero **sin asignar a ningún cliente**.
+- **⚠️ Una regla de seguridad de Spring que no casa deja la puerta abierta y no avisa.** Con
+  `spring-webmvc` en el *classpath*, `securityMatcher("/fhir/**")` construye un `MvcRequestMatcher`
+  que **nunca empareja** las peticiones que atiende el servlet de HAPI. La cadena se registra, el log
+  la anuncia y la API queda sin filtro **sin un solo error**. Se detectó porque un test pedía sin
+  testigo y esperaba `401`. Está arreglado y escrito en ADR-0020, pero **cualquier regla nueva que se
+  añada con una cadena vuelve a caer en lo mismo**.
+- **El realm apunta el JWKS del motor a `http://motor:8082/motor/jwks.json`, y el motor no está en el
+  `compose`.** Hasta el ítem 41 esa URL no resuelve desde el contenedor de Keycloak, y el canje del
+  motor devolverá `invalid_client`. Con el motor en local hay que cambiarla a
+  `http://host.docker.internal:8082/...`.
+- **La web no renueva el testigo en silencio.** Al caducar, la guarda relanza el flujo SMART: no se
+  pierde nada guardado, pero sí lo que hubiera a medias en un formulario. El criterio del ítem 37
+  pedía «sin que el usuario pierda lo que estaba haciendo» y esto **no lo cumple del todo**.
+- **La contraseña de PostgreSQL sigue en el `compose` en claro**, y ahora también la usa Keycloak
+  para su base. Está dicho en el propio fichero —es una simulación con datos sintéticos y la base no
+  se publica fuera de la red del `compose`—, pero conviene no perderlo de vista ahora que hay
+  credenciales de identidad detrás de esa misma base de datos.
 - **La pila del `compose` con Kafka no se ha levantado nunca.** En este equipo no hay Docker. El
   fichero es YAML válido, los *healthcheck* y el encadenado están escritos, pero la primera ejecución
   real está por hacer y con ella los fallos típicos de Kafka en Docker: escuchas anunciadas mal,
