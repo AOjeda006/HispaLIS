@@ -65,6 +65,18 @@ hispalis:
     servidor: ${HISPALIS_TERMINOLOGIA:}
     tiempo-de-espera: PT5S
 
+  # La identidad (SMART on FHIR). Solo se configura el emisor: los `endpoints` de autorización, de
+  # testigo y el JWKS no se cablean aquí, se descubren de su `.well-known/openid-configuration`.
+  seguridad:
+    # Encendida por defecto: una API clínica abierta tiene que ser una decisión que alguien escriba.
+    # Apagarla vale para los tests y para el desarrollo local, y el arranque lo avisa en voz alta.
+    habilitada: ${HISPALIS_SEGURIDAD:true}
+    emisor: ${HISPALIS_OIDC_EMISOR:}
+    # Las bases FHIR por las que se llega a este servidor. Sin `aud` un testigo emitido para otro
+    # servidor de recursos, con la misma firma y el mismo emisor, valdría aquí.
+    audiencias: ${HISPALIS_OIDC_AUDIENCIAS:}
+    tiempo-de-espera: PT5S
+
   bus:
     # Encendido por defecto: que el laboratorio no publique lo que ya ha apuntado tiene que ser una
     # decisión escrita, no un valor que falta. Con el broker caído no pasa nada — el hecho se queda

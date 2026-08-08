@@ -25,6 +25,7 @@ import ca.uhn.fhir.rest.server.RestfulServer;
 import ca.uhn.fhir.rest.server.provider.ResourceProviderFactory;
 import ca.uhn.fhir.rest.server.util.ISearchParamRegistry;
 import es.hispalis.backend.fhir.reconciliacion.ProveedorDeReconciliacion;
+import es.hispalis.backend.fhir.seguridad.DondeSeAutoriza;
 import jakarta.persistence.EntityManagerFactory;
 import java.util.List;
 import java.util.Set;
@@ -190,7 +191,8 @@ public class ConfiguracionServidorFhir {
             ProveedorDeReconciliacion proveedorDeReconciliacion,
             TraduccionDeErroresDeDominio traduccionDeErrores,
             IInterceptorService interceptoresDeAlmacenamiento,
-            EscrituraSoloPorElNucleo escrituraSoloPorElNucleo) {
+            EscrituraSoloPorElNucleo escrituraSoloPorElNucleo,
+            DondeSeAutoriza dondeSeAutoriza) {
         RestfulServer servidor = new RestfulServer(contexto);
 
         servidor.registerProviders(sustituyendoLosPropios(fabricaDeProveedores, proveedoresPropios));
@@ -213,8 +215,8 @@ public class ConfiguracionServidorFhir {
         // `RestfulServer`. Registrarlo en el sitio equivocado no da ningún error — simplemente no se
         // llama nunca, que en un interceptor que cierra una puerta es la peor forma de fallar.
         interceptoresDeAlmacenamiento.registerInterceptor(escrituraSoloPorElNucleo);
-        servidor.setServerConformanceProvider(
-                new ConformidadHispaLis(servidor, systemDao, ajustes, parametrosDeBusqueda, soporteDeValidacion));
+        servidor.setServerConformanceProvider(new ConformidadHispaLis(
+                servidor, systemDao, ajustes, parametrosDeBusqueda, soporteDeValidacion, dondeSeAutoriza));
 
         // La paginación va contra la base de datos, no contra memoria: es lo que hace que
         // `Bundle.link[relation=next]` siga funcionando con un resultado grande (ítem 11).

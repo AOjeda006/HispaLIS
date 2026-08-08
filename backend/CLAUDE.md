@@ -10,6 +10,7 @@
 @../../BibliotecaDocumentacion/bases-de-datos/sql/convenciones.md
 @../../BibliotecaDocumentacion/fundamentos/datos-distribuidos/convenciones.md
 @../../BibliotecaDocumentacion/interoperabilidad/terminologia/convenciones.md
+@../../BibliotecaDocumentacion/interoperabilidad/smart-on-fhir/convenciones.md
 @../../BibliotecaDocumentacion/patrones/repository-y-dto.md
 @../../BibliotecaDocumentacion/patrones/inyeccion-dependencias.md
 @../../BibliotecaDocumentacion/herramientas/docker.md
@@ -130,6 +131,51 @@ cambiar esa línea.
   concedido no garantiza los datos: **el consentimiento se aplica aquí**, no en el gateway.
 - **El gateway no habla FHIR.** No le muevas lógica FHIR: dos servidores FHIR y ninguno conforme.
 - **Nunca PHI en URLs, logs ni trazas.**
+
+## La seguridad son dos capas y no son intercambiables (ítem 35)
+
+```
+petición ──► filtro de Spring Security ──► servlet de HAPI ──► interceptores
+             firma, emisor, caducidad, aud    │                 AutorizacionSmart  → ¿puede leer Observation?
+             (criptografía y protocolo)       │                 ConsentimientoDelPaciente → ¿puede ver ESTA?
+```
+
+- **`AutorizacionSmart`** traduce los *scopes* a reglas de HAPI, con `PolicyEnum.DENY` por defecto.
+  Un scope que no se entiende **no concede nada**: `AmbitoSmart.de()` devuelve vacío ante un sufijo
+  desordenado, repetido o inventado. «Corregir» `.dus` a `.cud` le daría a quien pidió actualizar el
+  permiso de borrar.
+- **`ConsentimientoDelPaciente`** decide de quién son los datos, y **es la mitad que no se puede
+  delegar**: el proxy no sabe qué es un compartimento y el servidor de identidad ya hizo lo suyo al
+  emitir el testigo. El compartimento se pregunta al `ISearchParamRegistry`
+  (`getProvidesMembershipInCompartments`), no se escribe a mano.
+- **Dos formas de decir que no, y la diferencia importa.** Lectura directa → `403`. Búsqueda →
+  se omite el recurso **en silencio**: contestar «hay tres que no te enseño» ya cuenta algo de quien
+  no lo autorizó.
+- **El compartimento vive en un solo sitio.** HAPI sabe hacerlo también con `inCompartment`, y
+  ponerlo en los dos parecería defensa en profundidad: sería la misma regla en dos ficheros que hay
+  que cambiar a la vez.
+- **`aud` es obligatorio.** Sin validarlo, un testigo legítimo emitido para otro servidor de recursos
+  del mismo *realm* valdría aquí. Hay test.
+- **El descubrimiento es perezoso**: el laboratorio arranca con Keycloak caído y contesta `401`, que
+  es lo correcto. Lo que no hace es no arrancar.
+
+### ⚠️ `securityMatcher("/fhir/**")` no casa, y no avisa
+
+La API FHIR la sirve el servlet de HAPI, no el `DispatcherServlet`. Con `spring-webmvc` en el
+*classpath*, una cadena en `securityMatcher` / `requestMatchers` se convierte en un
+`MvcRequestMatcher` que **nunca empareja** esas peticiones: la cadena se construye, el log dice
+`Will secure Or [Mvc [pattern='/fhir/**']]` y **la API queda abierta sin un solo error**. Se usan
+emparejadores explícitos (`PathPatternRequestMatcher`) y hay un test que pide sin testigo y exige
+`401`. Todo el detalle en `docs/adr/adr-0020-…`.
+
+### Los tests y el interruptor
+
+`hispalis.seguridad.habilitada` va **encendida por defecto**. `TestDeIntegracion` la apaga, pero una
+clase que declare su **propio** `@SpringBootTest` oculta el del padre entero, propiedades incluidas,
+y arranca con la seguridad encendida sin emisor — el contexto no levanta. Hay que repetir la línea
+(lo hace `RelayDelOutboxTest`). Quien prueba la seguridad la enciende: `SeguridadSmartTest` levanta
+un servidor de identidad de verdad con `HttpServer` y firma sus propios testigos, para ejercitar el
+descubrimiento, el JWKS y la validación de `aud` de producción y no una versión de test de ellos.
 
 ## Comandos
 

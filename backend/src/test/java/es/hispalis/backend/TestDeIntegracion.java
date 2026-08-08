@@ -23,10 +23,16 @@ import org.springframework.test.context.DynamicPropertySource;
  * uno arrastraría un cliente de Kafka reintentando contra un broker que no existe. Se apaga aquí y
  * no en la configuración de la aplicación a propósito: el valor por defecto de producción tiene que
  * seguir siendo «encendido», y quien quiera el bus —{@code RelayDelOutboxTest}— lo enciende él.
+ *
+ * <p><strong>La seguridad también va apagada</strong>, y por la misma razón: estos tests prueban el
+ * comportamiento clínico de la API, no quién puede llamarla, y exigirles un testigo obligaría a
+ * levantar un servidor de identidad para comprobar que un espécimen rechazado no produce resultado.
+ * Quien prueba la seguridad —{@code SeguridadSmartTest}— la enciende él y se emite sus propios
+ * testigos. El valor por defecto de producción sigue siendo «encendida».
  */
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = "hispalis.bus.habilitado=false")
+        properties = {"hispalis.bus.habilitado=false", "hispalis.seguridad.habilitada=false"})
 public abstract class TestDeIntegracion {
 
     private static final EmbeddedPostgres POSTGRES = arrancarPostgres();

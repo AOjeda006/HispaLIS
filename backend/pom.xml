@@ -90,6 +90,19 @@
       <artifactId>spring-boot-starter-data-jpa</artifactId>
     </dependency>
 
+    <!--
+      El laboratorio es un SERVIDOR DE RECURSOS de OAuth2 y nada más: valida el testigo que le llega
+      y no participa en cómo se obtuvo. Por eso `resource-server` y no `oauth2-client`: aquí no hay
+      redirecciones, ni canje de códigos, ni sesión de navegador — eso es cosa de la web (ítem 37).
+
+      Lo que aporta es la validación por JWKS con caché y rotación de claves. Escribirla a mano es
+      exactamente el tipo de criptografía que no se escribe a mano.
+    -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
+    </dependency>
+
     <dependency>
       <groupId>org.postgresql</groupId>
       <artifactId>postgresql</artifactId>

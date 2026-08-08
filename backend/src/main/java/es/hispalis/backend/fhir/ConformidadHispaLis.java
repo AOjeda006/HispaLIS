@@ -7,11 +7,15 @@ import ca.uhn.fhir.jpa.provider.JpaCapabilityStatementProvider;
 import ca.uhn.fhir.rest.server.RestfulServer;
 import ca.uhn.fhir.rest.server.util.ISearchParamRegistry;
 import ca.uhn.fhir.util.FhirTerser;
+import es.hispalis.backend.fhir.seguridad.DondeSeAutoriza;
 import org.hl7.fhir.instance.model.api.IBaseConformance;
 import org.hl7.fhir.r5.model.CapabilityStatement;
 import org.hl7.fhir.r5.model.CapabilityStatement.CapabilityStatementRestComponent;
 import org.hl7.fhir.r5.model.CapabilityStatement.CapabilityStatementRestResourceComponent;
+import org.hl7.fhir.r5.model.CapabilityStatement.CapabilityStatementRestSecurityComponent;
 import org.hl7.fhir.r5.model.CapabilityStatement.SystemRestfulInteraction;
+import org.hl7.fhir.r5.model.Extension;
+import org.hl7.fhir.r5.model.UriType;
 
 /**
  * El {@code CapabilityStatement} de HispaLIS: el de HAPI, con los perfiles que de verdad soporta.
@@ -29,13 +33,23 @@ import org.hl7.fhir.r5.model.CapabilityStatement.SystemRestfulInteraction;
  */
 public class ConformidadHispaLis extends JpaCapabilityStatementProvider {
 
+    /** La extensión con la que SMART publica las direcciones del servidor de autorización. */
+    private static final String OAUTH_URIS = "http://fhir-registry.smarthealthit.org/StructureDefinition/oauth-uris";
+
+    private static final String SERVICIO_DE_SEGURIDAD =
+            "http://terminology.hl7.org/CodeSystem/restful-security-service";
+
+    private final DondeSeAutoriza dondeSeAutoriza;
+
     public ConformidadHispaLis(
             RestfulServer servidor,
             IFhirSystemDao<?, ?> systemDao,
             JpaStorageSettings ajustes,
             ISearchParamRegistry parametrosDeBusqueda,
-            IValidationSupport soporteDeValidacion) {
+            IValidationSupport soporteDeValidacion,
+            DondeSeAutoriza dondeSeAutoriza) {
         super(servidor, systemDao, ajustes, parametrosDeBusqueda, soporteDeValidacion);
+        this.dondeSeAutoriza = dondeSeAutoriza;
         setImplementationDescription("HispaLIS — Sistema de Información de Laboratorio (simulación)");
     }
 
@@ -53,10 +67,40 @@ public class ConformidadHispaLis extends JpaCapabilityStatementProvider {
         // ser agnóstico de versión sería pagar indirección por una portabilidad que nadie quiere.
         if (conformidad instanceof CapabilityStatement declaracion) {
             declaracion.getRest().forEach(ConformidadHispaLis::noPrometerTransacciones);
+            declaracion.getRest().forEach(this::declararLaSeguridad);
             declaracion.getRest().stream()
                     .flatMap(rest -> rest.getResource().stream())
                     .forEach(ConformidadHispaLis::declararSoloLosPerfilesDeLaGuia);
         }
+    }
+
+    /**
+     * Declara que este servidor se autoriza con SMART, y dónde.
+     *
+     * <p>Es lo que permite que una aplicación descubra el servidor de autorización partiendo
+     * únicamente de la URL base de FHIR. El documento {@code .well-known/smart-configuration} es hoy
+     * la vía preferente y esto está obsoleto para las <em>capabilities</em>, pero
+     * {@code rest.security} sigue siendo el sitio donde un cliente FHIR genérico —que no sabe de
+     * SMART— averigua que aquí hace falta OAuth2.
+     *
+     * <p>Si no hay autorización configurada no se declara nada. Un {@code CapabilityStatement} que
+     * anuncia SMART sobre un servidor abierto es peor que uno mudo.
+     */
+    private void declararLaSeguridad(CapabilityStatementRestComponent rest) {
+        dondeSeAutoriza.direcciones().ifPresent(direcciones -> {
+            CapabilityStatementRestSecurityComponent seguridad = rest.getSecurity();
+            seguridad.setCors(false);
+            seguridad
+                    .addService()
+                    .addCoding()
+                    .setSystem(SERVICIO_DE_SEGURIDAD)
+                    .setCode("SMART-on-FHIR")
+                    .setDisplay("SMART on FHIR");
+
+            Extension uris = seguridad.addExtension().setUrl(OAUTH_URIS);
+            uris.addExtension("authorize", new UriType(direcciones.autorizacion()));
+            uris.addExtension("token", new UriType(direcciones.testigo()));
+        });
     }
 
     /**

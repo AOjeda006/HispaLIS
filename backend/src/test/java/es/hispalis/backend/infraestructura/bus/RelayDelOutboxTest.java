@@ -78,6 +78,11 @@ import org.springframework.test.context.DynamicPropertySource;
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
+            // Se repite porque esta clase declara su propio `@SpringBootTest` y ese oculta el de
+            // `TestDeIntegracion` entero, propiedades incluidas. Sin esta línea, la seguridad se
+            // enciende sin emisor y el contexto no arranca — que es exactamente lo que tiene que
+            // pasar, pero aquí no viene a cuento: este test va del bus.
+            "hispalis.seguridad.habilitada=false",
             "hispalis.bus.habilitado=true",
             "hispalis.bus.registro-de-esquemas=mock://" + RelayDelOutboxTest.AMBITO,
             "hispalis.bus.intervalo=PT1H",
