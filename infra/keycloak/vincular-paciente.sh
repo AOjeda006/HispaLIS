@@ -44,7 +44,6 @@ if [[ ! $referencia =~ ^Patient/[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]]; then
 fi
 
 raiz=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
-compose=$raiz/infra/compose/docker-compose.yml
 entorno=$raiz/infra/compose/.env
 
 # Las credenciales de administración salen del mismo `.env` que usa el `compose`. No hay valor por
@@ -63,16 +62,18 @@ if [[ -z $clave ]]; then
   exit 78
 fi
 
-kc() {
-  docker compose -f "$compose" exec -T keycloak /opt/keycloak/bin/kcadm.sh "$@"
+# Contra la API de administración por HTTP y no con `kcadm` dentro del contenedor. Se intentó con
+# `kcadm` y se descartó: `docker compose exec -T` no le hace llegar la entrada estándar de forma
+# fiable, y la forma con `-s attributes.x=[...]` **no falla** cuando no cuaja — contesta que todo ha
+# ido bien y deja los atributos vacíos. Una orden que miente es peor que una que no existe.
+KEYCLOAK=${HISPALIS_KEYCLOAK_URL:-http://localhost:8081}
+
+testigo=$(curl -sf -X POST "$KEYCLOAK/realms/master/protocol/openid-connect/token"   -d grant_type=password -d client_id=admin-cli   --data-urlencode "username=$admin" --data-urlencode "password=$clave"   | python3 -c 'import json,sys;print(json.load(sys.stdin)["access_token"])') || {
+  echo "No se pudo entrar en $KEYCLOAK como administrador. ¿Está levantado el compose?" >&2
+  exit 69
 }
 
-kc config credentials --server http://localhost:8080 --realm master \
-  --user "$admin" --password "$clave" >/dev/null
-
-# `\r` fuera: kcadm escribe con final de línea de Windows cuando la terminal lo es, y un id con un
-# retorno de carro pegado produce un 404 que no hay forma de entender mirando la URL.
-id=$(kc get users -r hispalis -q "username=$usuario" -q exact=true --fields id --format csv --noquotes | tr -d '\r\n')
+id=$(curl -sf -H "Authorization: Bearer $testigo"   "$KEYCLOAK/admin/realms/hispalis/users?exact=true&username=$usuario"   | python3 -c 'import json,sys;u=json.load(sys.stdin);print(u[0]["id"] if u else "")')
 
 if [[ -z $id ]]; then
   echo "En el realm hispalis no hay ningún usuario «$usuario»." >&2
@@ -81,13 +82,16 @@ fi
 
 # El `fhirUser` lleva el tipo delante y el contexto de lanzamiento NO: son dos formas distintas de
 # nombrar lo mismo y la norma SMART las define así. Confundirlas hace que el laboratorio conteste
-# 403 sin más explicación.
+# 403 sin más explicación. Y los dos son LISTAS: un atributo de usuario de Keycloak siempre lo es.
 paciente=${referencia#Patient/}
 
-kc update "users/$id" -r hispalis -f - <<JSON
-{ "attributes": { "fhirUser": ["$referencia"], "patient": ["$paciente"] } }
-JSON
+codigo=$(curl -s -o /dev/null -w '%{http_code}' -X PUT   -H "Authorization: Bearer $testigo" -H 'Content-Type: application/json'   "$KEYCLOAK/admin/realms/hispalis/users/$id"   -d "{\"attributes\":{\"fhirUser\":[\"$referencia\"],\"patient\":[\"$paciente\"]}}")
+
+if [[ $codigo != 204 ]]; then
+  echo "Keycloak contestó $codigo al vincular. No se ha cambiado nada." >&2
+  exit 1
+fi
 
 echo "«$usuario» queda vinculado a $referencia."
 echo "Comprobación:"
-kc get "users/$id" -r hispalis --fields username,attributes
+curl -sf -H "Authorization: Bearer $testigo" "$KEYCLOAK/admin/realms/hispalis/users/$id"   | python3 -c 'import json,sys;u=json.load(sys.stdin);print(" ",u["username"],"→",u.get("attributes"))'
