@@ -2354,6 +2354,12 @@ contra la pila del `compose` levantada desde el clon limpio, no contra un doble.
   no hay lista aceptada universalmente y que cada laboratorio debe pactar la suya con sus clínicos. Lo
   que este proyecto demuestra es el **mecanismo** —umbral publicado, citable y consumido desde un
   único sitio—, no el número. Está dicho en el `ValueSet`, que es donde lo leerá quien lo reutilice.
+- **Las cuatro propiedades de `catalogo-pruebas` no declaran `uri`, y el validador lo dice.** Nivel
+  *Information*, no *Warning*: «this property has only a code […] so it has no clearly defined meaning
+  in the terminology ecosystem». Afecta también a `unidad-ucum`, que es anterior, así que ponerles URI
+  es **un cambio de los cuatro a la vez** y no un apaño del ítem 43. No cambia lo que `$lookup`
+  devuelve —el cliente lee por `code`—, así que es calidad del artefacto publicado y no
+  comportamiento. Hacerlo cuesta cuatro líneas y obliga a recargar el servidor y repasar el test.
 - **HAPI 8.10 sí devuelve las propiedades `decimal` de un `CodeSystem` por `$lookup`**, con
   `valueDecimal` y sin perder precisión. Se midió antes de modelar los umbrales, porque el plan B
   —declararlas `string` y parsear— habría sido mentir sobre el tipo en un artefacto publicado. El
