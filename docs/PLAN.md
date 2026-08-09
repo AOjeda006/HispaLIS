@@ -1108,8 +1108,14 @@ tienen su caso y no son el mismo: `repeat` apunta al tubo, `re-run` al analizado
 
 **Verificado en local, no en GitHub.** Esta tanda termina sin push, así que ninguna CI ha corrido; se
 han reproducido a mano las que tocan. Backend: **231 tests, `BUILD SUCCESS`** (eran 208). Web: 94.
-App: 69, `flutter analyze` sin avisos. Simuladores: 128, `ruff` limpio. La guía y el circuito en
-vivo, en el bloque de cierre de este mismo apartado.
+App: 69, `flutter analyze` sin avisos. Simuladores: 128, `ruff` limpio. SUSHI: 0 errores, 0 avisos.
+Validador oficial con la invocación exacta de `ci-ig`: **0 errores**. El circuito, recorrido en vivo
+contra el `compose` —tópico descubierto, entrega llegada al receptor sin PHI dentro, `$status`,
+`$events`, y la entrega fallida dejando la suscripción en `error` con su motivo—.
+
+**Dos cosas las cazó la construcción de la guía y no se ven antes**: el `display` de un código se
+compara entero contra el canónico de THO, y `Subscription.endpoint` **no admite una URL de ejemplo**
+—que es exactamente lo que uno escribe en un ejemplo—. Las dos corregidas y revalidadas.
 
 ### Empieza el hito 3 — la terminología que faltaba (ítems 42 y 43, 2026-08-09)
 
