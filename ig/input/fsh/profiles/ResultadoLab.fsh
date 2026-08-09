@@ -64,10 +64,18 @@ re-ejecución por fallo técnico. En R4 esto había que inventarlo.
 * referenceRange.appliesTo MS
 * referenceRange.age MS
 
+// Los tres códigos se admiten, pero NO los declara el mismo: `reflex` lo decide el laboratorio a
+// partir de la regla del catálogo (`prueba-refleja`) y lo rechaza si llega de fuera —quien manda un
+// resultado no decide el protocolo del laboratorio—; `repeat` y `re-run` los declara quien repite,
+// porque la hemólisis del tubo y el control de calidad del turno solo los ve él.
 * triggeredBy MS
 * triggeredBy.observation only Reference(ResultadoLab)
 * triggeredBy.type MS
 * triggeredBy.type ^short = "`reflex` | `repeat` | `re-run`"
+// El `reason` es la mitad que se olvida, y sin él el elemento no sirve de nada a quien lee: dos
+// cifras de la misma prueba con un enlace entre ellas siguen sin explicar cuál vale y por qué.
+* triggeredBy.reason MS
+* triggeredBy.reason ^short = "Por qué existe esta determinación, en español y en una frase"
 
 * hasMember MS
 * hasMember only Reference(ResultadoLab)

@@ -52,6 +52,18 @@ término LOINC por el nombre en vez de por sus seis ejes es el error de mapeo m�
 * ^property[3].description = "De dónde salen los dos límites, con la referencia concreta. Obligatoria en todo concepto que declare alguno: un umbral sin fuente no se usa."
 * ^property[3].type = #string
 
+// Las dos de abajo son la REGLA REFLEJA, y van juntas por lo mismo que las tres de arriba: una
+// prueba que se añade sola sin poder decir por qué aparece en el informe como una determinación que
+// nadie pidió. `type = #code` a propósito: una propiedad de tipo `code` se interpreta como código de
+// ESTE CodeSystem, y aquí eso es exactamente lo que se quiere decir — la refleja es otra prueba del
+// catálogo. Es el caso contrario al de `unidad-ucum`, que por eso es `Coding`.
+* ^property[4].code = #prueba-refleja
+* ^property[4].description = "Prueba del catálogo que el laboratorio añade por su cuenta cuando ESTA sale alterada, es decir, fuera de su rango de referencia. Ausente en las pruebas que no disparan ninguna."
+* ^property[4].type = #code
+* ^property[5].code = #motivo-de-la-refleja
+* ^property[5].description = "La frase que explica la refleja al que lee el informe, en español y ya redactada. Va tal cual a `Observation.triggeredBy.reason`, y de ahí a la pantalla: quien redacta la regla redacta también cómo se cuenta."
+* ^property[5].type = #string
+
 
 // ─── Bioquímica ──────────────────────────────────────────────────────────────
 
@@ -151,10 +163,20 @@ término LOINC por el nombre en vez de por sus seis ejes es el error de mapeo m�
 // ─── Hormonas ────────────────────────────────────────────────────────────────
 
 // TSH y T4 libre son el par de la prueba refleja del diseño: una TSH alterada dispara una T4 libre,
-// que se enlaza con `Observation.triggeredBy`.
+// que se enlaza con `Observation.triggeredBy`. La regla vive AQUÍ y no en el código del laboratorio:
+// cambiar a qué prueba refleja la TSH tiene que ser cambiar un catálogo, no desplegar un backend.
+//
+// A diferencia de los límites críticos, este umbral NO necesita fuente externa publicada: «alterada»
+// significa fuera del rango de referencia que publica este laboratorio con su método y su
+// analizador, y a qué prueba refleja es su protocolo, acordado con sus clínicos. Un valor crítico es
+// lo contrario — un acuerdo con quien recibe la llamada— y por eso el ítem 43 exigió cita y este no.
 * #TSH "TSH (tirotropina)" "Tirotropina en suero o plasma."
 * #TSH ^property[0].code = #unidad-ucum
 * #TSH ^property[0].valueCoding = $UCUM#"u[IU]/mL"
+* #TSH ^property[1].code = #prueba-refleja
+* #TSH ^property[1].valueCode = #T4L
+* #TSH ^property[2].code = #motivo-de-la-refleja
+* #TSH ^property[2].valueString = "Derivada de un TSH alterado: el protocolo de función tiroidea del laboratorio añade la T4 libre cuando la TSH cae fuera de su rango de referencia."
 
 * #T4L "T4 libre" "Tiroxina libre en suero o plasma."
 * #T4L ^property[0].code = #unidad-ucum
