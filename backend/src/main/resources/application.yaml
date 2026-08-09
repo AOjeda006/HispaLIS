@@ -81,6 +81,27 @@ hispalis:
     audiencias: ${HISPALIS_OIDC_AUDIENCIAS:}
     tiempo-de-espera: PT5S
 
+  # Las notificaciones de `Subscription` (ítem 44). Anotar lo notificable es siempre; lo que se puede
+  # apagar es SALIR a entregarlo — y apagarlo no cambia lo que el laboratorio considera notificable.
+  notificaciones:
+    habilitado: ${HISPALIS_NOTIFICACIONES:true}
+    # La base pública de esta API, la que el receptor puede resolver. No se deduce de la petición
+    # porque el relay no atiende ninguna: entrega desde un hilo de fondo.
+    base-fhir: ${HISPALIS_BASE_FHIR:http://localhost:8080/fhir}
+    intervalo: PT2S
+    tanda: 50
+    tiempo-de-espera: PT5S
+    # Cuatro intentos y se corta: la suscripción pasa a `error` y deja de acumular trabajo. Ver
+    # `RelayDeNotificaciones` para por qué el corte importa más que los reintentos.
+    intentos: 4
+    espera-entre-intentos: PT0.5S
+    # Las claves compartidas con cada receptor, por identificador. VACÍO por defecto y a propósito:
+    # un secreto con valor por defecto en un fichero versionado es la forma habitual de que un
+    # secreto acabe en producción. Sin clave configurada, la notificación NO sale — ver
+    # `EntregaFirmada`. El `compose` la rellena con `HISPALIS_CLAVE_HIS`.
+    secretos:
+      his-2026: ${HISPALIS_CLAVE_HIS:}
+
   bus:
     # Encendido por defecto: que el laboratorio no publique lo que ya ha apuntado tiene que ser una
     # decisión escrita, no un valor que falta. Con el broker caído no pasa nada — el hecho se queda

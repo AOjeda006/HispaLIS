@@ -1,0 +1,36 @@
+{
+  "resourceType": "SubscriptionTopic",
+  "id": "resultado-validado",
+  "url": "https://aojeda006.github.io/HispaLIS/fhir/SubscriptionTopic/resultado-validado",
+  "title": "Tópico: resultado validado",
+  "description": "Lo que este laboratorio deja escuchar: el momento en que un resultado deja de ser una cifra del\nanalizador y pasa a ser un resultado del que responde un facultativo.\n\n**El disparador es el cambio de estado, no el estado.** Se pide que el recurso esté en `final`\n*ahora* y que **no** lo estuviera *antes*: sin esa segunda condición, cualquier reescritura posterior\ndel mismo `Observation` —una corrección de la unidad impresa, un `performer` que faltaba— volvería a\nnotificar un hecho que ya se contó, y quien lo reciba no tiene forma de distinguirlo del primero.\n\n**Por qué `final` y no `preliminary`.** Una cifra recién salida del analizador puede cambiar. Publicar\nal exterior el momento de la medida sería invitar a que alguien actúe sobre un dato que todavía no\nfirma nadie; el hito 1 ya tomó esa decisión en la proyección y aquí se sostiene.",
+  "version": "0.1.0",
+  "name": "TopicoResultadoValidado",
+  "status": "draft",
+  "experimental": true,
+  "date": "2026-08-09",
+  "publisher": "Andrés Ojeda Rodríguez",
+  "purpose": "Que el HIS del hospital y los sistemas del peticionario se enteren de que hay resultado **sin\nsondear la API cada minuto**, y sin que el laboratorio tenga que saber quiénes son ni mantener una\nlista de destinatarios en su código.",
+  "resourceTrigger": [
+    {
+      "description": "Un `Observation` de este laboratorio pasa a `final`.",
+      "resource": "http://hl7.org/fhir/StructureDefinition/Observation",
+      "supportedInteraction": [
+        "create",
+        "update"
+      ],
+      "queryCriteria": {
+        "previous": "status:not=final",
+        "current": "status=final",
+        "requireBoth": true,
+        "resultForCreate": "test-passes",
+        "resultForDelete": "test-fails"
+      }
+    }
+  ],
+  "notificationShape": [
+    {
+      "resource": "http://hl7.org/fhir/StructureDefinition/Observation"
+    }
+  ]
+}

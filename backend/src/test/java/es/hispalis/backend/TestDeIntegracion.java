@@ -32,7 +32,14 @@ import org.springframework.test.context.DynamicPropertySource;
  */
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-        properties = {"hispalis.bus.habilitado=false", "hispalis.seguridad.habilitada=false"})
+        properties = {
+            "hispalis.bus.habilitado=false",
+            "hispalis.seguridad.habilitada=false",
+            // Y la ENTREGA de notificaciones, por la misma razón que el bus: un relay saliendo cada
+            // dos segundos en doscientos tests no prueba nada y ensucia el log. Lo que NO se apaga es
+            // anotar lo notificable — eso pasa siempre, y apagarlo cambiaría lo que se está probando.
+            "hispalis.notificaciones.habilitado=false"
+        })
 public abstract class TestDeIntegracion {
 
     private static final EmbeddedPostgres POSTGRES = arrancarPostgres();

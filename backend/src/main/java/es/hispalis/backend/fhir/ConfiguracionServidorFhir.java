@@ -24,6 +24,9 @@ import ca.uhn.fhir.rest.server.IResourceProvider;
 import ca.uhn.fhir.rest.server.RestfulServer;
 import ca.uhn.fhir.rest.server.provider.ResourceProviderFactory;
 import ca.uhn.fhir.rest.server.util.ISearchParamRegistry;
+import es.hispalis.backend.fhir.notificacion.AnotarLasNotificaciones;
+import es.hispalis.backend.fhir.notificacion.ProveedorDeSuscripcion;
+import es.hispalis.backend.fhir.notificacion.SuscripcionesQueElLaboratorioAcepta;
 import es.hispalis.backend.fhir.reconciliacion.ProveedorDeReconciliacion;
 import es.hispalis.backend.fhir.seguridad.DondeSeAutoriza;
 import jakarta.persistence.EntityManagerFactory;
@@ -189,10 +192,13 @@ public class ConfiguracionServidorFhir {
             DatabaseBackedPagingProvider paginacion,
             List<ProveedorPropio> proveedoresPropios,
             ProveedorDeReconciliacion proveedorDeReconciliacion,
+            ProveedorDeSuscripcion proveedorDeSuscripcion,
             TraduccionDeErroresDeDominio traduccionDeErrores,
             IInterceptorService interceptoresDeAlmacenamiento,
             EscrituraSoloPorElNucleo escrituraSoloPorElNucleo,
             SoloLosVerbosQueElNucleoGobierna soloLosVerbosQueElNucleoGobierna,
+            AnotarLasNotificaciones anotarLasNotificaciones,
+            SuscripcionesQueElLaboratorioAcepta suscripcionesAceptadas,
             DondeSeAutoriza dondeSeAutoriza) {
         RestfulServer servidor = new RestfulServer(contexto);
 
@@ -208,6 +214,11 @@ public class ConfiguracionServidorFhir {
         // porque los recorre todos. Va como proveedor suelto, que es como HAPI publica `[base]/$…`.
         servidor.registerProvider(proveedorDeReconciliacion);
 
+        // `$status` y `$events` de `Subscription`, que HAPI 8.10 no trae. Van como proveedor suelto y
+        // NO como `ProveedorPropio`: eso sustituiría al proveedor de HAPI para `Subscription` y le
+        // aplicaría las puertas de los recursos con agregado detrás, que este no tiene.
+        servidor.registerProvider(proveedorDeSuscripcion);
+
         // Sin esto, un invariante de negocio incumplido saldría como 500.
         servidor.registerInterceptor(traduccionDeErrores);
 
@@ -222,6 +233,13 @@ public class ConfiguracionServidorFhir {
         // `RestfulServer`. Registrarlo en el sitio equivocado no da ningún error — simplemente no se
         // llama nunca, que en un interceptor que cierra una puerta es la peor forma de fallar.
         interceptoresDeAlmacenamiento.registerInterceptor(escrituraSoloPorElNucleo);
+
+        // Los dos de las notificaciones van también en el registro del almacenamiento, y por la misma
+        // razón: se enganchan en puntos `STORAGE_*`. Anotar lo notificable tiene que ver TODA
+        // escritura de la proyección, incluidas las que hacen los casos de uso llamando a las DAO sin
+        // que haya una petición REST detrás.
+        interceptoresDeAlmacenamiento.registerInterceptor(suscripcionesAceptadas);
+        interceptoresDeAlmacenamiento.registerInterceptor(anotarLasNotificaciones);
         servidor.setServerConformanceProvider(new ConformidadHispaLis(
                 servidor, systemDao, ajustes, parametrosDeBusqueda, soporteDeValidacion, dondeSeAutoriza));
 
