@@ -192,6 +192,7 @@ public class ConfiguracionServidorFhir {
             TraduccionDeErroresDeDominio traduccionDeErrores,
             IInterceptorService interceptoresDeAlmacenamiento,
             EscrituraSoloPorElNucleo escrituraSoloPorElNucleo,
+            SoloLosVerbosQueElNucleoGobierna soloLosVerbosQueElNucleoGobierna,
             DondeSeAutoriza dondeSeAutoriza) {
         RestfulServer servidor = new RestfulServer(contexto);
 
@@ -209,6 +210,12 @@ public class ConfiguracionServidorFhir {
 
         // Sin esto, un invariante de negocio incumplido saldría como 500.
         servidor.registerInterceptor(traduccionDeErrores);
+
+        // Y este cierra los cinco verbos de escritura que los proveedores propios HEREDAN sin
+        // sustituir, más los dos que HAPI 8 añadió después. Va en el registro del `RestfulServer`
+        // —y no en el del almacenamiento, como el de las transacciones— porque el punto de enganche
+        // es `SERVER_INCOMING_REQUEST_PRE_HANDLED`, que lo dispara el propio servidor REST.
+        servidor.registerInterceptor(soloLosVerbosQueElNucleoGobierna);
 
         // Y este va en el servicio de interceptores del almacenamiento, no en el del servidor: los
         // puntos de enganche `STORAGE_*` los dispara la capa JPA, que no consulta el registro del
