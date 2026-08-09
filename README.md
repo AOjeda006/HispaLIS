@@ -189,7 +189,7 @@ curl -s http://localhost:8085/config/lab.resultados.v1-value | jq '.compatibilit
 # la terminología, por las cuatro operaciones estándar (nada propietario)
 BASE=http://localhost:8086/fhir
 IG=https://aojeda006.github.io/HispaLIS/fhir
-curl -s "$BASE/ValueSet/\$expand?url=$IG/ValueSet/pruebas-del-catalogo&count=0" | jq '.expansion.total'
+curl -s "$BASE/ValueSet/\$expand?url=$IG/ValueSet/pruebas-del-catalogo&count=1000" | jq '.expansion.contains | length'
 curl -s "$BASE/CodeSystem/\$lookup?system=$IG/CodeSystem/catalogo-pruebas&code=GLU" | jq
 curl -s "$BASE/ValueSet/\$validate-code?url=$IG/ValueSet/pruebas-del-catalogo&system=$IG/CodeSystem/catalogo-pruebas&code=NOEXISTE" | jq '.parameter[0]'
 curl -s "$BASE/ConceptMap/\$translate?url=$IG/ConceptMap/catalogo-a-loinc&system=$IG/CodeSystem/catalogo-pruebas&sourceCode=GLU&targetSystem=http://loinc.org" | jq

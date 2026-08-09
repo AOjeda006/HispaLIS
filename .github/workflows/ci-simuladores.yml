@@ -126,12 +126,20 @@ jobs:
       # necesita: el `display` de LOINC lo saca del `ConceptMap`, no de un `$lookup`. Que el
       # catálogo esté de verdad se comprueba **antes** de generar, porque un servidor arrancado y
       # vacío es la peor forma de estar disponible.
+      # ⚠️ `count=1000`, y NO `count=0`. La norma dice que `count=0` devuelve solo el total, sin
+      # códigos; HAPI lo lee como «máximo 0 códigos» y aborta con `HAPI-0831: produced too many
+      # codes (maximum 0)`. Y solo lo hace mientras el `ValueSet` está `NOT_EXPANDED` —recién
+      # cargado, que es siempre el caso aquí—, porque la pre-expansión toma otro camino. Contra un
+      # servidor con el volumen de una ejecución anterior la misma llamada funciona: `adr-0026`.
+      #
+      # Se pregunta EXACTAMENTE como lo va a preguntar el generador, para que un fallo de la llamada
+      # aparezca aquí y no tres pasos después disfrazado de catálogo vacío.
       - name: Comprobar que el catálogo está cargado
         run: |
           curl -sf --get "$HISPALIS_TERMINOLOGIA/ValueSet/\$expand" \
             --data-urlencode 'url=https://aojeda006.github.io/HispaLIS/fhir/ValueSet/pruebas-del-catalogo' \
-            --data-urlencode 'count=0' \
-            | python3 -c 'import json,sys; t=json.load(sys.stdin)["expansion"]["total"]; print(f"El catálogo oferta {t} pruebas."); sys.exit(0 if t else 1)'
+            --data-urlencode 'count=1000' \
+            | python3 -c 'import json,sys; n=len(json.load(sys.stdin)["expansion"].get("contains",[])); print(f"El catálogo oferta {n} pruebas."); sys.exit(0 if n else 1)'
 
       # Criterio de aceptación 11, la mitad que los tests no pueden afirmar por sí solos: que los
       # recursos generados sean CONFORMES a sus perfiles. Un test comprueba que el generador escribe

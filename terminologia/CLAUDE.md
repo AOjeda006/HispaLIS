@@ -61,6 +61,12 @@ mentir en un elemento que otros servidores usan para decidir si pueden expandir.
   Quien espera terminología espera al **cargador**, que además es la condición correcta.
 - **`$expand` necesita el índice de texto completo.** Sin Hibernate Search, contesta
   `HSEARCH800001: Hibernate Search was not initialized`; las otras tres operaciones funcionan igual.
+- **⚠️ `count=0` no significa lo que dice la norma, y falla de forma intermitente.** La norma define
+  `count=0` como «devuélveme solo el total, sin códigos»; HAPI lo interpreta como «máximo 0 códigos»
+  y aborta con `HAPI-0831: produced too many codes (maximum 0)`. Y **solo lo hace mientras el
+  `ValueSet` está `NOT_EXPANDED`**, porque la expansión en memoria es la que aplica el límite: contra
+  un servidor que ya tenía la pre-expansión hecha, la misma llamada devuelve el total tan tranquila.
+  Pasa siempre un `count` real. Detalle en `../docs/adr/adr-0026-…`.
 - **El dialecto tiene que ser el de HAPI** (`HapiFhirPostgres94Dialect`), o el arranque avisa de que
   «dialect is not a HAPI FHIR dialect» y sigue con medio servidor.
 - **`$lookup` de LOINC exige `version`** cuando hay un `CodeSystem` de LOINC cargado como fragmento:
@@ -82,5 +88,5 @@ ruff check . && ruff format --check .
 
 # Levantar el servidor y cargarlo (desde la raíz del repo)
 docker compose -f infra/compose/docker-compose.yml up -d terminologia terminologia-carga
-curl 'http://localhost:8086/fhir/ValueSet/$expand?url=https://aojeda006.github.io/HispaLIS/fhir/ValueSet/pruebas-del-catalogo&count=0'
+curl 'http://localhost:8086/fhir/ValueSet/$expand?url=https://aojeda006.github.io/HispaLIS/fhir/ValueSet/pruebas-del-catalogo&count=1000' | head -c 400
 ```
