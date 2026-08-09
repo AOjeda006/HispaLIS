@@ -9,9 +9,11 @@ import ca.uhn.fhir.rest.client.api.ServerValidationModeEnum;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import es.hispalis.backend.dominio.ReglaDeNegocioIncumplida;
+import es.hispalis.backend.dominio.resultado.NoSeSabeSiEsCritico;
 import es.hispalis.backend.fhir.CatalogoDePruebas;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.math.BigDecimal;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -20,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import org.hl7.fhir.r5.model.CodeableConcept;
+import org.hl7.fhir.r5.model.DecimalType;
 import org.hl7.fhir.r5.model.Parameters;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -159,6 +162,46 @@ class TerminologiaDelServidorTest {
     }
 
     @Test
+    @DisplayName("con el servidor caído NO se contesta «no es crítico»: se dice que no se sabe")
+    void conElServidorCaidoNoSeContestaQueNoEsCritico() {
+        servidor.stop(0);
+
+        // Es la única pregunta de este cliente que no degrada, y el motivo está en la respuesta
+        // contraria: «no es crítico» no es una versión pobre de «no lo sé», es lo opuesto, y se paga
+        // con una llamada de teléfono que no se hace.
+        assertThatThrownBy(() -> terminologia.esCritico("K", new BigDecimal("7.5"), "mmol/L"))
+                .isInstanceOf(NoSeSabeSiEsCritico.class)
+                .hasMessageContaining("K");
+    }
+
+    @Test
+    @DisplayName("un límite publicado sin procedencia no se usa: se para y se dice cuál está mal")
+    void unLimiteSinProcedenciaNoSeUsa() {
+        oido.contesta(
+                "$lookup",
+                conPropiedades(
+                        propiedad(
+                                "unidad-ucum",
+                                new org.hl7.fhir.r5.model.Coding("http://unitsofmeasure.org", "mmol/L", null)),
+                        propiedad("limite-critico-alto", new DecimalType("6.3"))));
+
+        assertThatThrownBy(() -> terminologia.umbralDe("K"))
+                .isInstanceOf(NoSeSabeSiEsCritico.class)
+                .hasMessageContaining("K")
+                .hasMessageContaining("de dónde sale");
+    }
+
+    @Test
+    @DisplayName("una prueba sin ningún límite publicado no tiene umbral, y eso sí es una respuesta")
+    void laPruebaSinLimitesNoTieneUmbral() {
+        oido.contesta("$lookup", conParametro("display", "Glucosa"));
+
+        assertThat(terminologia.umbralDe("GLU")).isEmpty();
+        assertThat(terminologia.esCritico("GLU", new BigDecimal("600"), "mg/dL"))
+                .isFalse();
+    }
+
+    @Test
     @DisplayName("lo que no se resolvió no se cachea: la respuesta buena posterior tiene que llegar")
     void loNoResueltoNoSeCachea() {
         oido.contesta("$lookup", conParametro("display", ""));
@@ -181,6 +224,28 @@ class TerminologiaDelServidorTest {
     private static Parameters conParametro(String nombre, String valor) {
         Parameters salida = new Parameters();
         salida.addParameter(nombre, new org.hl7.fhir.r5.model.StringType(valor));
+        return salida;
+    }
+
+    /**
+     * Una propiedad de concepto con la forma con la que llega de verdad: un parámetro
+     * {@code property} con las partes {@code code} y {@code value}, no un parámetro con el nombre de
+     * la propiedad. Es la confusión que haría que el cliente leyera vacío sin dar ningún error.
+     */
+    private static Parameters.ParametersParameterComponent propiedad(
+            String codigo, org.hl7.fhir.r5.model.DataType valor) {
+        Parameters.ParametersParameterComponent propiedad = new Parameters.ParametersParameterComponent();
+        propiedad.setName("property");
+        propiedad.addPart().setName("code").setValue(new org.hl7.fhir.r5.model.CodeType(codigo));
+        propiedad.addPart().setName("value").setValue(valor);
+        return propiedad;
+    }
+
+    private static Parameters conPropiedades(Parameters.ParametersParameterComponent... propiedades) {
+        Parameters salida = new Parameters();
+        for (Parameters.ParametersParameterComponent propiedad : propiedades) {
+            salida.addParameter(propiedad);
+        }
         return salida;
     }
 

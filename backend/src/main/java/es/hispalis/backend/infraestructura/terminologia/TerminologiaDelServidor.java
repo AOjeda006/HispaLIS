@@ -1,9 +1,13 @@
 package es.hispalis.backend.infraestructura.terminologia;
 
 import ca.uhn.fhir.rest.client.api.IGenericClient;
+import es.hispalis.backend.dominio.DatoInvalido;
 import es.hispalis.backend.dominio.ReglaDeNegocioIncumplida;
+import es.hispalis.backend.dominio.resultado.NoSeSabeSiEsCritico;
+import es.hispalis.backend.dominio.resultado.UmbralCritico;
 import es.hispalis.backend.fhir.CatalogoDePruebas;
 import es.hispalis.backend.fhir.terminologia.Terminologia;
+import java.math.BigDecimal;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -67,6 +71,10 @@ public class TerminologiaDelServidor implements Terminologia {
     private final Map<String, CodeableConcept> resueltos = new ConcurrentHashMap<>();
 
     private final Map<String, Boolean> validados = new ConcurrentHashMap<>();
+
+    /** Los umbrales ya resueltos, incluido «esta prueba no tiene», que también es una respuesta. */
+    private final Map<String, Optional<UmbralCritico>> umbrales = new ConcurrentHashMap<>();
+
     private final AtomicBoolean avisadoDeQueNoEsta = new AtomicBoolean();
 
     public TerminologiaDelServidor(IGenericClient cliente) {
@@ -77,6 +85,39 @@ public class TerminologiaDelServidor implements Terminologia {
     public CodeableConcept pruebaDelCatalogo(String codigoLocal) {
         CodeableConcept resuelto = resueltos.get(codigoLocal);
         return resuelto != null ? resuelto.copy() : resolver(codigoLocal).copy();
+    }
+
+    /**
+     * {@code $lookup} otra vez, y aquí sí importa que la respuesta llegue.
+     *
+     * <p>Es la misma operación y el mismo concepto que {@link #pruebaDelCatalogo}, pero se leen otras
+     * propiedades y <strong>la política de caída es la contraria</strong>: allí un servidor que no
+     * contesta da un código sin nombre; aquí lanza. Que las dos cosas convivan en una clase cuyo
+     * javadoc empieza diciendo «si el servidor no está, el laboratorio sigue» es deliberado — la regla
+     * general tiene exactamente una excepción y conviene verla al lado de la regla.
+     *
+     * <p>Se cachea lo mismo que allí y por lo mismo: lo que el servidor llegó a contestar, incluida la
+     * ausencia de umbral, que es una respuesta. Una llamada que no llegó no se cachea nunca.
+     */
+    @Override
+    public Optional<UmbralCritico> umbralDe(String codigoDePrueba) {
+        Optional<UmbralCritico> sabido = umbrales.get(codigoDePrueba);
+        if (sabido != null) {
+            return sabido;
+        }
+        Parameters entrada = new Parameters();
+        entrada.addParameter("system", new UriType(CatalogoDePruebas.SYSTEM));
+        entrada.addParameter("code", new CodeType(codigoDePrueba));
+
+        Parameters salida = invocar(CodeSystem.class, "$lookup", entrada)
+                .orElseThrow(() -> new NoSeSabeSiEsCritico(
+                        "El servidor de terminología no ha contestado por «%s», así que no se sabe si tiene umbral "
+                                        .formatted(codigoDePrueba)
+                                + "crítico. Preguntar y no obtener respuesta no es lo mismo que no tener umbral."));
+
+        Optional<UmbralCritico> umbral = umbralEn(salida, codigoDePrueba);
+        umbrales.put(codigoDePrueba, umbral);
+        return umbral;
     }
 
     @Override
@@ -207,6 +248,87 @@ public class TerminologiaDelServidor implements Terminologia {
             }
         }
         return Optional.empty();
+    }
+
+    /**
+     * Arma el umbral con lo que el concepto declara, o dice que no hay.
+     *
+     * <p>Sin ningún límite no hay umbral y se contesta vacío. Con límite pero sin unidad o sin
+     * procedencia hay <strong>un defecto del catálogo</strong>, y eso no se contesta vacío: un umbral
+     * a medias no se puede usar y quedarse callado lo convertiría en «esta prueba no tiene crítico»,
+     * que es la mentira exacta que hay que evitar. Se lanza nombrando la prueba, para que quien lo
+     * lea sepa qué concepto de la guía hay que arreglar.
+     */
+    private static Optional<UmbralCritico> umbralEn(Parameters salida, String codigoDePrueba) {
+        BigDecimal bajo = decimalDe(salida, "limite-critico-bajo");
+        BigDecimal alto = decimalDe(salida, "limite-critico-alto");
+        if (bajo == null && alto == null) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(new UmbralCritico(
+                    codigoDePrueba,
+                    bajo,
+                    alto,
+                    unidadDe(salida),
+                    propiedad(salida, "procedencia-del-valor-critico")
+                            .map(org.hl7.fhir.r5.model.DataType::primitiveValue)
+                            .orElse(null)));
+        } catch (DatoInvalido incompleto) {
+            throw new NoSeSabeSiEsCritico("El catálogo publica un límite crítico para «%s» que no se puede usar: %s"
+                    .formatted(codigoDePrueba, incompleto.getMessage()));
+        }
+    }
+
+    /**
+     * El valor de una propiedad del concepto, tal y como lo devuelve {@code $lookup}.
+     *
+     * <p>Cada propiedad llega como un parámetro {@code property} con dos partes, {@code code} y
+     * {@code value}; no como un parámetro con el nombre de la propiedad. Buscar por nombre no
+     * encuentra nada y no da error — devuelve vacío, que aquí significaría «no tiene umbral».
+     */
+    private static Optional<org.hl7.fhir.r5.model.DataType> propiedad(Parameters salida, String codigo) {
+        return salida.getParameter().stream()
+                .filter(parametro -> "property".equals(parametro.getName()))
+                .filter(parametro -> parametro.getPart().stream()
+                        .anyMatch(parte -> "code".equals(parte.getName())
+                                && parte.getValue() != null
+                                && codigo.equals(parte.getValue().primitiveValue())))
+                .flatMap(parametro -> parametro.getPart().stream())
+                .filter(parte -> "value".equals(parte.getName()) && parte.getValue() != null)
+                .map(Parameters.ParametersParameterComponent::getValue)
+                .findFirst();
+    }
+
+    /**
+     * Un límite, leído de su forma textual y no del tipo con el que venga envuelto.
+     *
+     * <p>El tipo declarado es {@code decimal} y HAPI lo devuelve como tal, pero leerlo por
+     * {@code primitiveValue()} hace que un servidor que lo mande como cadena siga funcionando — y un
+     * umbral es justo donde no interesa que el sistema se rompa por un envoltorio. Lo que sí se
+     * rechaza es una cifra que no es una cifra: eso no se aproxima.
+     */
+    private static BigDecimal decimalDe(Parameters salida, String codigo) {
+        return propiedad(salida, codigo)
+                .map(org.hl7.fhir.r5.model.DataType::primitiveValue)
+                .filter(valor -> valor != null && !valor.isBlank())
+                .map(valor -> {
+                    try {
+                        return new BigDecimal(valor);
+                    } catch (NumberFormatException noEsUnaCifra) {
+                        throw new NoSeSabeSiEsCritico(
+                                "El catálogo declara «%s» como límite crítico y eso no es una cifra.".formatted(valor));
+                    }
+                })
+                .orElse(null);
+    }
+
+    /** La unidad del concepto, que llega como {@code Coding} y no como cadena. */
+    private static String unidadDe(Parameters salida) {
+        return propiedad(salida, "unidad-ucum")
+                .filter(Coding.class::isInstance)
+                .map(valor -> ((Coding) valor).getCode())
+                .orElse(null);
     }
 
     private static Optional<String> texto(Parameters salida, String nombre) {

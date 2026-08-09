@@ -1,5 +1,6 @@
 package es.hispalis.backend.fhir.terminologia;
 
+import es.hispalis.backend.dominio.resultado.ValoresCriticos;
 import org.hl7.fhir.r5.model.CodeableConcept;
 
 /**
@@ -14,8 +15,15 @@ import org.hl7.fhir.r5.model.CodeableConcept;
  * <p>Deliberadamente <strong>no</strong> hay un método que devuelva «el catálogo entero». Con uno,
  * lo primero que haría alguien es guardárselo en un {@code Map<String,String>} al arrancar, que es
  * exactamente la lista paralela que prohíbe el invariante 4. Se pregunta por un código a la vez.
+ *
+ * <p><strong>Extiende {@link ValoresCriticos}, que es un puerto del dominio, y la dirección importa:
+ * el borde depende del núcleo y no al revés.</strong> Los umbrales críticos los publica la misma
+ * autoridad que los nombres de las pruebas —son propiedades del mismo concepto del catálogo—, así que
+ * los contesta el mismo cliente. Pero al dominio se le da solo la pregunta estrecha: lo que la regla
+ * de la doble validación necesita saber es si una cifra obliga a avisar, no qué es un
+ * {@code CodeableConcept}.
  */
-public interface Terminologia {
+public interface Terminologia extends ValoresCriticos {
 
     /**
      * El concepto codificado con el que se publica una prueba del catálogo.

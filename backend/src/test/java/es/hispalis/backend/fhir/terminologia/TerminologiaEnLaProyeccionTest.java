@@ -1,24 +1,31 @@
 package es.hispalis.backend.fhir.terminologia;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import ca.uhn.fhir.context.FhirContext;
 import ca.uhn.fhir.rest.client.api.ServerValidationModeEnum;
 import es.hispalis.backend.TestDeIntegracion;
+import es.hispalis.backend.dominio.resultado.NoSeSabeSiEsCritico;
+import es.hispalis.backend.dominio.resultado.UmbralCritico;
 import es.hispalis.backend.fhir.CatalogoDePruebas;
 import es.hispalis.backend.fhir.CircuitoDePrueba;
 import es.hispalis.backend.infraestructura.terminologia.TerminologiaDelServidor;
+import java.math.BigDecimal;
+import java.util.Optional;
 import java.util.function.Supplier;
 import org.hl7.fhir.r5.model.CodeSystem;
 import org.hl7.fhir.r5.model.CodeableConcept;
 import org.hl7.fhir.r5.model.CodeableReference;
 import org.hl7.fhir.r5.model.Coding;
 import org.hl7.fhir.r5.model.ConceptMap;
+import org.hl7.fhir.r5.model.DecimalType;
 import org.hl7.fhir.r5.model.Enumerations;
 import org.hl7.fhir.r5.model.Enumerations.ConceptMapRelationship;
 import org.hl7.fhir.r5.model.Enumerations.PublicationStatus;
 import org.hl7.fhir.r5.model.Observation;
 import org.hl7.fhir.r5.model.ServiceRequest;
+import org.hl7.fhir.r5.model.StringType;
 import org.hl7.fhir.r5.model.ValueSet;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -44,9 +51,10 @@ import org.springframework.http.ResponseEntity;
  * es que <em>la proyección lleva el nombre en español y el LOINC</em>, y que una prueba que el
  * catálogo no contiene no entra.
  *
- * <p>El catálogo que se sube es un <strong>recorte</strong> de dos pruebas con la forma exacta del que
- * publica la guía —incluido un mapeo que <em>no</em> es equivalente—. No es una lista paralela: nada
- * del código de aplicación la conoce, y en el {@code compose} lo que se carga es la guía entera.
+ * <p>El catálogo que se sube es un <strong>recorte</strong> de tres pruebas con la forma exacta del
+ * que publica la guía —incluido un mapeo que <em>no</em> es equivalente y los límites críticos del
+ * potasio con su procedencia—. No es una lista paralela: nada del código de aplicación la conoce, y
+ * en el {@code compose} lo que se carga es la guía entera.
  */
 @Import(TerminologiaEnLaProyeccionTest.ContraElHapiDeEsteProceso.class)
 class TerminologiaEnLaProyeccionTest extends TestDeIntegracion {
@@ -54,12 +62,16 @@ class TerminologiaEnLaProyeccionTest extends TestDeIntegracion {
     private static final String CONJUNTO = "https://aojeda006.github.io/HispaLIS/fhir/ValueSet/pruebas-del-catalogo";
     private static final String MAPA = "https://aojeda006.github.io/HispaLIS/fhir/ConceptMap/catalogo-a-loinc";
     private static final String LOINC = "http://loinc.org";
+    private static final String UCUM = "http://unitsofmeasure.org";
 
     @Autowired
     private TestRestTemplate rest;
 
     @Autowired
     private FhirContext contexto;
+
+    @Autowired
+    private Terminologia terminologia;
 
     private CircuitoDePrueba circuito;
 
@@ -139,6 +151,50 @@ class TerminologiaEnLaProyeccionTest extends TestDeIntegracion {
         assertThat(prueba.getCoding().get(0).getSystem()).isEqualTo(CatalogoDePruebas.SYSTEM);
     }
 
+    @Test
+    @DisplayName("un potasio de 6,2 NO es crítico y uno de 7,5 sí")
+    void elCriterioDelPotasio() {
+        // El de 6,2 está fuera de rango y no obliga a nada: es el caso que separa «anormal» de
+        // «urgente», y el que se equivoca cualquier implementación que confunda las dos cosas.
+        assertThat(terminologia.esCritico("K", new BigDecimal("6.2"), "mmol/L")).isFalse();
+        assertThat(terminologia.esCritico("K", new BigDecimal("7.5"), "mmol/L")).isTrue();
+        // Y por lo bajo, que es la mitad que se olvida: una hipopotasemia grave también se avisa.
+        assertThat(terminologia.esCritico("K", new BigDecimal("2.5"), "mmol/L")).isTrue();
+        assertThat(terminologia.esCritico("K", new BigDecimal("4.1"), "mmol/L")).isFalse();
+        // El límite exacto avisa. Un catálogo que dice «a partir de 6,3» no dice «a partir de 6,31».
+        assertThat(terminologia.esCritico("K", new BigDecimal("6.3"), "mmol/L")).isTrue();
+    }
+
+    @Test
+    @DisplayName("el umbral llega del servidor con su procedencia dentro, no de una lista de aquí")
+    void elUmbralLlegaConSuProcedencia() {
+        Optional<UmbralCritico> umbral = terminologia.umbralDe("K");
+
+        assertThat(umbral).isPresent();
+        assertThat(umbral.get().limiteBajo()).contains(new BigDecimal("2.8"));
+        assertThat(umbral.get().limiteAlto()).contains(new BigDecimal("6.3"));
+        assertThat(umbral.get().unidadUcum()).isEqualTo("mmol/L");
+        // Lo que hace auditable la cifra: viaja con ella, en el mismo recurso que la publica.
+        assertThat(umbral.get().procedencia()).contains("SEQC 2010").contains("Rev Lab Clin. 2010;3(4):177-182");
+    }
+
+    @Test
+    @DisplayName("una prueba sin umbral publicado no tiene umbral; no es lo mismo que no saberlo")
+    void laPruebaSinUmbralNoTieneUmbral() {
+        assertThat(terminologia.umbralDe("GLU")).isEmpty();
+        assertThat(terminologia.esCritico("GLU", new BigDecimal("600"), "mg/dL"))
+                .isFalse();
+    }
+
+    @Test
+    @DisplayName("un potasio en otra unidad no se declara «no crítico»: se rechaza la comparación")
+    void enOtraUnidadNoSeCompara() {
+        assertThatThrownBy(() -> terminologia.esCritico("K", new BigDecimal("7.5"), "mg/dL"))
+                .isInstanceOf(NoSeSabeSiEsCritico.class)
+                .hasMessageContaining("mmol/L")
+                .hasMessageContaining("mg/dL");
+    }
+
     private void subir(String referencia, org.hl7.fhir.r5.model.Resource recurso) {
         ResponseEntity<String> respuesta =
                 rest.exchange("/fhir/" + referencia, HttpMethod.PUT, circuito.peticionCon(recurso), String.class);
@@ -155,8 +211,26 @@ class TerminologiaEnLaProyeccionTest extends TestDeIntegracion {
         catalogo.setContent(Enumerations.CodeSystemContentMode.COMPLETE);
         catalogo.setCaseSensitive(true);
         catalogo.setValueSet(CONJUNTO);
+        catalogo.addProperty().setCode("unidad-ucum").setType(CodeSystem.PropertyType.CODING);
+        catalogo.addProperty().setCode("limite-critico-bajo").setType(CodeSystem.PropertyType.DECIMAL);
+        catalogo.addProperty().setCode("limite-critico-alto").setType(CodeSystem.PropertyType.DECIMAL);
+        catalogo.addProperty().setCode("procedencia-del-valor-critico").setType(CodeSystem.PropertyType.STRING);
         catalogo.addConcept().setCode("GLU").setDisplay("Glucosa");
         catalogo.addConcept().setCode("HTO").setDisplay("Hematocrito");
+
+        // El potasio, con la forma exacta que tiene en la guía: la unidad, los dos límites y la
+        // procedencia. Las cifras son las publicadas — SEQC 2010, tabla 6, consulta externa—, y aquí
+        // están porque el test que importa es que 6,2 no dispare y 7,5 sí.
+        CodeSystem.ConceptDefinitionComponent potasio =
+                catalogo.addConcept().setCode("K").setDisplay("Potasio");
+        potasio.addProperty().setCode("unidad-ucum").setValue(new Coding(UCUM, "mmol/L", null));
+        potasio.addProperty().setCode("limite-critico-bajo").setValue(new DecimalType("2.8"));
+        potasio.addProperty().setCode("limite-critico-alto").setValue(new DecimalType("6.3"));
+        potasio.addProperty()
+                .setCode("procedencia-del-valor-critico")
+                .setValue(
+                        new StringType(
+                                "SEQC 2010, tabla 6: mediana declarada para consulta externa (Rev Lab Clin. 2010;3(4):177-182)."));
         return catalogo;
     }
 
@@ -247,6 +321,11 @@ class TerminologiaEnLaProyeccionTest extends TestDeIntegracion {
         @Override
         public void exigirQueLaPruebaExiste(String codigoLocal) {
             construir().exigirQueLaPruebaExiste(codigoLocal);
+        }
+
+        @Override
+        public Optional<UmbralCritico> umbralDe(String codigoDePrueba) {
+            return construir().umbralDe(codigoDePrueba);
         }
 
         private TerminologiaDelServidor construir() {
