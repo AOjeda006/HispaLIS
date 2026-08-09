@@ -12,6 +12,7 @@ import es.hispalis.backend.fhir.seguridad.AmbitoSmart.Permiso;
 import java.util.List;
 import java.util.Optional;
 import org.hl7.fhir.r5.model.Observation;
+import org.hl7.fhir.r5.model.Provenance;
 
 /**
  * Lo que los <em>scopes</em> del testigo permiten hacer: verbos por tipo de recurso.
@@ -86,12 +87,35 @@ public class AutorizacionSmart extends AuthorizationInterceptor {
         // `$validar` cambia el estado de un resultado, así que se autoriza con el permiso de
         // actualizar sobre `Observation`. SMART no tiene scopes de operación: una operación se
         // autoriza por lo que le hace a los recursos, y lo que esta hace es firmar uno.
+        //
+        // ⚠️ **Autorizar la operación no autoriza lo que la operación escribe.** `$validar` firma el
+        // resultado y escribe **también un `Provenance`** —la constancia de quién firmó— en la misma
+        // transacción, y el interceptor comprueba cada recurso que se almacena, en
+        // `STORAGE_PRESTORAGE_RESOURCE_CREATED`. Sin la segunda regla, un testigo con
+        // `user/Observation.u` pasaba la autorización de la operación y se llevaba un `403` al
+        // escribir la procedencia, con un mensaje que no dice qué recurso lo provocó.
+        // `andAllowAllResponsesWithAllResourcesAccess()` **tampoco basta**: eso abre la respuesta,
+        // no la escritura. Medido contra HAPI 8.10.1.
+        //
+        // **La operación llevaba desde el ítem 18 sin poder ejecutarse con la seguridad puesta** y
+        // no lo veía nadie: los tests de integración la apagan y ningún cliente llama todavía a
+        // `$validar` —la web no tiene pantalla de validación—. Apareció al recorrer el circuito v2
+        // contra el `compose`.
+        //
+        // Conceder la creación de `Provenance` no abre ninguna puerta: lo que se escribe es efecto
+        // de un acto ya autorizado, y desde fuera no se puede escribir uno —`ProveedorDeProcedencia`
+        // rechaza `POST` y `PUT`, el interceptor de transacciones lo protege y los verbos heredados
+        // están cerrados—. Hay un test que lo comprueba con este mismo testigo.
         if (ambito.permisos().contains(Permiso.ACTUALIZAR) && ambito.alcanza("Observation", Permiso.ACTUALIZAR)) {
             reglas.allow(nombre + " validar")
                     .operation()
                     .named("$validar")
                     .onInstancesOfType(Observation.class)
                     .andAllowAllResponses();
+            reglas.allow(nombre + " procedencia de la validación")
+                    .create()
+                    .resourcesOfType(Provenance.class)
+                    .withAnyId();
         }
 
         // `$reconciliar` BORRA recursos publicados de cualquier tipo, así que exige exactamente eso:

@@ -6,6 +6,7 @@ import ca.uhn.fhir.context.FhirContext;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import es.hispalis.backend.TestDeIntegracion;
+import es.hispalis.backend.fhir.CircuitoDePrueba;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.hl7.fhir.r5.model.Bundle;
@@ -14,6 +15,7 @@ import org.hl7.fhir.r5.model.Enumerations;
 import org.hl7.fhir.r5.model.HumanName;
 import org.hl7.fhir.r5.model.OperationOutcome;
 import org.hl7.fhir.r5.model.Patient;
+import org.hl7.fhir.r5.model.Practitioner;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -71,6 +73,8 @@ class SeguridadSmartTest extends TestDeIntegracion {
     private static final AtomicInteger SIGUIENTE_NHC = new AtomicInteger(35_000_000);
 
     /** Lo que lleva un profesional en su testigo: leer todo y dar de alta lo que el alta necesita. */
+    private static final String FACULTATIVA = "Practitioner/dra-alvarez";
+
     private static final String SCOPES_DEL_FACULTATIVO =
             "openid fhirUser launch user/*.rs user/Patient.c user/Practitioner.c user/ServiceRequest.c";
 
@@ -298,6 +302,107 @@ class SeguridadSmartTest extends TestDeIntegracion {
                 IDENTIDAD.testigo("dra.alvarez", SCOPES_DEL_FACULTATIVO, null, "Practitioner/dra-alvarez");
         pacienteA = idDe(crear(pacienteDePrueba(nuevoNhc()), delFacultativo));
         pacienteB = idDe(crear(pacienteDePrueba(nuevoNhc()), delFacultativo));
+    }
+
+    /**
+     * Validar un resultado exige un <em>scope</em>, y el que hace falta no es solo el evidente.
+     *
+     * <p>{@code $validar} firma un {@code Observation} <strong>y escribe un {@code Provenance}</strong>
+     * en la misma transacción. Con la seguridad encendida eso lo comprueba el interceptor de
+     * autorización en {@code STORAGE_PRESTORAGE_RESOURCE_CREATED}, así que un testigo con permiso
+     * sobre {@code Observation} y sin permiso sobre {@code Provenance} se lleva un {@code 403} —
+     * pese a que la operación estaba autorizada— y el mensaje no dice qué recurso lo provocó.
+     *
+     * <p>Se descubrió recorriendo el circuito v2 contra el `compose` con seguridad. No lo veía
+     * ningún test porque {@code TestDeIntegracion} apaga la seguridad, y ningún cliente lo veía
+     * porque **ninguno llama todavía a {@code $validar}**: la web no tiene pantalla de validación.
+     * La operación llevaba desde el ítem 18 sin poder ejecutarse con la seguridad puesta.
+     */
+    @Test
+    void validar_un_resultado_exige_el_scope_y_escribe_tambien_la_procedencia() {
+        String delMotor = IDENTIDAD.testigo(
+                "hispalis-motor",
+                "system/Patient.crus system/ServiceRequest.cs system/Specimen.cs system/Observation.crs",
+                null,
+                null);
+        CircuitoDePrueba circuito = new CircuitoDePrueba(rest, contexto, delMotor);
+
+        // Quien pide y quien firma tiene que existir, y darlo de alta con un id elegido es un `PUT`:
+        // de ahí `user/Practitioner.u`. Es el mismo camino que `infra/fhir/sembrar-facultativos.sh`,
+        // y la misma razón por la que el `OML^O21` no entraba contra la pila con seguridad.
+        sembrarALaFacultativa();
+
+        String paciente = circuito.crear(CircuitoDePrueba.paciente(CircuitoDePrueba.siguienteNhc()));
+        String muestra = circuito.crear(CircuitoDePrueba.muestra(paciente));
+        String linea = circuito.crear(CircuitoDePrueba.linea(paciente, FACULTATIVA));
+        String resultado = circuito.crear(CircuitoDePrueba.resultado(paciente, muestra, linea, FACULTATIVA));
+
+        // Sin `user/Observation.u` no se valida, que es lo correcto.
+        assertThat(validar(resultado, IDENTIDAD.testigo("dra.alvarez", SCOPES_DEL_FACULTATIVO, null, FACULTATIVA))
+                        .getStatusCode())
+                .isEqualTo(HttpStatus.FORBIDDEN);
+
+        // Y con él sí, aunque la operación escriba por debajo un recurso de otro tipo.
+        ResponseEntity<String> firmado = validar(
+                resultado,
+                IDENTIDAD.testigo("dra.alvarez", SCOPES_DEL_FACULTATIVO + " user/Observation.u", null, FACULTATIVA));
+
+        assertThat(firmado.getStatusCode())
+                .as("con permiso de actualizar Observation, `$validar` tiene que pasar: %s", firmado.getBody())
+                .isEqualTo(HttpStatus.OK);
+        assertThat(firmado.getBody()).contains("\"status\":\"final\"");
+
+        // Y la concesión no abre ninguna puerta: con el MISMO testigo, escribir una procedencia a
+        // mano sigue estando prohibido. Si esto dejara de ser cierto, un cliente podría certificar
+        // una validación que no ha ocurrido.
+        HttpHeaders aMano = conTestigo(
+                IDENTIDAD.testigo("dra.alvarez", SCOPES_DEL_FACULTATIVO + " user/Observation.u", null, FACULTATIVA));
+        aMano.setContentType(MediaType.valueOf("application/fhir+json"));
+        ResponseEntity<String> inventada = rest.exchange(
+                "/fhir/Provenance",
+                HttpMethod.POST,
+                new HttpEntity<>(
+                        """
+                        {"resourceType":"Provenance","target":[{"reference":"%s"}],                        "recorded":"2026-08-09T10:00:00+02:00",                        "agent":[{"who":{"reference":"%s"}}]}"""
+                                .formatted(resultado, FACULTATIVA),
+                        aMano),
+                String.class);
+
+        assertThat(inventada.getStatusCode())
+                .as("una procedencia escrita por el cliente certificaría algo que aquí no ha pasado")
+                .isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+    }
+
+    /** Da de alta a `dra-alvarez` con un `PUT` de id elegido, que es lo que exige `.u`. */
+    private void sembrarALaFacultativa() {
+        Practitioner quien = new Practitioner();
+        quien.setId("dra-alvarez");
+        quien.addName(new HumanName().setFamily("Álvarez Peña").addGiven("Marta"));
+
+        HttpHeaders cabeceras = conTestigo(
+                IDENTIDAD.testigo("dra.alvarez", SCOPES_DEL_FACULTATIVO + " user/Practitioner.u", null, FACULTATIVA));
+        cabeceras.setContentType(MediaType.valueOf("application/fhir+json"));
+        ResponseEntity<String> alta = rest.exchange(
+                "/fhir/" + FACULTATIVA,
+                HttpMethod.PUT,
+                new HttpEntity<>(contexto.newJsonParser().encodeResourceToString(quien), cabeceras),
+                String.class);
+
+        assertThat(alta.getStatusCode())
+                .as("sin `user/Practitioner.u` el directorio no se puede sembrar: %s", alta.getBody())
+                .isIn(HttpStatus.OK, HttpStatus.CREATED);
+    }
+
+    private ResponseEntity<String> validar(String resultado, String testigo) {
+        HttpHeaders cabeceras = conTestigo(testigo);
+        cabeceras.setContentType(MediaType.valueOf("application/fhir+json"));
+        String cuerpo =
+                """
+                {"resourceType":"Parameters","parameter":[                {"name":"facultativo","valueReference":{"reference":"%s"}}]}"""
+                        .formatted(FACULTATIVA);
+
+        return rest.exchange(
+                "/fhir/" + resultado + "/$validar", HttpMethod.POST, new HttpEntity<>(cuerpo, cabeceras), String.class);
     }
 
     private ResponseEntity<String> crear(Patient paciente, String testigo) {

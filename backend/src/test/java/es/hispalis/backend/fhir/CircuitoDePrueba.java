@@ -67,10 +67,24 @@ public final class CircuitoDePrueba {
 
     private final TestRestTemplate rest;
     private final FhirContext contexto;
+    private final String testigo;
 
     public CircuitoDePrueba(TestRestTemplate rest, FhirContext contexto) {
+        this(rest, contexto, null);
+    }
+
+    /**
+     * El mismo circuito, pero firmando cada petición con un testigo.
+     *
+     * <p>Casi todos los tests corren con la seguridad apagada y no lo necesitan. Lo necesita el que
+     * la enciende, y ese es el único que puede comprobar lo que solo falla con ella puesta.
+     *
+     * @param testigo el testigo de acceso, o {@code null} para no mandar ninguno
+     */
+    public CircuitoDePrueba(TestRestTemplate rest, FhirContext contexto, String testigo) {
         this.rest = rest;
         this.contexto = contexto;
+        this.testigo = testigo;
     }
 
     public static String siguienteNhc() {
@@ -117,6 +131,9 @@ public final class CircuitoDePrueba {
     public HttpEntity<String> peticionCon(IBaseResource recurso) {
         HttpHeaders cabeceras = new HttpHeaders();
         cabeceras.setContentType(MediaType.valueOf("application/fhir+json"));
+        if (testigo != null) {
+            cabeceras.setBearerAuth(testigo);
+        }
         return new HttpEntity<>(contexto.newJsonParser().encodeResourceToString(recurso), cabeceras);
     }
 
