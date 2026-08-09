@@ -21,11 +21,15 @@ nada más**; quien la reciba va a buscarlo a la API con su testigo, y allí se l
 consentimiento del paciente como a cualquier otra lectura.
 """
 * status = #active
-* name = "HIS del Hospital Virgen del Rocío"
+* name = "HIS del hospital de referencia"
 * topic = "https://aojeda006.github.io/HispaLIS/fhir/SubscriptionTopic/resultado-validado"
 * reason = "El HIS incorpora a la historia del paciente los resultados que el laboratorio da por definitivos."
 * channelType = http://terminology.hl7.org/CodeSystem/subscription-channel-type#rest-hook
-* endpoint = "https://his.example.org/hispalis/notificaciones"
+// ⚠️ El validador oficial RECHAZA una URL de ejemplo aquí —«No se permiten URLs de ejemplo en este
+// contexto»—, así que no vale `https://his.example.org/…` por mucho que sea lo que uno escribiría en
+// un ejemplo. Se usa la del receptor simulado del `compose`, que además es la que funciona si copias
+// esta suscripción y la mandas contra la pila levantada.
+* endpoint = "http://receptor:8090/notificaciones"
 * contentType = #application/fhir+json
 * content = #id-only
 // Cuántos recursos como mucho caben en una notificación. Sin tope, un reproceso de mil resultados
@@ -63,7 +67,10 @@ que se entregaron. Es lo que permite al receptor saber **cuántos se ha perdido*
 * eventsSinceSubscriptionStart = 12
 * subscription = Reference(suscripcion-del-his)
 * topic = "https://aojeda006.github.io/HispaLIS/fhir/SubscriptionTopic/resultado-validado"
-* error[0] = http://terminology.hl7.org/CodeSystem/subscription-error#no-response "No response from endpoint"
+// El `display` es el CANÓNICO de THO, ni una palabra más: el validador compara la cadena entera y
+// «No response from endpoint» —que describe mejor lo que pasó— es un error, no un matiz. Lo que se
+// quiera contar va en `text`, que para eso está.
+* error[0] = http://terminology.hl7.org/CodeSystem/subscription-error#no-response "No response"
 * error[0].text = "Cuatro intentos sin respuesta del receptor (Connection refused). La suscripción queda en `error` y deja de intentarse hasta que alguien la reactive."
 
 
