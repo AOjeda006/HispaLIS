@@ -434,9 +434,15 @@ services:
       context: ../..
       dockerfile: simuladores/Dockerfile
     environment:
-      # Sin clave el receptor no arranca: aceptar sin firma es aceptar de cualquiera. Es la MISMA
-      # que el backend tiene en `HISPALIS_CLAVE_HIS`, porque eso es un secreto compartido.
-      HISPALIS_CLAVE_HIS: ${HISPALIS_CLAVE_HIS:?falta HISPALIS_CLAVE_HIS — copia infra/compose/.env.example a .env}
+      # Sin clave el receptor no arranca, y lo dice él: aceptar sin firma es aceptar de cualquiera.
+      # Es la MISMA que el backend tiene en `HISPALIS_CLAVE_HIS`, porque eso es un secreto compartido.
+      #
+      # ⚠️ Aquí NO se usa `${VAR:?...}` como en las contraseñas de Keycloak, y la diferencia importa:
+      # la interpolación se resuelve al LEER el fichero, no al levantar el servicio, así que un `:?`
+      # en un servicio con perfil rompe `docker compose` entero —incluido `up`, `ps` y `config`— para
+      # quien nunca vaya a usar ese perfil. Y peor: `.env.example` deja la clave vacía, y `:?` falla
+      # también con valor vacío, así que un clon recién copiado no levantaría nada. Comprobado.
+      HISPALIS_CLAVE_HIS: ${HISPALIS_CLAVE_HIS:-}
     ports:
       # Se publica para poder mirar el log y para probarlo con `curl` desde el equipo.
       - '8090:8090'
