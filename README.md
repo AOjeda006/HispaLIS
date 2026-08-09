@@ -211,6 +211,10 @@ curl -s "$BASE/CodeSystem/\$lookup?system=$IG/CodeSystem/catalogo-pruebas&code=G
 curl -s "$BASE/ValueSet/\$validate-code?url=$IG/ValueSet/pruebas-del-catalogo&system=$IG/CodeSystem/catalogo-pruebas&code=NOEXISTE" | jq '.parameter[0]'
 curl -s "$BASE/ConceptMap/\$translate?url=$IG/ConceptMap/catalogo-a-loinc&system=$IG/CodeSystem/catalogo-pruebas&sourceCode=GLU&targetSystem=http://loinc.org" | jq
 
+# los umbrales que obligan a avisar, con su procedencia dentro del propio concepto
+curl -s "$BASE/CodeSystem/\$lookup?system=$IG/CodeSystem/catalogo-pruebas&code=K" \
+  | jq '[.parameter[] | select(.name=="property") | {(.part[0].valueCode): (.part[1] | .valueDecimal // .valueString // .valueCoding.code)}] | add'
+
 # empezar de cero (la base y el log de Kafka se conservan entre arranques en volúmenes)
 docker compose -f infra/compose/docker-compose.yml down -v
 ```
