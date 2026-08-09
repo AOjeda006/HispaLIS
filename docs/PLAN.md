@@ -1021,6 +1021,14 @@ Dos cosas que este ítem deja puestas y valen más que el catálogo: **un umbral
 sin procedencia** —la regla vive en el tipo, no en un comentario—, y **«no lo sé» no puede degradarse
 a «no es crítico»**, ni por un servidor caído ni por una unidad que no casa.
 
+**`ci-ig` no ha corrido en GitHub**, porque esta tanda termina sin push y sin push no hay CI. Se ha
+reproducido entera en local, incluido el IG Publisher: SUSHI limpio (0 errores, 0 avisos), la
+comprobación de que cada perfil tiene ejemplo (10/10), el **IG Publisher dentro de la imagen oficial**
+—18 minutos, `exit 0`, y su QA **idéntica en clase a la línea base publicada**: el mismo y único
+error de plantilla, y los dos avisos que el artefacto nuevo suma son los que ya tienen los otros
+cuatro `ValueSet`— y el **validador oficial con la misma invocación de la CI**, `-ig
+ig/output/package.tgz` incluido: **0 errores**. Falta solo el push.
+
 ### Los criterios del hito 2, uno a uno
 
 Cada fila es un ítem del checklist con **la prueba concreta** de que se cumple. «En vivo» significa

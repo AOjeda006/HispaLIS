@@ -96,8 +96,27 @@ mensaje que apunte a su causa. El detalle está en `../docs/adr/adr-0007-trampas
    aparte. Sin él, la construcción recorre entera la fase FHIR y muere al renderizar las páginas.
 
 > **Y una limitación del entorno local:** el IG Publisher **se niega a construir si hay un espacio en
-> la ruta** del proyecto. En la CI no ocurre. En local, si tu clon está bajo una ruta con espacios,
-> la IG solo se puede construir en la CI o clonando en otra ruta.
+> la ruta** del proyecto, y además necesita Jekyll, que en Windows no está. En la CI no ocurre.
+>
+> **Sí se puede construir en local, dentro de la imagen oficial** — que lleva Java y Jekyll, y en la
+> que la ruta del contenedor no tiene espacios aunque la del anfitrión sí. Medido: 18 minutos, con la
+> misma salida que la CI. Es lo que permite comprobar un cambio de la guía **sin empujar**:
+>
+> ```bash
+> docker run --rm --entrypoint bash \
+>   -v "$PWD/ig":/home/publisher/ig -v ~/.fhir:/home/publisher/.fhir \
+>   hl7fhir/ig-publisher-base:latest \
+>   -lc 'cd /home/publisher/ig && java -Xmx4g -jar publisher.jar -ig . -no-sushi'
+> ```
+>
+> **El `qa.html` de la guía publicada es la línea base.** El publisher termina con `exit 0` aunque su
+> QA cuente errores, así que «cuántos» solo significa algo comparado con
+> `https://aojeda006.github.io/HispaLIS/qa.html`, que es el resultado de la última CI verde. Hoy esa
+> base son **1 error** —`Supressed messages file not found`, un parámetro por defecto de la plantilla
+> que apunta a un fichero que esta IG no tiene— y **488 enlaces rotos**, que son los
+> `artifacts.html#terminology` y `#example` de la barra de navegación: el ancla la genera la plantilla
+> en inglés y la página está en español (misma familia que `adr-0010`). Cada artefacto nuevo suma
+> ~12 enlaces rotos de esos. No los cuentes como regresión sin mirar la base.
 
 ## Comandos
 
