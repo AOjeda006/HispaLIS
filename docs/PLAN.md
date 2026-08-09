@@ -165,6 +165,42 @@ aceptable bajo ninguna de las tres opciones. Si algún día se implementa (a), e
 - **La ventana de huérfano se documenta en la IG**, no se esconde: un `ServiceRequest` sin `Specimen`
   es un estado transitorio legítimo del sistema mientras el reproceso no ha corrido.
 
+### Decisiones tomadas al abrir el hito 3 (ítems 42 y 43)
+
+- **2026-08-09 — La fuente de los umbrales críticos: SEQC 2010, tabla 6, columna de consulta
+  externa.** Es una lista **publicada y citable** de una sociedad científica española —Llopis Díaz MA
+  et al., Rev Lab Clin. 2010;3(4):177-182—, hecha encuestando a los laboratorios del Programa de
+  Garantía Externa de la Calidad de la SEQC, y publica mediana y percentiles 10-90 de los límites
+  declarados, separando consulta externa de hospitalización. Se toma **la mediana de consulta
+  externa** porque este laboratorio es privado y ambulatorio: sus pacientes están en su casa. No es
+  cosmético —en potasio son 6,3 frente a 6,5 mmol/L— y avisar antes es la dirección correcta del error
+  cuando el paciente no está ingresado.
+  *Lo que NO se hizo:* rellenar las pruebas del catálogo que la tabla no cubre (hemoglobina,
+  plaquetas, TSH). Se quedan sin umbral declarado, y eso es una respuesta.
+
+- **2026-08-09 — Los umbrales son propiedades del concepto de `catalogo-pruebas`, no un `CodeSystem`
+  aparte.** Un `CodeSystem/valores-criticos` con los mismos códigos `GLU`, `K`… crearía **conceptos
+  distintos con el mismo código**, que es el olor clásico de la terminología duplicada. El umbral es
+  una propiedad de la prueba tal y como este laboratorio la oferta, igual que `unidad-ucum`, que ya
+  sentó el precedente. El `ValueSet/valores-criticos` sí es propio: publica **cuáles** la tienen, que
+  es lo que un clínico necesita poder leer de un vistazo.
+  *Consecuencia buscada:* con un `$lookup` al concepto vienen a la vez la unidad, los dos límites y la
+  procedencia. Un solo viaje, y ninguna forma de tener el umbral sin la unidad en la que está.
+
+- **2026-08-09 — Los límites son inclusivos, y en la duda se avisa.** `valor >= alto` o
+  `valor <= bajo`. Un catálogo que dice «avisa a partir de 6,3» no está diciendo «a partir de 6,31».
+
+- **2026-08-09 — Un resultado en otra unidad no se declara «no crítico»: se rechaza la comparación.**
+  Y lo mismo con el servidor de terminología caído. Es la **única excepción** a la regla de
+  disponibilidad del proyecto —«si la terminología no está, el laboratorio sigue»—, y está escrita al
+  lado de la regla, en `TerminologiaDelServidor`. El motivo: con un nombre de prueba, callarse degrada
+  la respuesta; con un umbral, callarse la **invierte**. `NoSeSabeSiEsCritico` existe para que «no lo
+  sé» no pueda confundirse con «no tiene».
+  *Pendiente para el ítem 46:* `NoSeSabeSiEsCritico` no es un `ErrorDeDominio` y **todavía no tiene
+  traducción a HTTP** —hoy no hay quien la lance por la API, porque nadie la llama—. Quien enchufe la
+  doble validación decide si es un `503` o si la validación se bloquea, y lo añade a
+  `TraduccionDeErroresDeDominio`.
+
 ### Decisiones tomadas al cerrar lo que el hito 2 dejó abierto (prompt 14)
 
 - **2026-08-09 — Los facultativos peticionarios entran como dato maestro sembrado aparte, y el motor
@@ -959,6 +995,31 @@ ningún test veía.
 
 Y el bus, con el circuito entero recorrido: **0 filas** del `outbox` casan contra
 `(MUÑOZ|TORRE|Begoña|12345678Z)`, con los seis tipos de hecho publicados.
+
+### Empieza el hito 3 — la terminología que faltaba (ítems 42 y 43, 2026-08-09)
+
+**El ítem 42 está bloqueado por datos, no por trabajo**, y así se queda: no hay release de la Edición
+Española en la máquina y los tres códigos SNOMED del SNS **no se inventan ni se cablean
+«provisionalmente»**. Comprobado: `HISPALIS_SNOMED` sin definir y el archivo de releases solo con
+LOINC 2.82 y THO.
+
+**El ítem 43 está cerrado.** El laboratorio publica ya sus **valores críticos** —los umbrales que
+obligan a descolgar el teléfono, que no son los rangos de normalidad— con la fuente citada **dentro
+del recurso**, concepto a concepto, y el backend los resuelve por el servidor de terminología como
+todo lo demás.
+
+| | |
+|---|---|
+| La fuente | SEQC 2010, tabla 6, columna de **consulta externa** (Rev Lab Clin. 2010;3(4):177-182) |
+| Dónde vive | Propiedades de `CodeSystem/catalogo-pruebas`; `ValueSet/valores-criticos` publica cuáles |
+| Cuántas pruebas | **5** de 21 — las que están a la vez en la tabla y en el catálogo, con la misma unidad |
+| Cómo se resuelve | `$lookup`, puerto de dominio `ValoresCriticos`, valor `UmbralCritico` |
+| El criterio | `K` a 6,2 mmol/L → **no** crítico; a 7,5 → **sí**; a 6,3 (el límite) → sí; a 2,5 → sí |
+| Verificado | Contra el servidor del `compose` en vivo, y por test contra un `$lookup` de verdad |
+
+Dos cosas que este ítem deja puestas y valen más que el catálogo: **un umbral no se puede construir
+sin procedencia** —la regla vive en el tipo, no en un comentario—, y **«no lo sé» no puede degradarse
+a «no es crítico»**, ni por un servidor caído ni por una unidad que no casa.
 
 ### Los criterios del hito 2, uno a uno
 
@@ -2012,13 +2073,35 @@ contra la pila del `compose` levantada desde el clon limpio, no contra un doble.
   *Bloqueo declarado:* requiere registro ante el Ministerio de Sanidad y **no se redistribuye**. El
   ítem no se puede empezar sin la release en la máquina; el camino de carga ya está implementado y
   probado contra una mini-release RF2 sintética (ítem 32).
+  *⛔ Comprobado y BLOQUEADO (2026-08-09):* no hay release. `HISPALIS_SNOMED` está sin definir en
+  `infra/compose/.env` y en el archivo de releases (`BibliotecaDocumentacion/_fuente/_externos`) solo
+  están LOINC 2.82 y THO. **El ítem no se empieza**: los tres códigos no se cablean «provisionalmente»
+  ni se inventan, porque un código SNOMED escrito de memoria valida contra nada y se propaga a todo el
+  que consuma la guía. Se desbloquea el día que la release esté en la máquina; el resto del ítem
+  —cargador, deducción de la versión desde el *refset* de dependencias, `$lookup`— ya está hecho.
 
-- [ ] **43 — Catálogo de valores críticos, con su procedencia.**
+- [x] **43 — Catálogo de valores críticos, con su procedencia.** *(2026-08-09)*
   No es el fichero de rangos de normalidad: son los umbrales que obligan a avisar por teléfono.
   *Criterio:* `CodeSystem`/`ValueSet` propios en la guía con el umbral por prueba y sexo, **cada
   entrada con su fuente citada dentro del propio recurso**; el backend los resuelve por el servidor
   de terminología como todo lo demás (invariante 4: nada de `Map<String,String>`); y un test que
   comprueba que un potasio de 6,2 **no** es crítico y uno de 7,5 sí.
+  *Hecho:* la fuente es **Llopis Díaz MA et al., «Comunicación de valores críticos: resultados de una
+  encuesta realizada por la Comisión de la Calidad Extraanalítica de la SEQC», Rev Lab Clin.
+  2010;3(4):177-182** (ISSN 1888-4008), **tabla 6**, columna de **consulta externa** — que es la que
+  corresponde a un laboratorio privado ambulatorio. Cinco pruebas del catálogo están a la vez en esa
+  tabla y en la oferta del laboratorio, con la misma unidad: `GLU` 45/400 mg/dL, `K` 2,8/6,3 mmol/L,
+  `NA` 120/160 mmol/L, `CREA` —/5 mg/dL y `UREA` —/170 mg/dL. Viven como **propiedades del concepto**
+  en `CodeSystem/catalogo-pruebas` (`limite-critico-bajo`, `limite-critico-alto` y
+  `procedencia-del-valor-critico`) y el `ValueSet/valores-criticos` publica cuáles las tienen. El
+  backend las resuelve por `$lookup`, con el puerto de dominio `ValoresCriticos` y el valor
+  `UmbralCritico`, que **no se puede construir sin procedencia**. Verificado en vivo contra el
+  servidor del `compose` y por test contra un `$lookup` de verdad.
+  *No cumplido a propósito — el «y sexo»:* la fuente **no estratifica los límites críticos por sexo**.
+  Los intervalos de referencia sí dependen del sexo y este proyecto los modela así (`RangoDeReferencia`
+  lo lleva); los umbrales críticos publicados, no. Partirlos por sexo aquí sería inventar precisión en
+  el único sitio donde una cifra de más se traduce en una llamada que no se hace. Queda dicho en el
+  propio `ValueSet`.
 
 ### Lo que solo existe en R5
 
@@ -2260,6 +2343,22 @@ contra la pila del `compose` levantada desde el clon limpio, no contra un doble.
   los enganches `prestart`/`prebuild`, y con ellos SUSHI del Dockerfile de la web. Lo que **sigue
   abierto** de aquel ítem son los tres códigos SNOMED del SNS en `identifier.type`, y es bloqueo de
   datos: ver la nota de la Edición Española.
+- **⚠️ Cinco de las veintiuna pruebas del catálogo tienen umbral crítico, y las dieciséis restantes
+  no lo tienen «todavía»: no lo tienen.** La fuente citable (SEQC 2010, tabla 6) es de bioquímica y no
+  cubre hemoglobina, plaquetas ni TSH, que sí están en el catálogo. Un `esCritico("HB", …)` contesta
+  `false` **porque no hay umbral publicado**, no porque la cifra sea buena. Cuando el ítem 46 enchufe
+  la doble validación, esa diferencia deja de ser teórica: rellenar el hueco de memoria para «tenerlo
+  completo» sería inventar el número justo donde el prerrequisito del hito lo prohíbe. Si hace falta
+  cubrir esas pruebas, se busca otra fuente publicada y se cita **aparte**, entrada por entrada.
+- **Los umbrales de la guía son medianas de una encuesta, no una norma.** La propia SEQC concluye que
+  no hay lista aceptada universalmente y que cada laboratorio debe pactar la suya con sus clínicos. Lo
+  que este proyecto demuestra es el **mecanismo** —umbral publicado, citable y consumido desde un
+  único sitio—, no el número. Está dicho en el `ValueSet`, que es donde lo leerá quien lo reutilice.
+- **HAPI 8.10 sí devuelve las propiedades `decimal` de un `CodeSystem` por `$lookup`**, con
+  `valueDecimal` y sin perder precisión. Se midió antes de modelar los umbrales, porque el plan B
+  —declararlas `string` y parsear— habría sido mentir sobre el tipo en un artefacto publicado. El
+  cliente las lee por `primitiveValue()` de todas formas: así un servidor que las mande como cadena
+  sigue funcionando, y un valor que no sea una cifra se rechaza en vez de aproximarse.
 - **SNOMED CT Edición Española no está cargada.** El camino está entero —el cargador lee RF2, deduce
   la versión del *refset* de dependencia de módulos, elige el término preferente en español y falla si
   un concepto está retirado—, y está probado contra una mini-release sintética. Lo que falta es la
