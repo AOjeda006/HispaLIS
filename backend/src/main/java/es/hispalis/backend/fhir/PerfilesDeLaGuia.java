@@ -23,7 +23,8 @@ public enum PerfilesDeLaGuia {
     LABORATORIO_ORG("Organization", "laboratorio-org"),
     FACULTATIVO_LAB("Practitioner", "facultativo-lab"),
     COBERTURA_LAB("Coverage", "cobertura-lab"),
-    NOTIFICACION_EDO("Task", "notificacion-edo");
+    NOTIFICACION_EDO("Task", "notificacion-edo"),
+    PROCEDENCIA_VALIDACION("Provenance", "procedencia-validacion");
 
     private static final String BASE_CANONICA = "https://aojeda006.github.io/HispaLIS/fhir/StructureDefinition/";
 

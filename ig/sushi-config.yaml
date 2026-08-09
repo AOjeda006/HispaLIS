@@ -50,6 +50,8 @@ parameters:
 
 menu:
   Inicio: index.html
+  Flujo y estados: flujo-y-estados.html
+  Uso de la API: uso-de-la-api.html
   Perfiles: artifacts.html
   Terminología: artifacts.html#terminology
   Ejemplos: artifacts.html#example

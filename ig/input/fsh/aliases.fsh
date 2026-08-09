@@ -37,6 +37,10 @@ Alias: $CONDICION_MUESTRA_HL7  = http://terminology.hl7.org/CodeSystem/v2-0493
 // Estado de ayuno del paciente: `Specimen.collection.fastingStatus` lo ata con fuerza required.
 Alias: $AYUNO_HL7              = http://terminology.hl7.org/CodeSystem/v2-0916
 
+// Qué papel jugó un agente en un acto registrado. El laboratorio solo emite `verifier`: la
+// procedencia que publica da fe de UNA cosa, que un facultativo firmó un resultado.
+Alias: $PARTICIPANTE_PROCEDENCIA = http://terminology.hl7.org/CodeSystem/provenance-participant-type
+
 
 // ─── `Identifier.system` — ADOPTADOS de la IG española de ÚNICAS ─────────────
 //

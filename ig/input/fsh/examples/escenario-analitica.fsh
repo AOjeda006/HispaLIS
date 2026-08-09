@@ -225,3 +225,18 @@ Description: "Informe validado con los tres resultados. `presentedForm` transpor
 * effectiveDateTime = "2026-07-28T08:41:00+02:00"
 * issued = "2026-07-28T16:30:00+02:00"
 * conclusion = "Glucosa basal elevada y TSH por encima del rango con T4 libre normal. Se recomienda repetir en tres meses."
+
+
+Instance: procedencia-validacion-glucosa
+InstanceOf: ProcedenciaValidacion
+Usage: #example
+Title: "Quién validó la glucosa"
+Description: """
+El rastro de la firma. Es lo que hace que `resultado-glucosa` esté en `final` y no en `preliminary`:
+el laboratorio lo escribe **en la misma transacción** que la validación, y no admite que lo escriba
+un cliente.
+"""
+* target = Reference(resultado-glucosa)
+* recorded = "2026-07-28T13:20:00+02:00"
+* agent[0].type = $PARTICIPANTE_PROCEDENCIA#verifier
+* agent[0].who = Reference(facultativo-ejemplo)
