@@ -5,8 +5,8 @@ import ca.uhn.fhir.interceptor.api.Interceptor;
 import ca.uhn.fhir.interceptor.api.Pointcut;
 import es.hispalis.backend.dominio.ReglaDeNegocioIncumplida;
 import java.util.List;
-import java.util.stream.Collectors;
 import org.hl7.fhir.instance.model.api.IBaseResource;
+import org.hl7.fhir.r5.model.Enumerations.SubscriptionStatusCodes;
 import org.hl7.fhir.r5.model.Subscription;
 import org.hl7.fhir.r5.model.Subscription.SubscriptionPayloadContent;
 import org.hl7.fhir.r5.model.SubscriptionTopic;
@@ -61,8 +61,7 @@ public class SuscripcionesQueElLaboratorioAcepta {
                             + "mandar historia clínica por un canal saliente, sin testigo y sin consentimiento "
                             + "aplicado. Pide `id-only` y resuelve la referencia contra la API.");
         }
-        if (!suscripcion.hasEndpoint()
-                && suscripcion.getStatus() == org.hl7.fhir.r5.model.Enumerations.SubscriptionStatusCodes.ACTIVE) {
+        if (!suscripcion.hasEndpoint() && suscripcion.getStatus() == SubscriptionStatusCodes.ACTIVE) {
             throw new ReglaDeNegocioIncumplida(
                     "Una suscripción activa sin `endpoint` no se puede entregar en ninguna parte.");
         }
@@ -76,9 +75,7 @@ public class SuscripcionesQueElLaboratorioAcepta {
                                     + "`SubscriptionTopic`, no en la `Subscription`.")
                             .formatted(
                                     suscripcion.getTopic(),
-                                    publicados.isEmpty()
-                                            ? "ninguno todavía"
-                                            : publicados.stream().collect(Collectors.joining(", "))));
+                                    publicados.isEmpty() ? "ninguno todavía" : String.join(", ", publicados)));
         }
     }
 }

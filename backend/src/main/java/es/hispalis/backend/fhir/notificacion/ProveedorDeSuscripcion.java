@@ -107,6 +107,9 @@ public class ProveedorDeSuscripcion {
 
         // El cuerpo se rearma con `id-only` igual que el original: `$events` no es una puerta trasera
         // por la que sacar los recursos completos de lo que ya se notificó sin ellos.
+        //
+        // La base sale de la petición y no de la configuración —al revés que en el relay— porque aquí
+        // SÍ hay una petición: quien pregunta llegó por una URL, y esa es la que puede resolver.
         return TraductorDeNotificacion.notificacion(
                 suscripcion, bandeja.deLaSuscripcion(id, primero, ultimo), total, peticion.getFhirServerBase());
     }
