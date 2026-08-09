@@ -15,6 +15,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.hl7.fhir.r5.model.CapabilityStatement;
+import org.hl7.fhir.r5.model.CapabilityStatement.CapabilityStatementRestResourceComponent;
 import org.hl7.fhir.r5.model.Enumerations;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -42,6 +43,10 @@ class ConformidadFhirTest extends TestDeIntegracion {
 
     @Autowired
     private TestRestTemplate rest;
+
+    /** Los proveedores que escribe este proyecto. Se pregunta a Spring: la lista no se escribe. */
+    @Autowired
+    private List<ProveedorPropio> proveedoresPropios;
 
     @Test
     void metadata_responde_200_y_declara_la_version_5_0_0() {
@@ -73,7 +78,7 @@ class ConformidadFhirTest extends TestDeIntegracion {
     }
 
     @Test
-    void metadata_declara_los_nueve_perfiles_de_la_guia() {
+    void metadata_declara_los_diez_perfiles_de_la_guia() {
         CapabilityStatement conformidad = pedirConformidad();
 
         List<String> declarados = conformidad.getRestFirstRep().getResource().stream()
@@ -119,6 +124,51 @@ class ConformidadFhirTest extends TestDeIntegracion {
         assertThat(enElBackend)
                 .as("si esto falla, la guía cambió y `PerfilesDeLaGuia` no: hay que actualizarla")
                 .isEqualTo(enLaGuia);
+    }
+
+    /**
+     * Ningún recurso que este laboratorio gobierne puede quedarse sin describir en la guía.
+     *
+     * <p>Es la mitad que faltaba, y la que el filtrado por ruta de la CI hace invisible: los seis
+     * <em>workflows</em> filtran por {@code paths:}, así que dar de alta un proveedor propio nuevo
+     * dispara {@code ci-backend} y <strong>no</strong> {@code ci-ig}. La ausencia de cambios en
+     * {@code ig/} no es una señal de que la guía siga al día: es lo que ocurre por construcción. El
+     * hito 2 entero pasó sin tocar {@code ig/} y con un tipo de recurso nuevo publicado
+     * ({@code Provenance}) del que la guía no decía una palabra.
+     *
+     * <p>El test cruza <strong>lo que el servidor declara</strong> —el {@code CapabilityStatement}
+     * de verdad, no una lista— contra <strong>lo que la guía publica</strong>. El conjunto que se
+     * exige no es el de los 158 tipos que HAPI declara por tener DAO: es el de los que este
+     * proyecto <em>gobierna</em>, que son los que traen proveedor propio. Y esa lista
+     * <strong>se deduce</strong> de los proveedores registrados, siguiendo la regla 4 de
+     * {@code ADR-0014}: una lista escrita a mano nace correcta y envejece mal.
+     */
+    @Test
+    void ningun_recurso_gobernado_por_el_laboratorio_se_queda_sin_perfil_en_la_guia() {
+        CapabilityStatement conformidad = pedirConformidad();
+
+        List<String> gobernados = proveedoresPropios.stream()
+                .map(proveedor -> proveedor.getResourceType().getSimpleName())
+                .distinct()
+                .sorted()
+                .toList();
+
+        List<String> sinPerfil = gobernados.stream()
+                .filter(tipo -> conformidad.getRestFirstRep().getResource().stream()
+                        .filter(recurso -> tipo.equals(recurso.getType()))
+                        .noneMatch(CapabilityStatementRestResourceComponent::hasSupportedProfile))
+                .toList();
+
+        assertThat(sinPerfil)
+                .as(
+                        """
+                        El servidor publica y gobierna %s, y la guía no perfila %s.
+                        Un tipo de recurso que el laboratorio escribe con sus propias reglas es contrato \
+                        publicado: si la guía no lo describe, el único sitio donde está escrito lo que \
+                        significa es el código. Añade el perfil en `ig/input/fsh/profiles/`, un ejemplo \
+                        que lo declare en `meta.profile`, y la entrada en `PerfilesDeLaGuia`.""",
+                        gobernados, sinPerfil)
+                .isEmpty();
     }
 
     /**
