@@ -33,6 +33,10 @@ ig/template/
 ig/generated_output/
 ig/publisher.jar
 ig/validator_cli.jar
+# El publisher deja este `Requirements` en la RAÍZ de `ig/`, fuera de las carpetas de salida: lo
+# deduce de la narrativa en cada construcción. Se ve al construir la IG en local, no en la CI, porque
+# allí el árbol es recién clonado.
+ig/Requirements-fromNarrative.json
 **/*.tgz
 # ─── Java / Maven / Gradle ────────────────────────────────────────────────────
 target/
