@@ -7,6 +7,13 @@
 //
 // La propiedad `unidad-ucum` vive AQUÍ y no en una tabla aparte: el generador de datos sintéticos y
 // el backend tienen que consumir el mismo catálogo que la IG, nunca una lista paralela.
+//
+// Los LÍMITES CRÍTICOS viven aquí por lo mismo, y hay que distinguirlos de los rangos de referencia,
+// que NO están en la guía: un rango de normalidad depende del método y del analizador de cada
+// laboratorio, y dos laboratorios que usan el mismo código `CREA` publican rangos distintos sin
+// contradecirse. Un límite crítico es otra cosa — el umbral acordado con quien recibe la llamada—, y
+// tiene que estar publicado para que el clínico sepa qué dispara un aviso. Su procedencia va en el
+// propio concepto: ver `ValueSet/valores-criticos`.
 
 CodeSystem: CatalogoPruebas
 Id: catalogo-pruebas
@@ -31,30 +38,72 @@ término LOINC por el nombre en vez de por sus seis ejes es el error de mapeo m�
 // quiere decir: `mg/dL` no es una prueba del catálogo.
 * ^property[0].type = #Coding
 
+// Los tres de abajo van juntos o no van: un umbral sin unidad no se puede comparar con nada y un
+// umbral sin procedencia no se puede auditar. Los límites se expresan SIEMPRE en la `unidad-ucum`
+// del propio concepto — no llevan la suya, porque dos unidades para la misma prueba serían la
+// primera forma de equivocarse.
+* ^property[1].code = #limite-critico-bajo
+* ^property[1].description = "Cifra en la que un resultado pasa a ser crítico por lo bajo, en la `unidad-ucum` del concepto. Ausente cuando la prueba no tiene límite crítico inferior."
+* ^property[1].type = #decimal
+* ^property[2].code = #limite-critico-alto
+* ^property[2].description = "Cifra en la que un resultado pasa a ser crítico por lo alto, en la `unidad-ucum` del concepto. Ausente cuando la prueba no tiene límite crítico superior."
+* ^property[2].type = #decimal
+* ^property[3].code = #procedencia-del-valor-critico
+* ^property[3].description = "De dónde salen los dos límites, con la referencia concreta. Obligatoria en todo concepto que declare alguno: un umbral sin fuente no se usa."
+* ^property[3].type = #string
+
 
 // ─── Bioquímica ──────────────────────────────────────────────────────────────
 
 * #GLU "Glucosa" "Glucosa en suero o plasma."
 * #GLU ^property[0].code = #unidad-ucum
 * #GLU ^property[0].valueCoding = $UCUM#"mg/dL"
+* #GLU ^property[1].code = #limite-critico-bajo
+* #GLU ^property[1].valueDecimal = 45
+* #GLU ^property[2].code = #limite-critico-alto
+* #GLU ^property[2].valueDecimal = 400
+* #GLU ^property[3].code = #procedencia-del-valor-critico
+* #GLU ^property[3].valueString = "SEQC 2010, tabla 6: mediana declarada para consulta externa (Rev Lab Clin. 2010;3(4):177-182)."
 
+// Sin límite crítico inferior: la tabla 6 no declara ninguno para la creatinina, y ponerlo sería
+// inventarlo. Que falte no es un descuido — es lo que dice la fuente.
 * #CREA "Creatinina" "Creatinina en suero o plasma."
 * #CREA ^property[0].code = #unidad-ucum
 * #CREA ^property[0].valueCoding = $UCUM#"mg/dL"
+* #CREA ^property[1].code = #limite-critico-alto
+* #CREA ^property[1].valueDecimal = 5
+* #CREA ^property[2].code = #procedencia-del-valor-critico
+* #CREA ^property[2].valueString = "SEQC 2010, tabla 6: mediana declarada para consulta externa (Rev Lab Clin. 2010;3(4):177-182)."
 
 // En España se informa la UREA; en el mundo anglosajón, el NITRÓGENO UREICO (BUN). Son magnitudes
 // distintas con códigos LOINC distintos y un factor de conversión de 2,14 entre ellas.
 * #UREA "Urea" "Urea en suero o plasma."
 * #UREA ^property[0].code = #unidad-ucum
 * #UREA ^property[0].valueCoding = $UCUM#"mg/dL"
+* #UREA ^property[1].code = #limite-critico-alto
+* #UREA ^property[1].valueDecimal = 170
+* #UREA ^property[2].code = #procedencia-del-valor-critico
+* #UREA ^property[2].valueString = "SEQC 2010, tabla 6: mediana declarada para consulta externa (Rev Lab Clin. 2010;3(4):177-182)."
 
 * #NA "Sodio" "Sodio en suero o plasma."
 * #NA ^property[0].code = #unidad-ucum
 * #NA ^property[0].valueCoding = $UCUM#"mmol/L"
+* #NA ^property[1].code = #limite-critico-bajo
+* #NA ^property[1].valueDecimal = 120
+* #NA ^property[2].code = #limite-critico-alto
+* #NA ^property[2].valueDecimal = 160
+* #NA ^property[3].code = #procedencia-del-valor-critico
+* #NA ^property[3].valueString = "SEQC 2010, tabla 6: mediana declarada para consulta externa (Rev Lab Clin. 2010;3(4):177-182)."
 
 * #K "Potasio" "Potasio en suero o plasma."
 * #K ^property[0].code = #unidad-ucum
 * #K ^property[0].valueCoding = $UCUM#"mmol/L"
+* #K ^property[1].code = #limite-critico-bajo
+* #K ^property[1].valueDecimal = 2.8
+* #K ^property[2].code = #limite-critico-alto
+* #K ^property[2].valueDecimal = 6.3
+* #K ^property[3].code = #procedencia-del-valor-critico
+* #K ^property[3].valueString = "SEQC 2010, tabla 6: mediana declarada para consulta externa (Rev Lab Clin. 2010;3(4):177-182)."
 
 * #COLT "Colesterol total" "Colesterol total en suero o plasma."
 * #COLT ^property[0].code = #unidad-ucum
