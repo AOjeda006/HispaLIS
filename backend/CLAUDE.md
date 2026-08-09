@@ -29,6 +29,8 @@ respuesta de IA o librería basada en R4 que se copie sin mirar va a fallar aqu�
 | `Coverage.kind` | no existe | **`1..1` obligatorio** (`insurance \| self-pay \| other`) | Un `Coverage` R4 **no valida** en R5 |
 | `Coverage.subscriberId` | `string` | **`0..*` `Identifier`** | Cambio de tipo y cardinalidad |
 | `Observation.triggeredBy` | no existe | **`0..*`** | El gancho de las pruebas reflejas |
+| `Subscription.criteria` | cadena de búsqueda **dentro** de la suscripción | **no existe** → el criterio es un `SubscriptionTopic` aparte | Cambia el modelo entero, no un elemento |
+| `Subscription.error` | `string` dentro del recurso | **eliminado** → `SubscriptionStatus.error` (`CodeableConcept`), por `$status` | Buscarlo y no encontrarlo invita a inventarse una extensión |
 | `Observation.bodyStructure` | no existe | `0..1 Reference` | |
 | `DiagnosticReport.composition` | no existe | `0..1 Reference` | |
 | `Specimen.combined` / `.role` / `.feature` | no existen | nuevos | |
@@ -81,6 +83,31 @@ LECTURA    cliente ──GET / search──► DAOs HAPI JPA ──► esquema `
 - **Nunca PHI en el bus**, ni siquiera de paso: un hecho lleva `pacienteId` interno y referencias. Lo
   garantizan el agregado `Hecho` al construirlo y el esquema Avro al declararlo — un tópico replicado
   es lo más difícil de borrar que hay el día que alguien ejerza el derecho de supresión.
+
+## Las notificaciones de `Subscription` (ítem 44)
+
+- **El criterio NO está en el código.** Vive en el `SubscriptionTopic` que publica la guía;
+  `CriterioDelTopico` lo evalúa con el emparejador en memoria de HAPI y **no tiene una sola condición
+  escrita en Java**. Un criterio que el emparejador no sepa evaluar **no dispara** y se avisa: darlo
+  por bueno notificaría por algo que nadie ha comprobado.
+- **El backend lleva una copia del tópico** en `resources/conformidad/`, porque se construye sin la
+  guía delante. Es literalmente la salida de SUSHI, y **`ci-ig` falla si divergen**. Si tocas el FSH
+  del tópico, copia el fichero otra vez.
+- **Se anota en la transacción, se entrega fuera.** Igual que el `outbox` de Kafka, más una razón
+  propia: una llamada HTTP a un tercero dentro de una transacción la mantiene abierta lo que tarde en
+  contestar alguien que no controlamos.
+- **`id-only` y nada más**, cerrado en dos sitios: la `Subscription` que pide `full-resource` se
+  rechaza al escribir, y en `notificacion.evento` **no hay dónde guardar el recurso**. Que el
+  contenido no exista es lo que convierte la promesa en garantía.
+- **El secreto compartido NO va en el recurso.** `Subscription.parameter` es donde lo mete la
+  documentación habitual y es un error: el recurso se lee por la API y su historial no se borra. Se
+  **firma** con HMAC-SHA256 y una clave de configuración; el recurso solo dice cuál.
+- **El corte es el estado.** Agotados los intentos, la `Subscription` pasa a `error` y deja de
+  acumular. Reactivar es un acto explícito de alguien.
+- **⚠️ HAPI 8.10 no trae `$status` ni `$events`** (solo `$trigger-subscription`). Están en
+  `ProveedorDeSuscripcion`, registrado como **proveedor suelto**: hacerlo `ProveedorPropio`
+  sustituiría al proveedor de HAPI para `Subscription` y le aplicaría las puertas de los recursos con
+  agregado detrás, que este no tiene.
 
 ## La terminología es un servicio aparte (D14)
 

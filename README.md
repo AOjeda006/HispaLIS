@@ -100,6 +100,14 @@ backend y el motor con Maven y la web con Angular.
 Fuera del `compose` se quedan **solo los terceros**: el HIS y el analizador simulados
 (`simuladores/`), que son los sistemas del hospital y del laboratorio, no parte de HispaLIS.
 
+El **receptor de notificaciones** es otro tercero, y va detrás de un perfil por lo mismo: tenerlo
+siempre arriba daría a entender que el laboratorio depende de que esté, y no depende — si no está, la
+notificación se reintenta y la suscripción se corta sola.
+
+```bash
+docker compose -f infra/compose/docker-compose.yml --profile notificaciones up -d receptor
+```
+
 ⚠️ **Dos cosas viven fuera del repositorio y hay que tenerlas antes de levantar:**
 
 1. **La guía compilada** — `npx fsh-sushi .` dentro de `ig/`. No se versiona: la produce SUSHI, y con

@@ -165,6 +165,83 @@ aceptable bajo ninguna de las tres opciones. Si algún día se implementa (a), e
 - **La ventana de huérfano se documenta en la IG**, no se esconde: un `ServiceRequest` sin `Specimen`
   es un estado transitorio legítimo del sistema mientras el reproceso no ha corrido.
 
+### Decisiones tomadas con lo que solo existe en R5 (ítems 44 y 45)
+
+- **2026-08-09 — El `SubscriptionTopic` vive en la guía Y en el servidor, y una puerta de `ci-ig`
+  impide que se bifurquen.** En R5 el criterio es un recurso de conformidad que **el servidor
+  publica**: `GET [base]/SubscriptionTopic` es cómo un cliente descubre a qué puede suscribirse, así
+  que el laboratorio tiene que tenerlo dentro. Y el backend se construye **sin la guía delante** —son
+  dos módulos y dos CI—, de modo que lleva una copia en `resources/conformidad/`, que es literalmente
+  la salida de SUSHI. La alternativa era escribir el disparador otra vez en Java: la misma regla en
+  dos sitios que se contradicen sin que nada avise. Contra una copia sí se puede avisar, y `ci-ig`
+  —el único workflow que compila el FSH— compara los dos ficheros y falla si divergen.
+  *Consecuencia:* en `CriterioDelTopico` no hay ni una condición escrita en Java. Cambiar el
+  disparador es cambiar el FSH, recompilar y copiar.
+
+- **2026-08-09 — La notificación se anota en la transacción y se entrega fuera de ella.** Mismo
+  patrón que el `outbox` de Kafka y por las mismas dos razones —no notificar lo que la transacción
+  revirtió, no perder lo que ocurrió mientras el receptor estaba caído—, con una tercera propia de
+  este canal: una llamada HTTP a un tercero dentro de una transacción de base de datos la mantiene
+  abierta lo que tarde en contestar alguien que no controlamos.
+  *Tabla propia (`notificacion.evento`) y no `outbox.hecho`:* aquel cuenta lo que el laboratorio hace,
+  esta a quién se lo ha contado ya. Mezclarlos convertiría un hecho en N filas según cuántos
+  suscriptores hubiera ese día. Y hace falta de todas formas: **`$events` no se puede contestar sin
+  guardar lo entregado**.
+
+- **2026-08-09 — El secreto compartido NO va en `Subscription.parameter`.** Es donde lo mete la
+  documentación habitual, en forma de cabecera `Authorization`, y es un error: `Subscription` es un
+  recurso más de la API, así que la credencial queda legible para cualquiera con permiso de lectura
+  sobre el tipo — y escrita en un historial de versiones que no se borra. El laboratorio **firma** el
+  cuerpo con HMAC-SHA256 y una clave de su configuración; el recurso solo dice **cuál**, que es un
+  identificador. De paso se gana algo que un portador no da: que el cuerpo no se ha tocado. La marca
+  de tiempo entra en lo firmado para que una notificación capturada no valga mañana.
+
+- **2026-08-09 — El corte es que la suscripción pase a `error`, no un contador escondido.** Agotados
+  los intentos, la `Subscription` queda en `error` y deja de acumular trabajo hasta que alguien la
+  reactive. Sin eso, un receptor apagado el viernes tiene el lunes miles de notificaciones y el
+  laboratorio se ha pasado el fin de semana llamando a una puerta cerrada. Reactivar es un acto
+  explícito, que es lo correcto: quien lo hace sabe que se perdió lo de en medio, y
+  `eventsSinceSubscriptionStart` le dice cuánto.
+  *⚠️ El motivo NO cabe en la `Subscription`:* R4 tenía `Subscription.error` y **R5 lo quitó**. Vive
+  en `SubscriptionStatus.error`, codificado, y por eso hay que preguntarlo con `$status`.
+
+- **2026-08-09 — «TSH alterada» es fuera del rango de referencia, y con varios rangos hace falta
+  salirse de todos.** El resultado guarda el identificador del paciente, no su filiación, así que
+  aquí no se conoce el sexo; solo cuenta como alterado lo que lo estaría para cualquiera. Es
+  deliberadamente conservador —añadir una prueba que no tocaba le cuesta al paciente otra extracción—
+  y con la TSH, que tiene un solo rango, la respuesta es exacta.
+  *Lo que NO se hizo:* cargar al paciente para elegir el rango por sexo. Sería otro viaje dentro de
+  la transacción de escritura para una decisión que hoy no cambia en ninguna prueba con refleja.
+
+- **2026-08-09 — `reflex` no lo puede declarar un cliente; `repeat` y `re-run`, sí.** A qué prueba
+  refleja cada prueba es el protocolo del laboratorio y vive en su catálogo: admitirlo por la puerta
+  de entrada dejaría que quien manda un resultado se inventase un protocolo, y el `reason` publicado
+  diría lo que él quisiera. Los otros dos tienen que declararse desde fuera, porque la hemólisis del
+  tubo y el control de calidad del turno **solo los ve quien repite**.
+
+- **2026-08-09 — La refleja se ORDENA, no solo se enlaza.** Informar una TSH alterada crea la línea
+  de T4 libre en el mismo volante, con `intent = reflex-order` y heredando peticionario —R5 lo dice
+  en la definición del propio código `reflex`: la petición original es la que dio la autorización—.
+  Es idempotente contra el volante, así que reinformar la misma TSH no añade una segunda T4 libre.
+  *Limitación declarada:* un resultado informado **sin línea** no dispara refleja. No hay volante del
+  que colgar la autorización ni a quién devolverle el resultado añadido.
+
+- **2026-08-09 — La frase la redacta el catálogo, no el código.** `motivo-de-la-refleja` viaja tal
+  cual a `Observation.triggeredBy.reason` y de ahí a la pantalla. Componerla en el cliente
+  —«derivada de un %s alterado»— exigiría conocer el género de cada nombre de prueba, y quien redacta
+  la regla es quien tiene que redactar cómo se cuenta.
+
+- **2026-08-09 — Sin fuente citable, y a propósito.** Al revés que los valores críticos del ítem 43,
+  la regla refleja **no lleva procedencia externa**: «alterada» es fuera del rango que publica este
+  laboratorio con su método y su analizador, y a qué prueba refleja es su protocolo, acordado con sus
+  clínicos. Un valor crítico es lo contrario —un acuerdo con quien recibe la llamada—, y por eso
+  aquél exigió cita y este no.
+
+- **2026-08-09 — Con la terminología caída, la refleja se omite en vez de lanzar.** Es la asimetría
+  con `ValoresCriticos`, escrita al lado: callarse un umbral crítico **invierte** la respuesta y
+  alguien no recibe una llamada; callarse una refleja solo **omite** una prueba, y el facultativo va
+  a ver la TSH marcada como alta igual.
+
 ### Decisiones tomadas al abrir el hito 3 (ítems 42 y 43)
 
 - **2026-08-09 — La fuente de los umbrales críticos: SEQC 2010, tabla 6, columna de consulta
@@ -995,6 +1072,44 @@ ningún test veía.
 
 Y el bus, con el circuito entero recorrido: **0 filas** del `outbox` casan contra
 `(MUÑOZ|TORRE|Begoña|12345678Z)`, con los seis tipos de hecho publicados.
+
+### Lo que justifica R5 (ítems 44 y 45, 2026-08-09)
+
+Los dos mecanismos que en R4 no existen o son un apaño, y los dos cerrados.
+
+**El ítem 44 — `SubscriptionTopic` + `Subscription`.** No es una diferencia de versión: es **otro
+modelo**. En R4 el criterio es una cadena de búsqueda dentro de la `Subscription`, escrita a mano por
+cada cliente y publicada en ninguna parte; en R5 se saca fuera, a un recurso de conformidad que el
+servidor publica, y la suscripción solo dice a cuál se apunta. La consecuencia práctica se ve en el
+código: en `CriterioDelTopico` **no hay una sola condición escrita en Java**.
+
+| | |
+|---|---|
+| El disparador | `Observation` **pasa a** `final` — `previous = status:not=final` + `current = status=final` + `requireBoth` |
+| Lo que viaja | `Bundle` `subscription-notification`: un `SubscriptionStatus` y, por cada hecho, `fullUrl` + `GET`. **Ni un valor** |
+| La firma | HMAC-SHA256 sobre `momento.cuerpo`; la clave, en la configuración. El recurso solo dice **cuál** |
+| El corte | 4 intentos con retroceso; agotados, la `Subscription` a `error` y deja de acumular |
+| El motivo | `SubscriptionStatus.error` por `$status` — **R5 quitó `Subscription.error`** |
+| Lo que se rechaza al escribir | `full-resource`, y un tópico que este servidor no publica |
+| Verificado | 7 tests contra un receptor HTTP de verdad + el receptor del `compose`, en vivo |
+
+**El ítem 45 — `triggeredBy`.** El elemento no existe en R4, y por eso en la práctica esto no se
+hacía: el informe enseñaba dos determinaciones y el clínico deducía la relación. Ahora la TSH
+alterada **ordena** la T4 libre —línea nueva con `intent = reflex-order`, en la misma transacción y
+sin duplicar si se reinforma— y el resultado sale enlazado con la frase dentro. Los otros dos códigos
+tienen su caso y no son el mismo: `repeat` apunta al tubo, `re-run` al analizador.
+
+| | |
+|---|---|
+| Dónde vive la regla | `catalogo-pruebas`: `prueba-refleja = #T4L` y `motivo-de-la-refleja` |
+| Quién decide qué | El catálogo, *qué* se añade; el dominio, *cuándo* (fuera del rango de referencia) |
+| Quién NO decide | El cliente: `reflex` declarado desde fuera es `422`. `repeat` y `re-run`, sí |
+| Cómo se lee | Con **palabras** en la web y en la app, nunca con un icono |
+
+**Verificado en local, no en GitHub.** Esta tanda termina sin push, así que ninguna CI ha corrido; se
+han reproducido a mano las que tocan. Backend: **231 tests, `BUILD SUCCESS`** (eran 208). Web: 94.
+App: 69, `flutter analyze` sin avisos. Simuladores: 128, `ruff` limpio. La guía y el circuito en
+vivo, en el bloque de cierre de este mismo apartado.
 
 ### Empieza el hito 3 — la terminología que faltaba (ítems 42 y 43, 2026-08-09)
 
@@ -2061,6 +2176,10 @@ contra la pila del `compose` levantada desde el clon limpio, no contra un doble.
 - **El `compose` no crece más sin perfiles.** Son once servicios contando los de arranque; el
   receptor de notificaciones y el simulador del SVEA harían trece. A partir de ahí se reparte con
   perfiles de `compose`, y no se quitan *healthchecks*.
+  *✅ Cumplido (2026-08-09, ítem 44):* el receptor entró con `profiles: ['notificaciones']`, que es el
+  primer perfil de este `compose`. Además de por el número, por lo que es: no es un componente del
+  laboratorio, es el sistema del hospital, y tenerlo siempre arriba daría a entender que el
+  laboratorio depende de que esté. El simulador del SVEA (ítem 48) entra igual.
 
 ---
 
@@ -2113,15 +2232,27 @@ contra la pila del `compose` levantada desde el clon limpio, no contra un doble.
 
 ### Lo que solo existe en R5
 
-- [ ] **44 — `SubscriptionTopic` + `Subscription` del resultado validado.**
+- [x] **44 — `SubscriptionTopic` + `Subscription` del resultado validado.** *(2026-08-09)*
   *Criterio:* un `SubscriptionTopic` publicado en la guía con el disparador «`Observation` pasa a
   `final`», una `Subscription` activa contra él y la entrega llegando a un receptor de pruebas. El
   `notification-event` lleva **referencias, no valores** (invariante 6). `$status` y `$events`
   responden, y una entrega fallida deja la `Subscription` en `error` con su motivo — no en silencio.
   *Trampa:* el modelo de R4 no vale (ver prerrequisitos). Y `payload` a `id-only`, nunca
   `full-resource`: un `full-resource` manda la historia por el canal.
+  *Hecho:* `SubscriptionTopic/resultado-validado` en la guía, con `queryCriteria.previous =
+  status:not=final` y `current = status=final` y `requireBoth` — el disparador es el **cambio** de
+  estado, no el estado, o cada reescritura posterior volvería a notificar lo ya contado. El backend lo
+  publica en su propio servidor desde una copia de la salida de SUSHI, y una puerta de `ci-ig` impide
+  que las dos se bifurquen. La notificación se anota en la transacción de la escritura
+  (`notificacion.evento`) y la entrega el relay, firmada con HMAC-SHA256 y una clave que **no está en
+  el recurso**. `full-resource` se rechaza al escribir la `Subscription`, y un tópico que el
+  laboratorio no publica también — en R4 eso último no se podía ni detectar. `$status` y `$events` se
+  implementan aquí porque **HAPI 8.10 no las trae** (comprobado por reflexión sobre su
+  `SubscriptionResourceProvider`, que solo expone `search`). Agotados los intentos, la `Subscription`
+  pasa a `error` y el motivo sale por `$status` en `SubscriptionStatus.error`, que es donde R5 lo puso.
+  Siete tests de integración contra un receptor HTTP de verdad, más el receptor del `compose`.
 
-- [ ] **45 — `Observation.triggeredBy`: reflejas, repeticiones y re-ejecuciones.**
+- [x] **45 — `Observation.triggeredBy`: reflejas, repeticiones y re-ejecuciones.** *(2026-08-09)*
   El elemento **es nuevo en R5** y es exactamente lo que hace falta: TSH alterado ⇒ T4 libre, y que
   el informe enseñe **por qué** existe esa segunda determinación.
   *Criterio:* el dominio decide la refleja con una regla del catálogo —no cableada—, la `Observation`
@@ -2129,6 +2260,15 @@ contra la pila del `compose` levantada desde el clon limpio, no contra un doble.
   palabras («derivada de un TSH alterado»), no con un icono. Los otros dos valores del elemento
   —`repeat` y `re-run`— con su caso: una repetición por muestra hemolizada y una re-ejecución por
   control de calidad fuera.
+  *Hecho:* la regla vive en `CodeSystem/catalogo-pruebas` (`prueba-refleja` y
+  `motivo-de-la-refleja`), se resuelve por `$lookup` con el puerto de dominio `ReglasReflejas`, y en
+  el caso de uso no hay ni un código de prueba escrito. Informar una TSH fuera de rango **ordena** la
+  línea de T4 libre con `intent = reflex-order`, en la misma transacción y de forma idempotente
+  contra el volante; el resultado que se informe contra ella sale con `triggeredBy` y con la frase
+  del catálogo dentro. `reflex` declarado por un cliente se rechaza con `422` — el protocolo es del
+  laboratorio—; `repeat` y `re-run` se aceptan, porque la hemólisis y el control de calidad solo los
+  ve quien repite. La web y la app enseñan la frase; el `Disparo` **no se puede construir sin
+  motivo**.
 
 ### Lo clínico que el hito 2 dejó a medias
 
@@ -2183,6 +2323,41 @@ contra la pila del `compose` levantada desde el clon limpio, no contra un doble.
 
 ## Notas / riesgos
 
+- **⚠️ HAPI 8.10 NO trae `$status` ni `$events` de `Subscription`.** Tiene el motor de suscripciones
+  entero —`SubscriptionTopicConfig`, `SubscriptionTopicDispatcher`, `R5NotificationStatusBuilder`— y
+  publica `$trigger-subscription`, pero de las dos operaciones que R5 define sobre `Subscription` no
+  hay ninguna: comprobado por reflexión sobre su `SubscriptionResourceProvider`, que solo expone
+  `search`. Están implementadas en `ProveedorDeSuscripcion`, y eso arrastra una consecuencia que
+  conviene ver: **`$events` obliga a guardar lo entregado**. Sin la tabla `notificacion.evento` la
+  operación no se podría contestar más que con una lista vacía.
+- **La entrega es «al menos una vez», como el bus.** Si el proceso se cae entre el `POST` al receptor
+  y el `UPDATE` de la fila, la notificación se vuelve a entregar. El receptor deduplica por
+  `eventNumber`, que es también lo que le permite detectar **lo que no llegó** — el simulador
+  `receptor/` lo hace y lo avisa. Intentar exactamente-una-vez exigiría una transacción distribuida
+  entre PostgreSQL y un tercero por HTTP, que es peor.
+- **`AnotarLasNotificaciones` busca las suscripciones activas en CADA escritura de la proyección.**
+  Con las que hay hoy es una consulta indexada y no se nota; con cientos, habría que cachearlas e
+  invalidarlas al escribir una `Subscription`, igual que ya se hace con los tópicos. No se ha hecho
+  todavía porque sería optimizar sin medir.
+- **`Subscription.filterBy` y `heartbeatPeriod` no están implementados**, y por eso el tópico **no
+  declara `canFilterBy`**: publicar un filtro que el servidor no aplica es peor que no ofrecerlo — el
+  suscriptor creería estar recibiendo un subconjunto. Cuando haga falta filtrar por paciente o por
+  prueba, se declara y se implementa a la vez.
+- **`$events` no pagina.** Devuelve todo el rango que se le pida, y con `maxCount` solo se acota lo
+  que sale por el canal, no lo que sale por la operación. Un receptor que estuvo caído un mes se
+  traería una respuesta enorme; hoy no hay ese volumen.
+- **⚠️ Con la seguridad encendida no se puede recorrer el circuito con `curl`, y es a propósito.** El
+  *password grant* está deshabilitado en los clientes públicos, así que el testigo de profesional sale
+  del navegador. Para las comprobaciones en vivo de esta tanda se usó un
+  `infra/compose/docker-compose.override.yml` —que **ya está en `.gitignore`**, precisamente para
+  esto— apagando `HISPALIS_SEGURIDAD` y el bus, y se retiró al terminar. Quien repita la comprobación
+  tiene que hacer lo mismo, y saber que lo que apaga no es lo que está comprobando.
+- **⚠️ En esta máquina los contenedores del `compose` reciben `SIGTERM` cuando no queda ningún proceso
+  de WSL vivo.** Se ve como `Exited (143)` unos segundos después de que termine la orden que los
+  levantó, y **no es un fallo del proyecto**: es cómo se recicla aquí la distribución de WSL. La
+  consecuencia práctica es que una comprobación en vivo repartida en varias órdenes encuentra la pila
+  caída a la mitad; hay que levantar, esperar y recorrer **dentro de una sola sesión**. Costó dos
+  intentos descubrirlo.
 - **⚠️ Recrear el contenedor de Keycloak NO reimporta el realm.** El realm vive en PostgreSQL, y
   `--import-realm` usa la estrategia `IGNORE_EXISTING`: al levantar dice
   *«Realm 'hispalis' already exists. Import skipped»* y sigue tan tranquilo. Medido al añadir el
