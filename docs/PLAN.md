@@ -188,7 +188,7 @@ aceptable bajo ninguna de las tres opciones. Si algún día se implementa (a), e
   suscriptores hubiera ese día. Y hace falta de todas formas: **`$events` no se puede contestar sin
   guardar lo entregado**.
 
-- **2026-08-09 — El secreto compartido NO va en `Subscription.parameter`.** Es donde lo mete la
+- **2026-08-09 — El secreto compartido NO va en `Subscription.parameter`** (`adr-0027`). Es donde lo mete la
   documentación habitual, en forma de cabecera `Authorization`, y es un error: `Subscription` es un
   recurso más de la API, así que la credencial queda legible para cualquiera con permiso de lectura
   sobre el tipo — y escrita en un historial de versiones que no se borra. El laboratorio **firma** el
