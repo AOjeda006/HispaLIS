@@ -286,6 +286,12 @@ services:
       # (`:4200`) y el motor por la red interna (`backend:8080`), así que el `aud` legítimo de un
       # testigo es uno u otro según quién lo pidiera. Fuera de una pila de desarrollo hay una sola.
       HISPALIS_OIDC_AUDIENCIAS: 'http://localhost:4200/fhir,http://localhost:8080/fhir,http://backend:8080/fhir'
+      # La base por la que el receptor de una notificación puede resolver sus referencias. No se
+      # deduce de la petición porque el relay no atiende ninguna: entrega desde un hilo de fondo.
+      HISPALIS_BASE_FHIR: 'http://localhost:8080/fhir'
+      # El secreto con el que se FIRMA la notificación saliente. Nunca va dentro del recurso
+      # `Subscription`, que se lee por la API: ahí solo va el identificador de la clave.
+      HISPALIS_CLAVE_HIS: ${HISPALIS_CLAVE_HIS:-}
     ports:
       # Se publica aunque la web no lo necesite —le llega por el proxy—, porque el circuito se
       # recorre con `curl` y el validador oficial también entra por aquí.
@@ -410,6 +416,30 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+
+  # ─── Receptor de notificaciones (ítem 44) ──────────────────────────────────
+  #
+  # ⚠️ Va DETRÁS DE UN PERFIL, y es la primera vez que este `compose` usa uno. Con este servicio la
+  # pila llegaría a doce, y el prerrequisito del hito 3 dice que a partir de once se reparte con
+  # perfiles en vez de seguir creciendo. Se levanta a propósito:
+  #
+  #   docker compose --profile notificaciones up -d receptor
+  #
+  # Además es lo correcto por otra razón: este NO es un componente del laboratorio. Es el sistema
+  # del hospital, y tenerlo levantado siempre daría a entender que el laboratorio depende de que
+  # esté — y no depende: si no está, la notificación se reintenta y la suscripción se corta.
+  receptor:
+    profiles: ['notificaciones']
+    build:
+      context: ../..
+      dockerfile: simuladores/Dockerfile
+    environment:
+      # Sin clave el receptor no arranca: aceptar sin firma es aceptar de cualquiera. Es la MISMA
+      # que el backend tiene en `HISPALIS_CLAVE_HIS`, porque eso es un secreto compartido.
+      HISPALIS_CLAVE_HIS: ${HISPALIS_CLAVE_HIS:?falta HISPALIS_CLAVE_HIS — copia infra/compose/.env.example a .env}
+    ports:
+      # Se publica para poder mirar el log y para probarlo con `curl` desde el equipo.
+      - '8090:8090'
 
 volumes:
   # El almacén PKCS#12 del listener MLLP, generado al levantar y nunca versionado.

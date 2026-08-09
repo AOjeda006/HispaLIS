@@ -10,10 +10,14 @@ on:
     branches: [main]
     paths:
       - 'ig/**'
+      # El backend lleva una copia del `SubscriptionTopic` que la guía publica, y este workflow es
+      # el único que puede comprobar que no ha divergido: es el único que compila el FSH.
+      - 'backend/src/main/resources/conformidad/**'
       - '.github/workflows/ci-ig.yml'
   pull_request:
     paths:
       - 'ig/**'
+      - 'backend/src/main/resources/conformidad/**'
       - '.github/workflows/ci-ig.yml'
   workflow_dispatch:
 
@@ -113,6 +117,33 @@ jobs:
               sys.exit(1)
 
           print(f"Los {len(perfiles)} perfiles tienen al menos un ejemplo.")
+          PY
+
+      # El backend NO se construye con la guía delante —son dos módulos y dos CI—, así que para
+      # publicar el tópico en su propio servidor lleva dentro una copia del que produce SUSHI. La
+      # alternativa era escribir el disparador otra vez en Java, es decir, tener la misma regla en
+      # dos sitios que se pueden contradecir sin que nada avise. Contra una copia sí se puede avisar,
+      # y es lo que hace este paso: si divergen, la CI falla y dice cuál hay que actualizar.
+      - name: Comprobar que la copia del tópico no ha divergido de la guía
+        run: |
+          python3 - <<'PY'
+          import json, sys
+
+          DE_LA_GUIA = "ig/fsh-generated/resources/SubscriptionTopic-resultado-validado.json"
+          DEL_BACKEND = "backend/src/main/resources/conformidad/SubscriptionTopic-resultado-validado.json"
+
+          def leer(ruta):
+              with open(ruta, encoding="utf-8") as f:
+                  return json.load(f)
+
+          if leer(DE_LA_GUIA) != leer(DEL_BACKEND):
+              print(f"::error file={DEL_BACKEND}::La copia del tópico que usa el backend ya no es la que "
+                    f"publica la guía. El criterio de una suscripción quedaría diciendo una cosa en la "
+                    f"documentación y haciendo otra en el servidor. Cópialo otra vez: "
+                    f"cp {DE_LA_GUIA} {DEL_BACKEND}")
+              sys.exit(1)
+
+          print("La copia del tópico del backend es idéntica a la que publica la guía.")
           PY
 
       # Los ejemplos se escriben en FSH, así que lo que hay que validar es lo que SUSHI genera, no
