@@ -41,6 +41,17 @@ class ReleaseDeLoincInvalidaError(RuntimeError):
     """La release archivada no está donde se dijo, o no se puede saber qué versión es."""
 
 
+def esta_archivada(raiz: Path) -> bool:
+    """Dice si la release está donde se dijo, sin abrirla ni leerla.
+
+    Es la pregunta que separa las dos situaciones que **no** se pueden confundir: que la release no
+    esté —la biblioteca es una carpeta hermana, no una dependencia, y en una CI no está— y que esté
+    pero le falte algo. La primera se avisa y se sigue; la segunda es un fallo. Sin esta pregunta
+    las dos llegan como la misma excepción y hay que elegir entre morir siempre o callar siempre.
+    """
+    return (raiz / _TABLA).is_file()
+
+
 def version_de(raiz: Path) -> str:
     """La versión de la release, deducida de cómo está archivada.
 

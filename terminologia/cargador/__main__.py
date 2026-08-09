@@ -61,27 +61,48 @@ def _todo_lo_que_hay_que_cargar(curado: Curado, opciones: argparse.Namespace) ->
     El orden no lo exige la integridad referencial —está apagada— sino la expansión: un `ValueSet`
     que enumera códigos SNOMED se pre-expande al subirlo, y si el `CodeSystem` todavía no está, se
     pre-expande vacío.
+
+    **Ninguna de las tres externas se da por presente.** Viven fuera del repositorio —dos en la
+    biblioteca, que es una carpeta hermana, y la del Ministerio en ningún sitio que se pueda
+    publicar—, así que hay entornos legítimos donde no están: una CI, o un clon recién hecho. Si
+    falta una, se avisa **listando lo que se queda sin resolver** y se carga lo demás; morir dejaría
+    el servidor vacío, y un servidor de terminología vacío contesta que no a todo. Lo que sí es un
+    fallo es una release **presente y rota**: eso no se ignora.
     """
     recursos: list[dict] = []
 
-    recursos.append(loinc.codesystem_de(Path(opciones.loinc), curado.loinc))
-    recursos.extend(tho.codesystems_de(Path(opciones.tho), curado.sistemas_hl7))
-    LOG.info(
-        "HL7 Terminology %s — %d sistemas", tho.version_de(Path(opciones.tho)), len(recursos) - 1
-    )
+    if loinc.esta_archivada(Path(opciones.loinc)):
+        recursos.append(loinc.codesystem_de(Path(opciones.loinc), curado.loinc))
+    elif curado.loinc:
+        _falta_una_release("LOINC", VARIABLES["loinc"], curado.loinc, "`$translate` a LOINC")
+
+    if tho.esta_archivado(Path(opciones.tho)):
+        sistemas = tho.codesystems_de(Path(opciones.tho), curado.sistemas_hl7)
+        recursos.extend(sistemas)
+        LOG.info(
+            "HL7 Terminology %s — %d sistemas",
+            tho.version_de(Path(opciones.tho)),
+            len(sistemas),
+        )
+    elif curado.sistemas_hl7:
+        _falta_una_release(
+            "HL7 Terminology", VARIABLES["tho"], curado.sistemas_hl7, "los sistemas v2 y v3"
+        )
 
     if opciones.snomed:
         recursos.append(snomed.codesystem_de(Path(opciones.snomed), curado.snomed))
     elif curado.snomed:
         # No es un aviso decorativo: sin la Edición Española, `$lookup` de un tipo de muestra no
         # devuelve término y `$validate-code` sobre `tipos-muestra` dice que no a códigos buenos.
-        LOG.warning(
-            "SNOMED CT NO se carga: falta %s. La guía referencia %d conceptos (%s) y el servidor "
-            "no podrá resolverlos. La Edición Española es gratuita en España previo registro ante "
-            "el SNS, pero NO se puede redistribuir: descárgala y apunta la variable a la release.",
+        _falta_una_release(
+            "SNOMED CT",
             VARIABLES["snomed"],
-            len(curado.snomed),
-            ", ".join(curado.snomed[:3]) + ("…" if len(curado.snomed) > 3 else ""),
+            curado.snomed,
+            "`$lookup` de los tipos de muestra y los motivos de rechazo",
+            detalle=(
+                "La Edición Española es gratuita en España previo registro ante el SNS, pero NO se "
+                "puede redistribuir: descárgala y apunta la variable a la release."
+            ),
         )
 
     # Los propios, ordenados por tipo: los sistemas antes que los conjuntos que los enumeran y que
@@ -89,6 +110,30 @@ def _todo_lo_que_hay_que_cargar(curado: Curado, opciones: argparse.Namespace) ->
     orden = {"CodeSystem": 0, "ValueSet": 1, "ConceptMap": 2}
     recursos.extend(sorted(curado.propios, key=lambda recurso: orden[recurso["resourceType"]]))
     return recursos
+
+
+def _falta_una_release(
+    nombre: str,
+    variable: str,
+    referenciados: tuple[str, ...],
+    consecuencia: str,
+    detalle: str = "",
+) -> None:
+    """Avisa de que una terminología externa no se carga, y de qué deja de funcionar por ello.
+
+    El aviso **enumera** —no cuenta— lo primero que se queda sin resolver. Un «faltan 21 conceptos»
+    no le dice a nadie si lo que falta le afecta; tres códigos concretos, sí.
+    """
+    LOG.warning(
+        "%s NO se carga: falta %s. La guía referencia %d códigos (%s) y el servidor no podrá "
+        "resolverlos, así que se pierde %s.%s",
+        nombre,
+        variable,
+        len(referenciados),
+        ", ".join(referenciados[:3]) + ("…" if len(referenciados) > 3 else ""),
+        consecuencia,
+        f" {detalle}" if detalle else "",
+    )
 
 
 def _esperar_al_servidor(servidor: str, segundos: int) -> None:

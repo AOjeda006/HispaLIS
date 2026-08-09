@@ -22,6 +22,14 @@ class PaqueteDeThoInvalidoError(RuntimeError):
     """El paquete no está donde se dijo, o no es el que se cree."""
 
 
+def esta_archivado(paquete: Path) -> bool:
+    """Dice si el paquete está donde se dijo, sin abrirlo.
+
+    La misma distinción que en LOINC: ausente se avisa, presente y roto se falla.
+    """
+    return paquete.is_file()
+
+
 def version_de(paquete: Path) -> str:
     """La versión que el propio paquete declara en su `package.json`.
 
