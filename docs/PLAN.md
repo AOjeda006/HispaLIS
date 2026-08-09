@@ -2309,12 +2309,17 @@ contra la pila del `compose` levantada desde el clon limpio, no contra un doble.
   versiones mayores, así que la dependencia está acotada (`faker>=40,<41`). Subir de mayor cambiará
   la salida con la misma semilla; no es un fallo, pero hay que saberlo antes de investigar por qué
   un volcado ya no coincide.
-- **La IG propia es trabajo real:** nueve perfiles más terminología, sin US Core ni IPS de donde tirar.
-  Es el ítem que más fácilmente se subestima.
-- **Sin la red de seguridad de Mirth** (D11): almacén de mensajes, reintentos y consola de reproceso
-  hay que construirlos — el almacén está (**ítem 22**), los reintentos y la consola **no** (ítem 25).
-  Con D22 tomada dejan de ser una red de seguridad opcional: son lo que sostiene la atomicidad del
-  `OML^O21`.
+- **La IG propia es trabajo real:** **diez** perfiles más terminología, sin US Core ni IPS de donde
+  tirar. Es el ítem que más fácilmente se subestima — y el que más fácilmente se queda atrás: el hito
+  2 entero pasó sin tocarla mientras el sistema cambiaba de contrato debajo. Eso ya no puede volver a
+  pasar en silencio: lo vigila `ConformidadFhirTest`.
+- ~~**Sin la red de seguridad de Mirth** (D11): almacén de mensajes, reintentos y consola de
+  reproceso hay que construirlos.~~ — **cerrada**: el almacén en el ítem 22 y la DLQ con su reproceso
+  idempotente en el ítem 25. Con D22 tomada no eran una red de seguridad opcional sino lo que sostiene
+  la atomicidad del `OML^O21`, y se comprobó recorriéndolo: el mensaje que referencia un facultativo
+  que no existe acaba en la bandeja, y el reproceso lo aplica entero tras el alta. Lo que sigue
+  abierto de la consola es que **no se publica fuera de la red del `compose`**, porque no tiene
+  autenticación.
 - **Un servicio con esquema propio no puede poner su tabla de control de Flyway en `public`.** Si
   comparte instancia con otro que sí escribe ahí —y el laboratorio lo hace, por HAPI JPA—, Flyway
   encuentra un esquema no vacío sin historial y **se niega a arrancar**. Descubierto al levantar el
