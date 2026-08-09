@@ -112,6 +112,26 @@ def construir_analizador() -> argparse.ArgumentParser:
     )
     analizador.add_argument("--puerto-escucha", type=int, default=PUERTO_DE_ESCUCHA_POR_DEFECTO)
     analizador.add_argument(
+        "--certificado",
+        default="",
+        help=(
+            "Certificado PEM con el que se cifra la escucha. El motor devuelve el `ORU^R01` "
+            "sobre TLS, así que sin esto el envío no llega. Un par válido sale de: openssl req "
+            "-x509 -newkey rsa:2048 -keyout clave.pem -out cert.pem -days 1 -nodes "
+            "-subj /CN=localhost"
+        ),
+    )
+    analizador.add_argument("--clave", default="", help="La clave privada PEM del certificado.")
+    analizador.add_argument(
+        "--interfaz-escucha",
+        default="localhost",
+        help=(
+            "En qué interfaz se escucha. `localhost` deja fuera al motor cuando corre en un "
+            "contenedor: llega por la puerta de enlace del anfitrión, que no es 127.0.0.1. Para "
+            "recibir desde el `compose`, «0.0.0.0»."
+        ),
+    )
+    analizador.add_argument(
         "--acuse",
         choices=["AA", "AE", "AR"],
         default="AA",
@@ -131,11 +151,23 @@ def escuchar(opciones: argparse.Namespace) -> int:
 
     Se queda en claro a propósito cuando no se le da certificado: el plano de sistemas va cifrado
     (D4), pero un HIS de juguete no tiene PKI, y exigirle una haría imposible la prueba manual.
+
+    Con `--certificado` y `--clave` sí cifra, que es lo que hace falta para ejercitar el camino de
+    verdad: el motor manda el `ORU^R01` de vuelta con `tls: true`. El par va en **PEM** y no en el
+    PKCS#12 que genera `motor-claves`; que sean dos formatos distintos para el mismo certificado es
+    lo que tenía este camino sin probar (`adr-0022`).
     """
     with ServidorDelHis(
-        Escucha(puerto=opciones.puerto_escucha), codigo_de_acuse=opciones.acuse
+        Escucha(
+            puerto=opciones.puerto_escucha,
+            interfaz=opciones.interfaz_escucha,
+            certificado=opciones.certificado,
+            clave=opciones.clave,
+        ),
+        codigo_de_acuse=opciones.acuse,
     ) as servidor:
-        print(f"HIS escuchando en el puerto {servidor.puerto}; acusa {opciones.acuse}.")
+        cifrado = "TLS" if opciones.certificado and opciones.clave else "EN CLARO"
+        print(f"HIS escuchando en el puerto {servidor.puerto} ({cifrado}); acusa {opciones.acuse}.")
         try:
             recibidos = servidor.esperar(opciones.cuantos, tiempo_max=opciones.espera)
         except TimeoutError as fallo:

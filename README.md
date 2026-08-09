@@ -121,6 +121,23 @@ Fuera del `compose` se quedan **solo los terceros**: el HIS y el analizador simu
 - **Motor de integración:** `localhost:2575` (MLLP sobre TLS). Su consola **no se publica**: todavía
   no tiene autenticación, y una bandeja de errores con referencias a pacientes no se abre al equipo.
 
+### Sembrar el directorio de facultativos
+
+Antes de que el HIS pueda mandar una petición, **los facultativos que la firman tienen que estar en
+el directorio del laboratorio**. Un `OML^O21` dice quién pide en `ORC-12`, el motor lo traduce a
+`ServiceRequest.requester` y, si ese facultativo no existe, la API rechaza la petición y el mensaje
+acaba en la bandeja de errores del motor — que es la conducta correcta.
+
+```bash
+infra/fhir/sembrar-facultativos.sh
+```
+
+Es un guion y no un permiso más del motor **a propósito**: dejarle crear facultativos lo convertiría
+en autoridad sobre un directorio que solo conoce de oídas, y un número de colegiado mal tecleado en
+el HIS crearía un facultativo fantasma. Lo siembra un **profesional**, que es quien mantiene el
+directorio en un laboratorio de verdad. Quién entra está en `infra/fhir/facultativos.json`, y
+volver a ejecutarlo no duplica nada.
+
 ### Vincular una identidad con su historia
 
 Antes de que la app del ciudadano pueda enseñar nada, la persona que se identifica tiene que estar

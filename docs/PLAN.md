@@ -165,6 +165,41 @@ aceptable bajo ninguna de las tres opciones. Si algún día se implementa (a), e
 - **La ventana de huérfano se documenta en la IG**, no se esconde: un `ServiceRequest` sin `Specimen`
   es un estado transitorio legítimo del sistema mientras el reproceso no ha corrido.
 
+### Decisiones tomadas al cerrar lo que el hito 2 dejó abierto (prompt 14)
+
+- **2026-08-09 — Los facultativos peticionarios entran como dato maestro sembrado aparte, y el motor
+  no gana ningún permiso.** *Decidido por el usuario* tras plantearle las tres salidas. Con Keycloak
+  delante, el `OML^O21` daba `AE`: referencia `Practitioner/COL12345` y ese recurso no existía. Las
+  opciones eran (a) sembrarlo aparte, (b) darle al motor un `system/Practitioner.cus` para que lo
+  creara la primera vez que lo viera, y (c) además de sembrar, que el motor lo buscara por
+  `identifier` en vez de por id lógico.
+  **Elegida (a).** Dejarle crear facultativos convertiría al motor en autoridad sobre un directorio
+  que solo conoce de oídas: un número de colegiado mal tecleado en el HIS crearía un facultativo
+  fantasma que ya no se deshace sin borrar. Es además lo que el doc-comment del transformador ya
+  prometía —«el motor no da de alta profesionales por su cuenta»—, así que el motor no se toca.
+  *Cómo se hizo:* `infra/fhir/sembrar-facultativos.sh` más `infra/fhir/facultativos.json`, con el
+  testigo de un **profesional** —que es quien mantiene el directorio en un laboratorio de verdad— y
+  un `PUT` con id elegido. El `PUT` obliga a un scope nuevo, `user/Practitioner.u`: el HIS nombra al
+  peticionario por su número de colegiado, así que ese número **es** el id lógico, y `.c` es crear,
+  donde el id lo pone el servidor.
+  *Lo que queda como deuda, y es la opción (c):* usar el número de colegiado como id lógico conflaciona
+  un identificador con un id. Lo correcto en FHIR es que el motor busque
+  `Practitioner?identifier=<colegio>|COL12345` y referencie el UUID que devuelva el servidor. Toca el
+  transformador, sus tests y el ejemplo de la guía; anotado para el hito 3.
+
+- **2026-08-09 — `Provenance` lleva perfil propio, y la decisión del ítem 18 se corrige.** Entonces se
+  preguntó «¿hay una restricción de negocio que justifique el décimo perfil?» y se respondió que no.
+  La pregunta buena es «¿es contrato publicado que un cliente no pueda deducir?». Lo es. Y hay un
+  segundo motivo que no existía entonces: con la comprobación de divergencia
+  (`ConformidadFhirTest`), un tipo gobernado sin perfil obligaría a una **lista de excepciones**, que
+  es exactamente el sitio donde estas cosas se esconden. Un perfil de más es deuda; una exención, dos.
+
+- **2026-08-09 — Los verbos heredados se cierran con un interceptor, no verbo a verbo en cada
+  proveedor.** Regla 3 de `adr-0014`. La alternativa eran cuarenta y dos sobreescrituras repartidas
+  por seis clases, que es un sitio estupendo donde olvidarse de una. El interceptor va **detrás** del
+  de autorización (orden 210): «no tienes permiso» tiene que ganar a «este verbo no se admite aquí»,
+  porque lo segundo le cuenta a un no autorizado lo que el servidor sabe hacer.
+
 ### Decisiones tomadas en los huecos de dominio (ítems 17–19)
 
 - **2026-08-06 — El motivo de la anulación va en `ServiceRequest.note`, no en `statusReason`.**
@@ -870,6 +905,61 @@ Levantarla de verdad destapó **tres fallos que ningún test habría visto**, lo
 3. **La vinculación con `kcadm` no fallaba: mentía.** Decía «queda vinculado» y dejaba los atributos
    vacíos. Va contra la API de administración, comprueba el `204` y **lee de vuelta** lo que escribió.
 
+### Lo que el hito 2 dejó abierto, cerrado (prompt 14, 2026-08-09)
+
+Esta tanda no añade funcionalidad del hito 3: cierra cinco cosas que una revisión del repositorio
+encontró abiertas. **Las cinco están cerradas**, y por el camino aparecieron cuatro fallos que
+ningún test veía.
+
+1. **`ci-simuladores` estaba en rojo** desde el ítem 33 y ahora está **en verde en GitHub**
+   (`d2c8ee3`). El paso «Generar un corpus sintético» moría con código 3: desde ese ítem el
+   generador pregunta el catálogo al servidor de terminología y en ese trabajo no había ninguno. El
+   trabajo levanta ahora `terminologia` y su cargador **del propio `compose`** —el invariante queda
+   intacto: la misma terminología que el sistema, no una lista paralela—. Para que eso fuera posible,
+   **las tres terminologías externas dejan de ser obligatorias**: LOINC y THO se tratan como SNOMED,
+   que se avisa y se sigue. Y con ello corren por primera vez los dos pasos que nunca habían llegado
+   a ejecutarse: la generación del corpus y su validación con el validador oficial.
+2. **La guía volvió a describir el sistema.** `git log 1859fa0..HEAD -- ig/` estaba vacío: el hito 2
+   entero pasó sin tocarla. Ahora cuenta la validación facultativa, la anulación de línea, que no hay
+   `transaction`, la ventana de huérfano que D22 prometió documentar, cómo se autoriza, y `Provenance`
+   tiene perfil y ejemplo.
+3. **La divergencia ya no puede repetirse en silencio.** `ConformidadFhirTest` cruza el
+   `CapabilityStatement` que sirve el servidor contra los perfiles de la guía, sobre el conjunto de
+   tipos que el laboratorio **gobierna** —deducido de los proveedores propios—, y rompe el build.
+4. **Las puertas de escritura heredadas están cerradas.** Ver la nota tachada: eran siete, no cinco.
+5. **El circuito v2 se recorre entero contra el `compose` con seguridad**, que es lo que el hito 2 no
+   llegó a hacer.
+
+**Los cuatro fallos que solo se ven en vivo:**
+
+- **`count=0` en un `$expand` de HAPI aborta la operación** en vez de devolver el total, y solo
+  mientras el `ValueSet` no está pre-expandido. En local pasaba porque el volumen venía de una
+  ejecución anterior. `adr-0026`.
+- **`$validar` no podía ejecutarse con la seguridad puesta, desde el ítem 18.** La operación escribe
+  **también un `Provenance`**, y autorizar la operación no autoriza lo que escribe: el interceptor lo
+  comprueba en `STORAGE_PRESTORAGE_RESOURCE_CREATED`. No lo veía nadie porque los tests de integración
+  apagan la seguridad y **ningún cliente la llama todavía**.
+- **Una descripción de más de 255 caracteres en el realm impide que Keycloak arranque**, y el
+  importador no valida nada al leer el JSON.
+- **Recrear el contenedor de Keycloak no reimporta el realm:** vive en PostgreSQL y la estrategia es
+  `IGNORE_EXISTING`.
+
+**La transcripción del circuito v2, contra la pila con Keycloak, el motor y el laboratorio de verdad:**
+
+| Paso | Qué se mandó | Qué contestó |
+|---|---|---|
+| 1 | `ADT^A01`, NHC 70000001 | `MSA\|AA` · `Patient` con `Begoña María MUÑOZ DE LA TORRE` |
+| 2 | `OML^O21` **sin sembrar** | `MSA\|AE` · `HAPI-1094: Resource Practitioner/COL12345 not found` |
+| 3 | `infra/fhir/sembrar-facultativos.sh` | `201`, `201`; al repetirlo, `200`, `200` — idempotente |
+| 4 | `OML^O21` | `MSA\|AA` · 3 `ServiceRequest` + 1 `Specimen` |
+| 5 | `ORU^R01` del analizador | `MSA\|AA` · 3 `Observation` en `preliminary` |
+| 6 | `$validar` ×3 | `200` · `status=final` y un `ProcedenciaValidacion` con `agent.type=verifier` |
+| 7 | `POST DiagnosticReport` | `201` |
+| 8 | **`ORU^R01` saliente** | Recibido por el HIS **sobre TLS**, con `MSH-18 = 8859/1`, `MUÑOZ DE LA TORRE` intacto y doble codificación `LN` + `99HISPALIS` |
+
+Y el bus, con el circuito entero recorrido: **0 filas** del `outbox` casan contra
+`(MUÑOZ|TORRE|Begoña|12345678Z)`, con los seis tipos de hecho publicados.
+
 ### Los criterios del hito 2, uno a uno
 
 Cada fila es un ítem del checklist con **la prueba concreta** de que se cumple. «En vivo» significa
@@ -886,30 +976,15 @@ contra la pila del `compose` levantada desde el clon limpio, no contra un doble.
 | 23 | Listener MLLP sobre TLS, con acuses y charset | **En vivo:** `MSA\|AA` desde el `compose`, con `MSH-18 = 8859/1` de ida y de vuelta, sobre el certificado que genera `motor-claves` al levantar |
 | 24 | `ADT^A01`/`A08` → `Patient` por la API FHIR | **En vivo:** `Begoña María MUÑOZ DE LA TORRE`, y la `Ñ` comprobada **por punto de código** (`0xd1`), no por cómo se ve en una consola |
 | 25 | DLQ y reproceso idempotente | `GET /motor/dlq` y `POST /motor/dlq/{id}/reproceso` sobre las filas `RECHAZADO`; nunca devuelve el mensaje v2 |
-> **Lo que queda sin verificar, al cerrar el hito 2:**
+> **Lo que queda sin verificar, tras el prompt 14:**
 >
-> - ⚠️ **El circuito v2 completo NO se ha cerrado contra la pila con seguridad.** La primera mitad
->   sí: `ADT^A01` entra por MLLP/TLS, el motor se identifica con su clave y el `Patient` aparece con
->   la `Ñ` intacta. El `OML^O21` se queda en `AE`: el `ServiceRequest` referencia
->   `Practitioner/COL12345` y **ese recurso no existe ni se puede crear**. `user/Practitioner.c` es
->   *crear*, no *actualizar*, así que un `PUT` con id elegido devuelve `403` — que es el
->   comportamiento correcto del ítem 35—, y el motor solo tiene `system/` de los cinco tipos que
->   escribe. Es un hueco **de diseño del camino de alta**, no un fallo: falta decidir quién da de
->   alta a los facultativos peticionarios y con qué permiso. Hasta el ítem 36 el circuito se recorría
->   con el backend sin seguridad y por eso no se había visto. Primer candidato del hito 3.
-> - **Los seis workflows no han corrido en GitHub.** Esta tanda es `commit` sin push. Se ejercitaron
->   en local con la misma orden que corren ellos, pero la CI no los ha visto — y el backend descarga
->   de un repositorio que no es Central (Confluent), que sigue siendo el riesgo anotado.
 > - **La app del ciudadano no se ha ejecutado en un dispositivo.** `flutter analyze` y `flutter test`
->   pasan, y el flujo SMART se recorrió **con las mismas peticiones que hace la app** contra el
->   Keycloak del `compose`, pero nadie ha visto la pantalla en un emulador ni en un móvil. La trampa
->   del `10.0.2.2` está resuelta en el código y **no está comprobada en un emulador de verdad**.
+>   pasan, y el flujo SMART se recorrió con las mismas peticiones que hace la app contra el Keycloak
+>   del `compose`, pero nadie ha visto la pantalla en un emulador ni en un móvil. La trampa del
+>   `10.0.2.2` está resuelta en el código y **no está comprobada en un emulador de verdad**.
 > - **`flutter build apk` y `flutter build web` no se han ejecutado.** La CI hace `analyze` y `test`;
 >   un fallo que solo aparezca al empaquetar —el manifiesto, el `network_security_config`— no lo
 >   vería ninguno de los dos.
-> - **El `ORU^R01` saliente sigue sin ejercitarse sobre TLS a mano.** El camino del emisor lo cubre
->   `NotificadorAlHisTest`, que levanta un HIS con certificado; lo que no se ha hecho es el receptor
->   Python con TLS, porque necesita un par PEM y lo que se genera es un PKCS#12 (`adr-0022`).
 > - **Los tres códigos SNOMED del SNS siguen fuera** (ítem 42 del hito 3). Bloqueo de datos, no de
 >   trabajo: la Edición Española no se redistribuye y no está en este equipo.
 > - **`Observation.device` sigue vacío.** El identificador del aparato llega en `OBX-18` y no se
@@ -921,8 +996,14 @@ contra la pila del `compose` levantada desde el clon limpio, no contra un doble.
 >   compatibilidad la toma el mismo comprobador que el servidor, pero el camino HTTP no se ha
 >   ejercitado.
 > - **La consola del motor (8082) no tiene autenticación**, y por eso **no se publica** fuera de la
->   red del `compose`. Es una decisión consciente, no un olvido: una bandeja de errores con
->   referencias a pacientes no se abre al equipo.
+>   red del `compose`. Es una decisión consciente, no un olvido.
+> - **Ningún cliente llama a `$validar` ni emite informes.** La operación funciona y ahora también
+>   con la seguridad puesta, pero **la web no tiene pantalla de validación ni de emisión de
+>   informe**: los dos scopes que hacen falta (`user/Observation.u` y `user/DiagnosticReport.c`)
+>   existen en el realm y son **opcionales**, y la web no los pide. El circuito completo solo lo
+>   recorre hoy un guion. Es trabajo de pantalla, no de contrato.
+> - **El contador `MSH-10` de los acuses del motor es efímero** (ver *Notas / riesgos*): el
+>   contenedor no tiene volumen para el `id_file` de HAPI.
 
 ---
 
@@ -1379,14 +1460,18 @@ contra la pila del `compose` levantada desde el clon limpio, no contra un doble.
   *Consecuencia que hay que asumir:* el circuito del hito 1 gana un paso. `CircuitoCompletoTest` y el
   guion de verificación del `compose` se actualizan **en el mismo commit**, o el informe deja de
   emitirse.
-  *Nota:* `Provenance` no está entre los nueve perfiles de §6.5 y **no se le escribe uno** salvo que
-  aparezca una restricción de negocio que justifique el décimo; §6.1 lo lista como recurso aparte.
+  *Nota (revisada el 2026-08-09):* aquí se escribió que `Provenance` **no** necesitaba perfil salvo
+  que apareciera una restricción de negocio que justificase el décimo. **La pregunta era la
+  equivocada.** La buena no es «¿hay una restricción de negocio?» sino «¿es contrato publicado que un
+  cliente no pueda deducir?», y lo es: el recurso base admite siete tipos de agente y aquí
+  `agent.type` es siempre `verifier`, `target` apunta a un `ResultadoLab` y solo a uno, y `recorded`
+  está siempre. Nada de eso se descubre sin probar. El décimo perfil existe desde `d140924`.
   *Hecho (2026-08-06):* rojo `80b9ebf`, verde `23bbdab`. Objeto de valor `Validacion`, estado
   **derivado** (`EstadoDeResultado`, sin columna propia), migración `V8`, operación
   `POST /fhir/Observation/{id}/$validar`, `TraductorDeProcedencia` con id **derivado** del resultado
   —para que el reconciliador del ítem 31 regenere sin duplicar firmas— y `ProveedorDeProcedencia`,
   que cierra `create` y `update` de `Provenance`. El circuito ganó su paso y vuelca la procedencia
-  para el validador oficial. Se confirmó que **no hace falta perfil**: no se ha añadido el décimo.
+  para el validador oficial. Lo del perfil se corrigió en el prompt 14: ver la nota revisada arriba.
   *Lo que se decidió NO hacer ahora:* la **doble validación del resultado crítico** de §10. Ver
   *Decisiones tomadas en los huecos de dominio*.
 
@@ -2007,6 +2092,28 @@ contra la pila del `compose` levantada desde el clon limpio, no contra un doble.
 
 ## Notas / riesgos
 
+- **⚠️ Recrear el contenedor de Keycloak NO reimporta el realm.** El realm vive en PostgreSQL, y
+  `--import-realm` usa la estrategia `IGNORE_EXISTING`: al levantar dice
+  *«Realm 'hispalis' already exists. Import skipped»* y sigue tan tranquilo. Medido al añadir el
+  scope `user/Practitioner.u`: el `compose` arrancaba en verde, el realm era el viejo, y el síntoma
+  era un `403` que no cuadraba con lo que decía el fichero. **Para que un cambio del realm entre hace
+  falta `down -v`**, o borrar el realm a mano. Es la misma familia de trampa que la del volumen de
+  terminología (`adr-0026`): configuración como código que no se aplica porque hay estado debajo.
+- **⚠️ Una descripción de más de 255 caracteres en el realm impide que Keycloak arranque.**
+  `CLIENT_SCOPE.DESCRIPTION` es `varchar(255)` y el importador **no valida nada al leer el JSON**:
+  falla al escribir, con `ERROR: value too long for type character varying(255)` enterrado en un
+  `could not execute batch`, y el servidor no levanta. El fichero del realm es válido, el `compose`
+  parece bien y lo que se rompe es la pila entera, porque todo depende de que Keycloak esté sano.
+  Medido al documentar `user/Practitioner.u` con la explicación larga que merecía. Las explicaciones
+  largas van en el `PLAN` o en el guion, no en el realm.
+- **El profesional puede ahora actualizar el directorio de facultativos** (`user/Practitioner.u`,
+  ítem del prompt 14). Hacía falta para sembrarlo con `PUT` e id elegido, y es un permiso con más
+  alcance del que suena: con él se puede reescribir el nombre o el colegio de cualquier facultativo,
+  incluido el que firma informes. Está concedido al cliente de la web como *scope* **opcional**, así
+  que solo lo lleva quien lo pide; la web no lo pide en su flujo normal.
+- **`count=0` en un `$expand` de HAPI aborta la operación**, y solo mientras el `ValueSet` está sin
+  pre-expandir: contra un servidor con el volumen de una ejecución anterior la misma llamada
+  funciona. Costó una CI en rojo que en local pasaba. `adr-0026`.
 - **El backend depende ahora de un repositorio Maven que no es Central.** Las serdes de Avro contra
   el registro de esquemas las publica **solo** Confluent (`packages.confluent.io`), así que
   `backend/pom.xml` declara ese repositorio. Es la única dependencia externa a Central de todo el
@@ -2030,10 +2137,9 @@ contra la pila del `compose` levantada desde el clon limpio, no contra un doble.
   la anuncia y la API queda sin filtro **sin un solo error**. Se detectó porque un test pedía sin
   testigo y esperaba `401`. Está arreglado y escrito en ADR-0020, pero **cualquier regla nueva que se
   añada con una cadena vuelve a caer en lo mismo**.
-- **El realm apunta el JWKS del motor a `http://motor:8082/motor/jwks.json`, y el motor no está en el
-  `compose`.** Hasta el ítem 41 esa URL no resuelve desde el contenedor de Keycloak, y el canje del
-  motor devolverá `invalid_client`. Con el motor en local hay que cambiarla a
-  `http://host.docker.internal:8082/...`.
+- ~~**El realm apunta el JWKS del motor a `http://motor:8082/motor/jwks.json`, y el motor no está en
+  el `compose`.**~~ — **cerrada el 2026-08-08** (`d46a570`): el motor entró en el `compose`, así que
+  esa URL resuelve dentro de la red y Keycloak se baja el JWKS por ella. Comprobado en vivo.
 - **La web no renueva el testigo en silencio.** Al caducar, la guarda relanza el flujo SMART: no se
   pierde nada guardado, pero sí lo que hubiera a medias en un formulario. El criterio del ítem 37
   pedía «sin que el usuario pierda lo que estaba haciendo» y esto **no lo cumple del todo**.
@@ -2041,10 +2147,10 @@ contra la pila del `compose` levantada desde el clon limpio, no contra un doble.
   para su base. Está dicho en el propio fichero —es una simulación con datos sintéticos y la base no
   se publica fuera de la red del `compose`—, pero conviene no perderlo de vista ahora que hay
   credenciales de identidad detrás de esa misma base de datos.
-- **La pila del `compose` con Kafka no se ha levantado nunca.** En este equipo no hay Docker. El
-  fichero es YAML válido, los *healthcheck* y el encadenado están escritos, pero la primera ejecución
-  real está por hacer y con ella los fallos típicos de Kafka en Docker: escuchas anunciadas mal,
-  `CLUSTER_ID` inconsistente con un volumen viejo, y el registro arrancando antes que el broker.
+- ~~**La pila del `compose` con Kafka no se ha levantado nunca.**~~ — **cerrada el 2026-08-08**
+  (ítem 41): se levanta desde un clon limpio con un solo comando, y desde el prompt 14 también en la
+  CI, donde `ci-simuladores` arranca el servidor de terminología del propio `compose`. Los fallos
+  que destapó levantarla están todos anotados en esta lista.
 - **Un doble de la API no prueba las propiedades del servidor real, y esta tanda lo demostró dos
   veces.** Los 72 tests del motor estaban en verde mientras dos cosas fallaban contra el laboratorio
   de verdad: el caché de búsquedas de HAPI, que hacía que la idempotencia fuese una ilusión
@@ -2052,12 +2158,14 @@ contra la pila del `compose` levantada desde el clon limpio, no contra un doble.
   Los tests contra el doble siguen valiendo —son rápidos y prueban el mapeo—, pero **la ejecución de
   extremo a extremo con los procesos de verdad no es una demostración: es parte de la verificación**,
   y hay que hacerla antes de dar un canal por cerrado.
-- **HAPI escribe un fichero `id_file` en el directorio de trabajo del motor.** Es el contador de
-  `MSH-10` de los acuses que genera (`FileBasedHiLoGenerator`). Está en `.gitignore`, pero la
-  consecuencia real es de despliegue y hay que resolverla al meter el motor en el `compose`: en un
-  contenedor con sistema de ficheros de solo lectura el arranque falla, y con uno efímero el contador
-  se reinicia en cada despliegue. Las salidas son un volumen o cambiar el generador por uno sin
-  estado; ninguna de las dos se ha hecho.
+- **HAPI escribe un fichero `id_file` en el directorio de trabajo del motor**, y con el motor ya en
+  el `compose` la mitad de esta nota se puede cerrar y la otra no. Es el contador de `MSH-10` de los
+  acuses que genera (`FileBasedHiLoGenerator`). **Lo que se temía y no pasa:** el contenedor no tiene
+  el sistema de ficheros en solo lectura, así que el arranque no falla — comprobado levantándolo.
+  **Lo que sigue abierto:** el contenedor es efímero y no hay volumen, así que el contador **se
+  reinicia en cada despliegue** y dos acuses de dos arranques distintos pueden repetir `MSH-10`. A
+  quien le importa es al receptor, que deduplica por ese campo. Un volumen de una línea lo arregla;
+  no se ha hecho porque no ha molestado todavía.
 - **La CI del motor depende de SUSHI y el orden importa.** Los tests leen el `CodeSystem` y el
   `ConceptMap` de `ig/fsh-generated/resources`, que **no está versionado**. En
   `ci-integracion.yml` el paso de SUSHI se movió delante del build; en local, quien no lo haya
@@ -2145,16 +2253,13 @@ contra la pila del `compose` levantada desde el clon limpio, no contra un doble.
   solo hace improbable —no imposible— que dos mostradores mezclen dos volantes en uno. **El camino v2
   no lo usa** (ítem 26): allí el número viene en `ORC-4` y manda el del HIS. Si aparece un emisor de
   números propio, el apaño de la web se retira.
-- **El catálogo de pruebas llega al navegador empaquetado en el build.** Es el mismo `CodeSystem` de
-  la guía (D15), no una lista paralela, pero se congela al construir la web: añadir una prueba al
-  catálogo obliga a reconstruirla. En el hito 2, con el servidor de terminología, pasa a pedirse con
-  `$expand` y el problema desaparece; hasta entonces es lo más cercano a la fuente que puede hacer un
-  cliente que no tiene servidor de terminología al que preguntar. **Sigue abierta**: el servidor ya
-  está en pie y las otras tres piezas resuelven contra él (ítems 32 y 33), pero **la web no se ha
-  tocado** — es la mitad que le queda al ítem 33, junto con los tres códigos SNOMED del SNS en
-  `identifier.type`. Lo que hay que decidir al hacerlo es **por dónde entra**: el navegador habla con
-  el mismo origen a través de nginx, así que o el proxy publica una ruta hacia el servidor de
-  terminología, o se decide que el catálogo lo sirva el laboratorio.
+- ~~**El catálogo de pruebas llega al navegador empaquetado en el build.**~~ — **cerrada el
+  2026-08-08** (`c618924`, ítem 33). La web lo pide con `$expand` **por su mismo origen**: nginx
+  publica `/terminologia/` hacia el servidor, así que el navegador no habla con un segundo origen ni
+  hay CORS que configurar. Desaparecieron el guion `traer-terminologia.mjs`, la copia en `public/` y
+  los enganches `prestart`/`prebuild`, y con ellos SUSHI del Dockerfile de la web. Lo que **sigue
+  abierto** de aquel ítem son los tres códigos SNOMED del SNS en `identifier.type`, y es bloqueo de
+  datos: ver la nota de la Edición Española.
 - **SNOMED CT Edición Española no está cargada.** El camino está entero —el cargador lee RF2, deduce
   la versión del *refset* de dependencia de módulos, elige el término preferente en español y falla si
   un concepto está retirado—, y está probado contra una mini-release sintética. Lo que falta es la
@@ -2218,22 +2323,25 @@ contra la pila del `compose` levantada desde el clon limpio, no contra un doble.
   **El backend tiene el mismo montaje** —tabla de control en `public`— y hoy funciona porque su
   Flyway corre antes de que HAPI cree nada; conviene revisarlo si algún día arranca contra una base
   que ya tenga tablas.
-- **El `CapabilityStatement` puede estar prometiendo un verbo que el servidor rechaza.** El ítem 16
-  cerró el `Bundle transaction` para los recursos con agregado, pero `ConformidadHispaLis` solo recorta
-  `supportedProfile`: **no toca `rest.interaction`**, que HAPI rellena por su cuenta. Hay que mirar qué
-  declara hoy `GET /fhir/metadata`; si dice `transaction`, el único documento del que un cliente se
-  fía está anunciando algo que el interceptor de `ADR-0014` deniega. No se rehace aquí —el hito 1 está
-  cerrado— y se comprueba y corrige en el **ítem 26**, que es donde D22 aterriza.
-- **Los proveedores propios heredan MÁS puertas de escritura de las que cierran.**
-  `BaseJpaResourceProvider` expone `create`, `update`, `patch`, `delete`, `metaAdd`, `metaDelete` y
-  `expunge`. Los proveedores de este proyecto solo sobrescriben las dos primeras, así que **las otras
-  cinco siguen siendo las de HAPI: escriben la proyección y dejan el dominio atrás**, en silencio,
-  que es exactamente el fallo que `adr-0014` describe. Descubierto al abrir `$validar` (ítem 18) y
-  **no corregido en esa tanda a propósito** — cerrarlas es su propia unidad de trabajo, con su test
-  por cada verbo. **Tampoco se ha comprobado cuáles son alcanzables de verdad** con el
-  `JpaStorageSettings` actual: `expunge` y el borrado en cascada suelen venir apagados, y ese dato
-  cambia la prioridad. **Mirarlo antes del ítem 26**, que es cuando el motor de integración se
-  convierte en el segundo cliente de escritura.
+- ~~**El `CapabilityStatement` puede estar prometiendo un verbo que el servidor rechaza.**~~ —
+  **cerrada en `32c5a30`** (ítem 26). `ConformidadHispaLis.noPrometerTransacciones()` quita
+  `transaction` de `rest.interaction`, y `ConformidadFhirTest` lo comprueba contra el documento que
+  sirve el servidor: prometer la mitad que funciona hacía que el límite se descubriera fallando.
+  Desde el prompt 14 la guía además **lo explica y dice qué hacer en su lugar**
+  (`ig/input/pagecontent/uso-de-la-api.md`).
+- ~~**Los proveedores propios heredan MÁS puertas de escritura de las que cierran.**~~ — **cerrada
+  el 2026-08-09** (`e8c6cb4`), y el rojo está en el historial. **Medido primero, como pedía la nota:**
+  de las cinco, **cuatro estaban abiertas** —`PATCH` cambiaba el sexo del paciente y subía a
+  `versionId 2`; `DELETE` contestaba *«Successfully deleted 1 resource(s)»* con el agregado intacto;
+  `$meta-add` y `$meta-delete` etiquetaban el recurso publicado— y `$expunge` no, porque
+  `expungeEnabled` viene apagado.
+  **No eran cinco: son siete.** HAPI 8 añadió `$merge` y `$undo-merge` —fusionar dos pacientes
+  reescribe las referencias del origen y puede borrarlo— y aparecieron sin que nadie las pidiera y
+  sin que nada fallara, que es el argumento entero de por qué enumerar las puertas una vez no sirve.
+  Las siete se cierran igual, incluidas las tres que HAPI ya rechaza: **una puerta cerrada por un
+  valor por defecto no está cerrada**. Un interceptor con los recursos **deducidos** de los
+  proveedores registrados, un test por verbo, y un octavo test que recorre por reflexión los métodos
+  de escritura y rompe el build ante uno sin clasificar.
 - **`Especimen` no guarda la línea de petición que lo motivó**, así que «una línea anulada no admite
   un espécimen nuevo» (criterio del ítem 17) **no se puede comprobar hoy**: no hay con qué cruzar, y
   `Specimen.request` tampoco se proyecta. No es urgente —el daño real, publicar un resultado de una
