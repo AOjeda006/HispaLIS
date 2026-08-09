@@ -200,12 +200,11 @@ public class Reconciliador {
 
         for (Resultado resultado : resultados.buscarDePaciente(pacienteId)) {
             anotar(esperados, aResultado.aFhir(resultado));
-            // La procedencia no es un agregado: es la proyección de la firma que lleva dentro el
-            // resultado. Su identidad se deriva de la del resultado justamente para que regenerarla
-            // sobrescriba en vez de duplicar (ver `TraductorDeProcedencia.identidadDe`).
-            if (resultado.validacion().isPresent()) {
-                anotar(esperados, aProcedencia.aFhir(resultado));
-            }
+            // La procedencia no es un agregado: es la proyección de cada firma que lleva dentro el
+            // resultado. Su identidad se deriva de la del resultado y del orden de la firma
+            // justamente para que regenerarla sobrescriba en vez de duplicar (ver
+            // `TraductorDeProcedencia.identidadDe`). Son varias porque un crítico lleva dos.
+            aProcedencia.aFhir(resultado).forEach(procedencia -> anotar(esperados, procedencia));
         }
         return esperados;
     }

@@ -38,6 +38,7 @@ import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -61,6 +62,9 @@ import org.springframework.http.ResponseEntity;
  * el {@code $lookup} de la guía para el potasio. Que el umbral se lea de verdad del catálogo lo
  * prueba {@code TerminologiaEnLaProyeccionTest} contra un HAPI real.
  */
+// La terminología de esta clase es la de abajo, no el doble compartido de `TestDeIntegracion`:
+// dos beans `@Primary` del mismo tipo no conviven. Ver `TerminologiaDeLosTests`.
+@TestPropertySource(properties = "hispalis.test.terminologia=propia")
 @Import(DobleValidacionTest.ConLosUmbralesDelCatalogo.class)
 class DobleValidacionTest extends TestDeIntegracion {
 

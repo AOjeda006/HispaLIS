@@ -37,6 +37,7 @@ import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.core.env.Environment;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
@@ -57,6 +58,9 @@ import org.springframework.http.ResponseEntity;
  * potasio con su procedencia—. No es una lista paralela: nada del código de aplicación la conoce, y
  * en el {@code compose} lo que se carga es la guía entera.
  */
+// La terminología de esta clase es la de abajo, no el doble compartido de `TestDeIntegracion`:
+// dos beans `@Primary` del mismo tipo no conviven. Ver `TerminologiaDeLosTests`.
+@TestPropertySource(properties = "hispalis.test.terminologia=propia")
 @Import(TerminologiaEnLaProyeccionTest.ContraElHapiDeEsteProceso.class)
 class TerminologiaEnLaProyeccionTest extends TestDeIntegracion {
 

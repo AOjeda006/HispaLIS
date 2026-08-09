@@ -126,11 +126,14 @@ class NotificacionesTest extends TestDeIntegracion {
 
         // Lo que de verdad se está probando: por el canal no va PHI. Ni la cifra, ni la unidad, ni
         // el apellido del paciente. El invariante 6, comprobado sobre los bytes que salieron.
+        //
+        // La cifra se busca como `"value":92` y no como «92» a secas: un UUID es hexadecimal, así
+        // que tarde o temprano alguno contiene «92» y el test falla sin que nada haya cambiado. Pasó.
         assertThat(cuerpo)
                 .doesNotContain("valueQuantity")
                 .doesNotContain("mg/dL")
                 .doesNotContain(CircuitoDePrueba.APELLIDOS)
-                .doesNotContain("92");
+                .doesNotContain("\"value\":92");
     }
 
     @Test
@@ -206,9 +209,20 @@ class NotificacionesTest extends TestDeIntegracion {
 
         // Y el corte: una suscripción en `error` deja de acumular trabajo. Sin esto, un receptor
         // apagado el viernes tiene el lunes miles de notificaciones esperándole.
-        int entregasHastaAhora = receptor.entregas().size();
+        //
+        // Se mide sobre los eventos ANOTADOS y no sobre las entregas recibidas, y la diferencia
+        // importa: anotar pasa dentro de la transacción de la validación, así que en cuanto
+        // `unResultadoValidado()` vuelve la respuesta ya es definitiva. Contar entregas mide otra
+        // cosa —cuántos reintentos del envío anterior seguían en el aire— y eso depende de si un
+        // tic del relay se solapa con el siguiente, que es una carrera y no la regla.
         unResultadoValidado();
-        assertThat(receptor.entregas()).hasSize(entregasHastaAhora);
+
+        SubscriptionStatus despues = (SubscriptionStatus) leerBundle("/fhir/" + suscripcion + "/$status")
+                .getEntryFirstRep()
+                .getResource();
+        assertThat(despues.getEventsSinceSubscriptionStart())
+                .as("una suscripción cortada no vuelve a apuntarse trabajo hasta que alguien la reactive")
+                .isEqualTo(estado.getEventsSinceSubscriptionStart());
     }
 
     @Test

@@ -12,8 +12,10 @@ import es.hispalis.backend.dominio.especimen.NumeroDeAcceso;
 import es.hispalis.backend.dominio.peticion.Peticion;
 import es.hispalis.backend.dominio.resultado.Medicion;
 import es.hispalis.backend.dominio.resultado.Resultado;
+import es.hispalis.backend.dominio.resultado.ValoresCriticos;
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
@@ -170,9 +172,12 @@ class InformeTest {
         return new LineaDeLaPeticion(linea.id(), linea.numeroDePeticion(), linea.codigoDePrueba(), false, true);
     }
 
+    /** Una glucosa no tiene umbral crítico declarado en este catálogo, así que le basta una firma. */
+    private static final ValoresCriticos SIN_UMBRALES = codigoDePrueba -> Optional.empty();
+
     /** Un resultado listo para publicar: medido <strong>y firmado</strong>, que es lo que exige el informe. */
     private static Resultado resultado(Peticion linea, String codigo) {
-        return sinValidar(linea, codigo).validar(FACULTATIVA, null);
+        return sinValidar(linea, codigo).validar(SIN_UMBRALES, FACULTATIVA, null);
     }
 
     private static Resultado sinValidar(Peticion linea, String codigo) {

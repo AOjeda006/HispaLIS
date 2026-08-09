@@ -31,6 +31,7 @@ import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
@@ -50,6 +51,9 @@ import org.springframework.http.ResponseEntity;
  * {@code $lookup} lo prueba {@code TerminologiaEnLaProyeccionTest} contra un HAPI real; repetir ese
  * montaje en este test escondería lo que este sí prueba, que es lo que pasa después.
  */
+// La terminología de esta clase es la de abajo, no el doble compartido de `TestDeIntegracion`:
+// dos beans `@Primary` del mismo tipo no conviven. Ver `TerminologiaDeLosTests`.
+@TestPropertySource(properties = "hispalis.test.terminologia=propia")
 @Import(PruebasReflejasTest.ConLaReglaDelCatalogo.class)
 class PruebasReflejasTest extends TestDeIntegracion {
 

@@ -9,11 +9,13 @@ import ca.uhn.fhir.rest.server.exceptions.BaseServerResponseException;
 import ca.uhn.fhir.rest.server.exceptions.InvalidRequestException;
 import ca.uhn.fhir.rest.server.exceptions.PreconditionFailedException;
 import ca.uhn.fhir.rest.server.exceptions.ResourceVersionConflictException;
+import ca.uhn.fhir.rest.server.exceptions.UnclassifiedServerFailureException;
 import ca.uhn.fhir.rest.server.exceptions.UnprocessableEntityException;
 import es.hispalis.backend.dominio.ConflictoDeNegocio;
 import es.hispalis.backend.dominio.DatoInvalido;
 import es.hispalis.backend.dominio.ErrorDeDominio;
 import es.hispalis.backend.dominio.ReglaDeNegocioIncumplida;
+import es.hispalis.backend.dominio.resultado.NoSeSabeSiEsCritico;
 import org.springframework.stereotype.Component;
 
 /**
@@ -34,6 +36,7 @@ import org.springframework.stereotype.Component;
  *   <tr><td>{@link DatoInvalido}</td><td>400</td><td>lo que llegó está mal formado</td></tr>
  *   <tr><td>{@link ConflictoDeNegocio}</td><td>409</td><td>está bien formado pero choca con algo que ya existe</td></tr>
  *   <tr><td>{@link ReglaDeNegocioIncumplida}</td><td>422</td><td>la acción no procede — el código que FHIR reserva para sus reglas de negocio</td></tr>
+ *   <tr><td>{@link NoSeSabeSiEsCritico}</td><td>503</td><td>no es del dominio: la pregunta se quedó sin respuesta y hay que reintentar</td></tr>
  * </table>
  */
 @Interceptor
@@ -43,6 +46,8 @@ public class TraduccionDeErroresDeDominio {
     /** Tope al recorrer la cadena de causas: una cadena cíclica no debe colgar la respuesta. */
     private static final int PROFUNDIDAD_MAXIMA = 10;
 
+    private static final int NO_DISPONIBLE = 503;
+
     /**
      * @param error lo que sea que se haya lanzado al atender la petición
      * @return la excepción con la que HAPI debe responder, o {@code null} para no intervenir y
@@ -50,7 +55,12 @@ public class TraduccionDeErroresDeDominio {
      */
     @Hook(Pointcut.SERVER_PRE_PROCESS_OUTGOING_EXCEPTION)
     public BaseServerResponseException traducir(Throwable error, RequestDetails peticion) {
-        ErrorDeDominio errorDeDominio = buscarErrorDeDominio(error);
+        NoSeSabeSiEsCritico sinRespuesta = buscar(error, NoSeSabeSiEsCritico.class);
+        if (sinRespuesta != null) {
+            return noSePuedeSaberSiEsCritico(sinRespuesta);
+        }
+
+        ErrorDeDominio errorDeDominio = buscar(error, ErrorDeDominio.class);
         if (errorDeDominio == null) {
             return fallaLaPrecondicion(error, peticion) ? new PreconditionFailedException(error.getMessage()) : null;
         }
@@ -78,7 +88,24 @@ public class TraduccionDeErroresDeDominio {
     }
 
     /**
-     * Busca un error de dominio en la cadena de causas, no solo en la excepción de arriba.
+     * «No se ha podido saber si esta cifra es crítica», que no es un error de nadie.
+     *
+     * <p>Es el caso que el ítem 43 dejó decidido a medias y que la doble validación cierra. La
+     * pregunta se quedó sin contestar —el servidor de terminología no está, o el resultado viene en
+     * una unidad que no es la del umbral—, así que <strong>no se valida</strong>: publicar como
+     * definitivo un resultado sin saber si obligaba a llamar por teléfono es la única forma de
+     * fallar que el catálogo de críticos existe para evitar.
+     *
+     * <p>Y es un {@code 503} y no un {@code 422}: lo que llegó está bien y la acción procede: lo que
+     * pasa es que el laboratorio no puede completarla ahora. La diferencia le importa al cliente,
+     * que con un {@code 503} sabe que reintentar es lo correcto y con un {@code 422} sabría que no.
+     */
+    private static BaseServerResponseException noSePuedeSaberSiEsCritico(NoSeSabeSiEsCritico sinRespuesta) {
+        return new UnclassifiedServerFailureException(NO_DISPONIBLE, sinRespuesta.getMessage());
+    }
+
+    /**
+     * Busca una excepción de un tipo en la cadena de causas, no solo en la de arriba.
      *
      * <p>Hace falta porque HAPI <strong>ya ha envuelto</strong> lo que lanzó el proveedor cuando
      * llega aquí: lo convierte en un {@code InternalErrorException} con el prefijo
@@ -86,11 +113,11 @@ public class TraduccionDeErroresDeDominio {
      * no encuentra nunca nada, y el síntoma es un {@code 500} en vez del código correcto — con el
      * mensaje del dominio dentro, lo que hace parecer que el interceptor funciona.
      */
-    private static ErrorDeDominio buscarErrorDeDominio(Throwable error) {
+    private static <T> T buscar(Throwable error, Class<T> tipo) {
         Throwable actual = error;
         for (int profundidad = 0; actual != null && profundidad < PROFUNDIDAD_MAXIMA; profundidad++) {
-            if (actual instanceof ErrorDeDominio errorDeDominio) {
-                return errorDeDominio;
+            if (tipo.isInstance(actual)) {
+                return tipo.cast(actual);
             }
             actual = actual.getCause();
         }

@@ -9,6 +9,7 @@ import es.hispalis.backend.dominio.hecho.RepositorioDeHechos;
 import es.hispalis.backend.dominio.hecho.TipoDeHecho;
 import es.hispalis.backend.dominio.resultado.RepositorioDeResultados;
 import es.hispalis.backend.dominio.resultado.Resultado;
+import es.hispalis.backend.dominio.resultado.ValoresCriticos;
 import es.hispalis.backend.fhir.resultado.TraductorDeProcedencia;
 import es.hispalis.backend.fhir.resultado.TraductorDeResultado;
 import java.time.Instant;
@@ -41,6 +42,7 @@ public class ValidarResultado {
 
     private final RepositorioDeResultados resultados;
     private final RepositorioDeHechos hechos;
+    private final ValoresCriticos criticos;
     private final TraductorDeResultado traductor;
     private final TraductorDeProcedencia traductorDeProcedencia;
     private final DaoRegistry daos;
@@ -48,11 +50,13 @@ public class ValidarResultado {
     public ValidarResultado(
             RepositorioDeResultados resultados,
             RepositorioDeHechos hechos,
+            ValoresCriticos criticos,
             TraductorDeResultado traductor,
             TraductorDeProcedencia traductorDeProcedencia,
             DaoRegistry daos) {
         this.resultados = resultados;
         this.hechos = hechos;
+        this.criticos = criticos;
         this.traductor = traductor;
         this.traductorDeProcedencia = traductorDeProcedencia;
         this.daos = daos;
@@ -76,24 +80,38 @@ public class ValidarResultado {
                 .orElseThrow(() ->
                         new DatoInvalido("El resultado %s no está registrado en este laboratorio.".formatted(id)));
 
-        Resultado validado = existente.validar(quienEs(facultativo), momentoDe(cuando));
+        // El catálogo de críticos se le pasa AL AGREGADO, que es quien decide cuántas firmas hacen
+        // falta. Preguntarlo aquí y pasar un booleano dejaría la regla en el caso de uso, y con ella
+        // fuera del alcance de cualquier otra puerta de entrada.
+        Resultado validado = existente.validar(criticos, quienEs(facultativo), momentoDe(cuando));
         resultados.actualizar(validado);
 
         // Este es el hecho del que colgarán el `ORU^R01` saliente y el notificador EDO. Ni la cifra
         // ni quién firmó viajan en él: van las dos referencias que hay que mirar para saberlo.
-        hechos.registrar(Hecho.de(
-                TipoDeHecho.RESULTADO_VALIDADO,
-                validado.pacienteId(),
-                Map.of(
-                        "observationRef",
-                        "Observation/" + validado.id(),
-                        "provenanceRef",
-                        "Provenance/" + TraductorDeProcedencia.identidadDe(validado))));
+        //
+        // Solo se apunta cuando el resultado queda VALIDADO. La primera firma de un crítico no es un
+        // resultado publicable, y anunciarla haría que el HIS incorporase a la historia una cifra a
+        // la que todavía le falta la revisión que el laboratorio se ha impuesto.
+        if (validado.estaValidado()) {
+            hechos.registrar(Hecho.de(
+                    TipoDeHecho.RESULTADO_VALIDADO,
+                    validado.pacienteId(),
+                    Map.of(
+                            "observationRef",
+                            "Observation/" + validado.id(),
+                            "provenanceRef",
+                            "Provenance/"
+                                    + TraductorDeProcedencia.identidadDe(
+                                            validado, validado.firmas().size()))));
+        }
 
-        // La procedencia va primero porque es la que da fe del cambio: si algo revienta después, la
-        // transacción entera se deshace y no queda ni un resultado `final` sin firma ni una firma sin
-        // resultado. Las dos escrituras son de la misma transacción, no de dos pasos encadenados.
-        daos.getResourceDao(Provenance.class).update(traductorDeProcedencia.aFhir(validado), peticionHttp);
+        // Las procedencias van primero porque son las que dan fe del cambio: si algo revienta
+        // después, la transacción entera se deshace y no queda ni un resultado `final` sin firma ni
+        // una firma sin resultado. Todas las escrituras son de la misma transacción, no de pasos
+        // encadenados.
+        traductorDeProcedencia
+                .aFhir(validado)
+                .forEach(procedencia -> daos.getResourceDao(Provenance.class).update(procedencia, peticionHttp));
 
         return (Observation) daos.getResourceDao(Observation.class)
                 .update(traductor.aFhir(validado), peticionHttp)

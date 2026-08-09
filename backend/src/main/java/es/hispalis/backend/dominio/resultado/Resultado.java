@@ -6,6 +6,7 @@ import es.hispalis.backend.dominio.especimen.Especimen;
 import es.hispalis.backend.dominio.peticion.Peticion;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -33,7 +34,8 @@ public final class Resultado {
     private final String unidadUcum;
     private final String valorTextual;
     private final Medicion medicion;
-    private final Validacion validacion;
+    private final List<Validacion> firmas;
+    private final Integer firmasExigidas;
     private final Disparo disparo;
 
     private Resultado(
@@ -46,7 +48,8 @@ public final class Resultado {
             String unidadUcum,
             String valorTextual,
             Medicion medicion,
-            Validacion validacion,
+            List<Validacion> firmas,
+            Integer firmasExigidas,
             Disparo disparo) {
         this.id = id;
         this.especimenId = especimenId;
@@ -57,7 +60,8 @@ public final class Resultado {
         this.unidadUcum = unidadUcum;
         this.valorTextual = valorTextual;
         this.medicion = medicion == null ? Medicion.sinConstancia() : medicion;
-        this.validacion = validacion;
+        this.firmas = firmas == null ? List.of() : List.copyOf(firmas);
+        this.firmasExigidas = firmasExigidas;
         this.disparo = disparo;
     }
 
@@ -108,7 +112,8 @@ public final class Resultado {
                 null,
                 medicion,
                 // Recién salido del analizador. Lo que hay aquí es una cifra medida; que sea un
-                // resultado publicable lo decide después una persona.
+                // resultado publicable lo deciden después una o dos personas.
+                List.of(),
                 null,
                 disparo);
     }
@@ -144,6 +149,7 @@ public final class Resultado {
                 null,
                 texto.strip(),
                 medicion,
+                List.of(),
                 null,
                 disparo);
     }
@@ -155,18 +161,53 @@ public final class Resultado {
      * {@code ORU^R01} saliente hacia el HIS y la notificación EDO. Devuelve un agregado nuevo: el
      * original no se toca.
      *
-     * @throws ReglaDeNegocioIncumplida si ya estaba validado
+     * <h2>Un resultado crítico exige dos firmas, y de personas distintas</h2>
+     *
+     * <p>Es el invariante de §10 que el hito 2 dejó a medias. Un potasio de 6,9 mmol/L no es «un
+     * valor alto»: es una cifra por la que se llama por teléfono antes de que el informe salga, y una
+     * sola revisión sobre algo así es el punto donde un laboratorio se equivoca de la forma más cara.
+     * Que la segunda sea de <strong>otro</strong> facultativo es la mitad que importa: la misma
+     * persona mirando dos veces no es una revisión independiente —quien leyó mal la cifra la vuelve a
+     * leer mal treinta segundos después—, así que aceptarla convertiría el invariante en un contador.
+     *
+     * <p><strong>El catálogo se pregunta aquí, dentro del agregado, y no en el caso de uso.</strong>
+     * Recibir un {@code boolean esCritico} sería lo mismo que no tener la regla: la decidiría quien
+     * llama, y bastaría una segunda puerta de entrada —el motor de integración es una— para que
+     * dejara de aplicarse. Al recibir el puerto, no hay forma de validar sin haber preguntado.
+     *
+     * <p>Se pregunta <strong>una sola vez</strong>, en la primera firma, y el número de firmas que
+     * hacen falta queda grabado en el resultado. Así una caída de la terminología entre las dos
+     * firmas no bloquea la segunda —la obligación ya está establecida— y un cambio del catálogo a
+     * mitad de camino no puede rebajar a una firma lo que empezó exigiendo dos.
+     *
+     * @param criticos la autoridad que dice si esta cifra obliga a avisar
+     * @param facultativo quién firma
+     * @param cuando el momento de la firma; {@code null} se resuelve como ahora
+     * @throws ReglaDeNegocioIncumplida si ya estaba validado, o si quien firma ya había firmado
      * @throws DatoInvalido si no se dice quién valida
+     * @throws NoSeSabeSiEsCritico si no se ha podido saber si la cifra es crítica; entonces no se
+     *     valida, porque publicar como definitivo lo que quizá exigía una llamada es peor que no
+     *     publicar
      */
-    public Resultado validar(String facultativo, Instant cuando) {
-        // Revalidar no es corregir. Si valiera, la segunda firma taparía a la primera y el rastro de
-        // quién respondió del resultado quedaría reescrito sin dejar constancia de que hubo otro.
+    public Resultado validar(ValoresCriticos criticos, String facultativo, Instant cuando) {
+        // Antes que nada, que la firma sea una firma: sin autor no hay nada que discutir, y el
+        // mensaje que corresponde es el suyo y no uno sobre el catálogo de críticos.
+        Validacion firma = Validacion.por(facultativo, cuando);
+
+        // Revalidar no es corregir. Si valiera, la firma nueva taparía a las anteriores y el rastro
+        // de quién respondió del resultado quedaría reescrito sin dejar constancia de que hubo otro.
         // Corregir un resultado ya validado es otra operación, con sus propias reglas.
-        if (validacion != null) {
+        if (estaValidado()) {
             throw new ReglaDeNegocioIncumplida(
-                    "El resultado %s ya está validado por %s: revalidar taparía la primera firma."
-                            .formatted(codigoDePrueba, validacion.facultativo()));
+                    "El resultado %s ya está validado por %s: revalidar taparía la firma anterior."
+                            .formatted(codigoDePrueba, ultimaFirma().orElseThrow().facultativo()));
         }
+
+        int exigidas = firmasExigidas != null ? firmasExigidas : cuantasFirmasPide(criticos);
+        exigirQueNoHayaFirmadoYa(firma);
+
+        List<Validacion> conLaNueva = new ArrayList<>(firmas);
+        conLaNueva.add(firma);
         return new Resultado(
                 id,
                 especimenId,
@@ -177,8 +218,39 @@ public final class Resultado {
                 unidadUcum,
                 valorTextual,
                 medicion,
-                Validacion.por(facultativo, cuando),
+                conLaNueva,
+                exigidas,
                 disparo);
+    }
+
+    /**
+     * Dos si la cifra alcanza el umbral crítico publicado, una si no.
+     *
+     * <p>La pregunta se le hace al catálogo entera —código, cifra y unidad—, no se deduce de nada de
+     * aquí: qué es crítico lo pactó el laboratorio con quien recibe la llamada y se publica en la
+     * guía, no lo decide el agregado.
+     */
+    private int cuantasFirmasPide(ValoresCriticos criticos) {
+        return criticos.esCritico(codigoDePrueba, valor, unidadUcum) ? 2 : 1;
+    }
+
+    /**
+     * Impide que la segunda firma sea de quien ya firmó.
+     *
+     * <p>La comparación es sobre la referencia literal al facultativo, que es la que el servidor
+     * exige que resuelva al escribir la procedencia. Dos referencias distintas a la misma persona
+     * pasarían, y eso es un problema del directorio de profesionales —un facultativo duplicado—, no
+     * de esta regla.
+     */
+    private void exigirQueNoHayaFirmadoYa(Validacion firma) {
+        boolean repite = firmas.stream().anyMatch(puesta -> puesta.facultativo().equals(firma.facultativo()));
+        if (repite) {
+            throw new ReglaDeNegocioIncumplida(
+                    ("El resultado %s es crítico y necesita una segunda firma de otro facultativo. %s ya lo ha "
+                                            + "firmado, y la misma persona mirando dos veces no es una segunda "
+                                            + "revisión: es la primera contada dos veces.")
+                            .formatted(codigoDePrueba, firma.facultativo()));
+        }
     }
 
     /**
@@ -200,7 +272,13 @@ public final class Resultado {
         return linea == null ? null : linea.id();
     }
 
-    /** Reconstruye un resultado ya almacenado. Lo usa el repositorio, nunca un caso de uso. */
+    /**
+     * Reconstruye un resultado ya almacenado. Lo usa el repositorio, nunca un caso de uso.
+     *
+     * @param firmas las firmas puestas, en el orden en que se pusieron
+     * @param firmasExigidas cuántas pedía este resultado, o {@code null} si todavía no ha firmado
+     *     nadie y por tanto no se ha preguntado
+     */
     public static Resultado reconstruir(
             UUID id,
             UUID especimenId,
@@ -211,7 +289,8 @@ public final class Resultado {
             String unidadUcum,
             String valorTextual,
             Medicion medicion,
-            Validacion validacion,
+            List<Validacion> firmas,
+            Integer firmasExigidas,
             Disparo disparo) {
         return new Resultado(
                 id,
@@ -223,7 +302,8 @@ public final class Resultado {
                 unidadUcum,
                 valorTextual,
                 medicion,
-                validacion,
+                firmas,
+                firmasExigidas,
                 disparo);
     }
 
@@ -270,9 +350,30 @@ public final class Resultado {
         return medicion;
     }
 
-    /** La firma facultativa, si ya se ha producido. */
-    public Optional<Validacion> validacion() {
-        return Optional.ofNullable(validacion);
+    /**
+     * Las firmas facultativas puestas hasta ahora, en orden.
+     *
+     * <p>Puede haber más de una: un resultado crítico exige dos, de personas distintas. Que estén
+     * todas y no solo la última es lo que permite reclamar cada una por separado — cada firma es un
+     * acto de una persona concreta y tiene su propio {@code Provenance}.
+     */
+    public List<Validacion> firmas() {
+        return firmas;
+    }
+
+    /** La última firma puesta, si hay alguna. */
+    public Optional<Validacion> ultimaFirma() {
+        return firmas.isEmpty() ? Optional.empty() : Optional.of(firmas.get(firmas.size() - 1));
+    }
+
+    /**
+     * Cuántas firmas pide este resultado, una vez sabido.
+     *
+     * <p>Vacío hasta la primera: antes de que alguien firme, nadie le ha preguntado al catálogo, y
+     * decir «una» por defecto sería contestar por él.
+     */
+    public Optional<Integer> firmasExigidas() {
+        return Optional.ofNullable(firmasExigidas);
     }
 
     /**
@@ -316,12 +417,21 @@ public final class Resultado {
                         .allMatch(rango -> valor.compareTo(rango.bajo()) < 0 || valor.compareTo(rango.alto()) > 0);
     }
 
-    /** Se deriva de la firma y no se guarda aparte: ver {@link EstadoDeResultado}. */
+    /** Se deriva de las firmas y no se guarda aparte: ver {@link EstadoDeResultado}. */
     public EstadoDeResultado estado() {
-        return validacion == null ? EstadoDeResultado.PRELIMINAR : EstadoDeResultado.VALIDADO;
+        if (firmas.isEmpty()) {
+            return EstadoDeResultado.PRELIMINAR;
+        }
+        return estaValidado() ? EstadoDeResultado.VALIDADO : EstadoDeResultado.PENDIENTE_DE_SEGUNDA_FIRMA;
     }
 
+    /**
+     * Si tiene todas las firmas que hacían falta.
+     *
+     * <p>No es «si alguien lo firmó»: un crítico con una sola firma está firmado y <strong>no</strong>
+     * está validado. La diferencia es la que separa un resultado que se publica de uno que espera.
+     */
     public boolean estaValidado() {
-        return validacion != null;
+        return firmasExigidas != null && firmas.size() >= firmasExigidas;
     }
 }
