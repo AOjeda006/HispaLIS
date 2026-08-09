@@ -17,12 +17,19 @@ on:
       # laboratorio, en el árbol del backend, para sortear valores verosímiles. Sin esta ruta,
       # cambiar un rango allí no dispararía los tests que comprueban que el generador lo carga.
       - 'backend/src/main/resources/laboratorio/**'
+      # Desde que el corpus se genera contra el servidor de verdad, este trabajo depende del
+      # `compose` y del cargador. Sin estas dos rutas, romper el cargador dejaría el corpus sin
+      # generar y el fallo aparecería en el trabajo de otro componente.
+      - 'terminologia/**'
+      - 'infra/compose/docker-compose.yml'
   pull_request:
     paths:
       - 'simuladores/**'
       - '.github/workflows/ci-simuladores.yml'
       - 'ig/input/fsh/**'
       - 'backend/src/main/resources/laboratorio/**'
+      - 'terminologia/**'
+      - 'infra/compose/docker-compose.yml'
   workflow_dispatch:
 
 permissions:
@@ -35,6 +42,10 @@ concurrency:
 env:
   VERSION_FHIR: 5.0.0
   PAQUETE_FHIR: hl7.fhir.r5.core#5.0.0
+  # El mismo nombre de variable que usan el backend, el motor y el `compose`: los cuatro resuelven
+  # contra la misma autoridad, y eso tiene que verse también en la configuración. Aquí apunta al
+  # puerto que el `compose` publica.
+  HISPALIS_TERMINOLOGIA: http://localhost:8086/fhir
 
 jobs:
   verificar:
@@ -86,6 +97,42 @@ jobs:
           curl -sSL -o validator_cli.jar \
             https://github.com/hapifhir/org.hl7.fhir.core/releases/latest/download/validator_cli.jar
 
+      # Desde el ítem 33 el generador NO lee ficheros: le pregunta el catálogo al servidor de
+      # terminología (D14, D15). Aquí, por tanto, hace falta uno — y tiene que ser **el del
+      # `compose`**, no un doble: los tests de más arriba ya corren contra el arnés de
+      # `tests/conftest.py`, así que un segundo doble no probaría nada nuevo, mientras que el HAPI
+      # de verdad es lo único que puede desmentir al arnés si divergen.
+      #
+      # Se levantan solo `terminologia` y su cargador; el resto de la pila no hace falta y el
+      # encadenado del `compose` trae postgres solo. Las dos claves de Keycloak son marcadores de
+      # posición de servicios que este trabajo NO arranca: `docker compose` interpola el fichero
+      # entero antes de elegir qué levantar, así que sin ellas ni se leería el YAML.
+      - name: Levantar el servidor de terminología del compose
+        run: |
+          mkdir -p /tmp/releases-vacias
+          cat > infra/compose/.env <<'EOF'
+          HISPALIS_KEYCLOAK_ADMIN_CLAVE=ni-se-arranca-keycloak-en-esta-ci
+          HISPALIS_KEYCLOAK_CLAVE_DEMO=ni-se-arranca-keycloak-en-esta-ci
+          HISPALIS_RELEASES=/tmp/releases-vacias
+          EOF
+          docker compose -f infra/compose/docker-compose.yml up -d --build terminologia-carga
+          # `wait` devuelve el código de salida del cargador, que es la condición correcta: lo que
+          # importa no es que el servidor conteste, sino que tenga dentro el catálogo.
+          docker compose -f infra/compose/docker-compose.yml wait terminologia-carga
+
+      # LOINC, THO y SNOMED **no** se cargan aquí: viven fuera del repositorio y ninguna de las tres
+      # se puede descargar en una CI —la del Ministerio ni siquiera se puede redistribuir—. El
+      # cargador lo avisa en voz alta y carga el catálogo propio, que es lo único que el generador
+      # necesita: el `display` de LOINC lo saca del `ConceptMap`, no de un `$lookup`. Que el
+      # catálogo esté de verdad se comprueba **antes** de generar, porque un servidor arrancado y
+      # vacío es la peor forma de estar disponible.
+      - name: Comprobar que el catálogo está cargado
+        run: |
+          curl -sf --get "$HISPALIS_TERMINOLOGIA/ValueSet/\$expand" \
+            --data-urlencode 'url=https://aojeda006.github.io/HispaLIS/fhir/ValueSet/pruebas-del-catalogo' \
+            --data-urlencode 'count=0' \
+            | python3 -c 'import json,sys; t=json.load(sys.stdin)["expansion"]["total"]; print(f"El catálogo oferta {t} pruebas."); sys.exit(0 if t else 1)'
+
       # Criterio de aceptación 11, la mitad que los tests no pueden afirmar por sí solos: que los
       # recursos generados sean CONFORMES a sus perfiles. Un test comprueba que el generador escribe
       # lo que cree que escribe; que eso sea válido según la especificación solo lo dice el
@@ -93,9 +140,14 @@ jobs:
       #
       # La fecha se fija para que el corpus validado sea siempre el mismo: sin ella, un fallo que
       # dependiera del día no se podría reproducir.
+      #
+      # Sesenta pacientes y no cuarenta, que son los mismos que usan los tests: medido con la semilla
+      # 42 contra el servidor, con cuarenta salen CERO pruebas reflejas, y entonces el validador
+      # oficial nunca llega a ver un `Observation.triggeredBy` — el elemento que R5 estrena y que más
+      # falta hace comprobar contra la especificación. Un corpus que no contiene el caso no lo valida.
       - name: Generar un corpus sintético
         working-directory: simuladores
-        run: python -m generador --seed 42 --pacientes 40 --fecha 2026-08-05 --salida corpus
+        run: python -m generador --seed 42 --pacientes 60 --fecha 2026-08-05 --salida corpus
 
       - name: Validar el corpus contra los perfiles de la guía
         run: |
@@ -115,3 +167,14 @@ jobs:
           path: simuladores/corpus/
           retention-days: 7
           if-no-files-found: ignore
+
+      # `wait` no imprime nada, así que si el cargador falla el trabajo se para sin decir por qué.
+      # Los logs salen siempre y del servidor también: la mitad de los fallos de carga son del HAPI
+      # de abajo, no del cargador de arriba.
+      - name: Los logs de la terminología
+        if: always()
+        run: docker compose -f infra/compose/docker-compose.yml logs --no-color terminologia terminologia-carga
+
+      - name: Recoger
+        if: always()
+        run: docker compose -f infra/compose/docker-compose.yml down -v
