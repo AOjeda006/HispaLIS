@@ -42,6 +42,10 @@ Se queda en `preliminary` y ahí termina. No se valida, no se informa y no se no
 * code = CatalogoPruebas#K "Potasio"
 * subject = Reference(paciente-ejemplo)
 * specimen = Reference(especimen-ejemplo)
+// Que no esté validado no significa que no lo midiera nadie: lo midió el laboratorio. Sin
+// `performer`, el propio validador avisa — y con razón, porque una cifra sin nadie detrás no se
+// puede reclamar.
+* performer[0] = Reference(laboratorio-ejemplo)
 * effectiveDateTime = "2026-07-28T09:30:00+02:00"
 * valueQuantity.value = 6.9
 * valueQuantity.unit = "mmol/L"
@@ -99,6 +103,7 @@ Como en la hemólisis, se queda en `preliminary` y no se borra.
 * code = CatalogoPruebas#NA "Sodio"
 * subject = Reference(paciente-ejemplo)
 * specimen = Reference(especimen-ejemplo)
+* performer[0] = Reference(laboratorio-ejemplo)
 * effectiveDateTime = "2026-07-28T09:31:00+02:00"
 * valueQuantity.value = 149
 * valueQuantity.unit = "mmol/L"
