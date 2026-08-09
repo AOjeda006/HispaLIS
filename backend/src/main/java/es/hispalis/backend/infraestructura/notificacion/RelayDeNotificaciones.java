@@ -127,14 +127,17 @@ public class RelayDeNotificaciones {
                 suscripcion, deEstaVuelta, bandeja.eventosDe(suscripcionId), propiedades.baseFhir());
         String cuerpo = contexto.newJsonParser().encodeResourceToString(notificacion);
 
+        String clave = identificadorDeClave(suscripcion);
+        // Sin ninguna clave configurada, `secretos` llega nulo. Se resuelve a «no hay secreto para
+        // esta suscripción», que es lo que `EntregaFirmada` sabe contar; un `NullPointerException`
+        // aquí saldría como una vuelta del relay reventada y sin decir qué falta.
+        String secreto =
+                propiedades.secretos() == null ? null : propiedades.secretos().get(clave);
+
         EntregaFallida ultimoFallo = null;
         for (int intento = 1; intento <= propiedades.intentos(); intento++) {
             try {
-                entrega.entregar(
-                        suscripcion.getEndpoint(),
-                        identificadorDeClave(suscripcion),
-                        propiedades.secretos().get(identificadorDeClave(suscripcion)),
-                        cuerpo);
+                entrega.entregar(suscripcion.getEndpoint(), clave, secreto, cuerpo);
                 Instant ahora = Instant.now();
                 deEstaVuelta.forEach(evento -> bandeja.marcarEntregado(evento.id(), ahora));
                 return true;
