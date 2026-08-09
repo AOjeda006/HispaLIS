@@ -5,6 +5,7 @@ import {
   fechaLegible,
   identificador,
   nombreCompleto,
+  porQueExiste,
   rangoDeReferencia,
   valorConUnidad,
 } from '../fhir/presentacion';
@@ -34,6 +35,9 @@ export class ConsultaInforme implements OnInit {
   protected readonly nombreDe = nombreCompleto;
   protected readonly fechaLegible = fechaLegible;
   protected readonly valorConUnidad = valorConUnidad;
+
+  /** Por qué existe una determinación que nadie pidió. Vacío en casi todas. */
+  protected readonly porQueExiste = porQueExiste;
 
   protected readonly busqueda = this.formularios.nonNullable.group({
     nhc: ['', [Validators.required, Validators.pattern(/^\d{8}$/)]],

@@ -40,6 +40,17 @@ final Informe _validado = Informe.emitido(
       valor: ValorTextual('Negativo'),
       estado: EstadoDelResultado.validado,
     ),
+    // La prueba refleja: existe porque otra salió alterada, y el informe tiene que decirlo.
+    const Resultado(
+      id: 'o4',
+      prueba: 'T4 libre',
+      valor: ValorNumerico(0.9, 'ng/dL'),
+      rango: RangoDeReferencia(unidad: 'ng/dL', bajo: 0.7, alto: 1.9),
+      estado: EstadoDelResultado.validado,
+      porQueExiste:
+          'Derivada de un TSH alterado: el protocolo de función tiroidea del laboratorio '
+          'añade la T4 libre cuando la TSH cae fuera de su rango de referencia.',
+    ),
   ],
 );
 
@@ -112,6 +123,20 @@ void main() {
       expect(find.text('Valores de referencia: 12 – 15 g/dL'), findsOneWidget);
     });
 
+    testWidgets('una prueba refleja explica CON PALABRAS por qué está ahí', (tester) async {
+      final vm = await _vmCargado(
+        _RepositorioDeMentira(
+          historialDe: Historial(paciente: _lucia, informes: [_validado]),
+        ),
+      );
+
+      await tester.pumpWidget(_conVm(vm, const PantallaDeInforme(informeId: 'inf-1')));
+
+      // Con palabras y no con un icono: un icono hay que aprendérselo y no lo lee un lector de
+      // pantalla. La frase la trae el laboratorio; la app no compone ninguna.
+      expect(find.textContaining('Derivada de un TSH alterado'), findsOneWidget);
+    });
+
     testWidgets('una prueba sin rango lo DICE en vez de dejar el hueco', (tester) async {
       final vm = await _vmCargado(
         _RepositorioDeMentira(
@@ -173,7 +198,7 @@ void main() {
       await tester.pumpWidget(_conVm(vm, const PantallaDeInforme(informeId: 'inf-1')));
 
       expect(find.text(AvisoDeValidacion.textoPendiente), findsNothing);
-      expect(find.text('Validado por el facultativo'), findsNWidgets(2));
+      expect(find.text('Validado por el facultativo'), findsNWidgets(_validado.resultados.length));
     });
   });
 
@@ -197,7 +222,9 @@ void main() {
 
     testWidgets('sin resultados se dice que no hay, no se enseña una lista vacía', (tester) async {
       final vm = await _vmCargado(
-        _RepositorioDeMentira(historialDe: const Historial(paciente: _lucia, informes: [])),
+        _RepositorioDeMentira(
+          historialDe: const Historial(paciente: _lucia, informes: []),
+        ),
       );
 
       await tester.pumpWidget(_conVm(vm, const PantallaDeInformes()));

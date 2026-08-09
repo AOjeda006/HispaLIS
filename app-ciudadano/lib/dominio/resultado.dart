@@ -96,6 +96,7 @@ final class Resultado {
     required this.estado,
     this.rango,
     this.medidoEn,
+    this.porQueExiste,
   });
 
   /// El id lógico del `Observation`.
@@ -120,4 +121,15 @@ final class Resultado {
 
   /// Cuándo se midió.
   final DateTime? medidoEn;
+
+  /// Por qué existe esta determinación, si no la pidió nadie: la refleja, la repetición, la
+  /// re-ejecución.
+  ///
+  /// ⚠️ Sale de `Observation.triggeredBy`, que es **nuevo en R5**. Antes no había dónde decirlo, y
+  /// la persona veía dos analíticas de lo mismo el mismo día sin nada que se lo explicara.
+  ///
+  /// Es una **frase**, no un código, y llega ya redactada del laboratorio. La app no la compone: si
+  /// la compusiera, tendría que decidir el género de cada nombre de prueba, y quien redacta la regla
+  /// es quien tiene que redactar cómo se cuenta.
+  final String? porQueExiste;
 }

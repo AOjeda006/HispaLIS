@@ -187,28 +187,71 @@ void main() {
       expect(estadoDe('lo-que-sea'), EstadoDelResultado.desconocido);
       expect(EstadoDelResultado.desconocido.loFirmaUnFacultativo, isFalse);
     });
+
+    test('una prueba refleja llega con la frase que la explica, no con un código', () {
+      // R5: `triggeredBy`. La frase la redacta el laboratorio; la app no compone ninguna, porque
+      // tendría que decidir el género de cada nombre de prueba para hacerlo bien.
+      final t4l = _observacion(valor: {'value': 0.9, 'unit': 'ng/dL'})
+        ..['triggeredBy'] = [
+          {
+            'observation': {'reference': 'Observation/tsh'},
+            'type': 'reflex',
+            'reason': 'Derivada de un TSH alterado.',
+          },
+        ];
+
+      expect(
+        MapeadorFhir.resultado(t4l, SexoRegistrado.noConsta).porQueExiste,
+        'Derivada de un TSH alterado.',
+      );
+    });
+
+    test('un disparo sin frase no se enseña: «derivada de otra» no le aclara nada a nadie', () {
+      final mudo = _observacion(valor: {'value': 0.9, 'unit': 'ng/dL'})
+        ..['triggeredBy'] = [
+          {
+            'observation': {'reference': 'Observation/tsh'},
+            'type': 'repeat',
+          },
+        ];
+
+      expect(MapeadorFhir.resultado(mudo, SexoRegistrado.noConsta).porQueExiste, isNull);
+    });
+
+    test('la mayoría de los resultados no vienen de ninguna otra determinación', () {
+      expect(
+        MapeadorFhir.resultado(
+          _observacion(valor: {'value': 13.5, 'unit': 'g/dL'}),
+          SexoRegistrado.noConsta,
+        ).porQueExiste,
+        isNull,
+      );
+    });
   });
 
   group('Informe', () {
     test('un resultado que el laboratorio no ha devuelto se omite sin reventar', () {
       // El servidor OMITE del resultado de búsqueda lo que la sesión no puede ver. Si el informe
       // apunta a un `Observation` que no llegó, eso es una decisión de consentimiento, no un fallo.
-      final informe = MapeadorFhir.informe({
-        'resourceType': 'DiagnosticReport',
-        'id': 'inf-1',
-        'issued': '2026-08-08T10:00:00+02:00',
-        'result': [
-          {'reference': 'Observation/o1'},
-          {'reference': 'Observation/no-llego'},
-        ],
-      }, {
-        'Observation/o1': const Resultado(
-          id: 'o1',
-          prueba: 'Hemoglobina',
-          valor: ValorNumerico(13.4, 'g/dL'),
-          estado: EstadoDelResultado.validado,
-        ),
-      });
+      final informe = MapeadorFhir.informe(
+        {
+          'resourceType': 'DiagnosticReport',
+          'id': 'inf-1',
+          'issued': '2026-08-08T10:00:00+02:00',
+          'result': [
+            {'reference': 'Observation/o1'},
+            {'reference': 'Observation/no-llego'},
+          ],
+        },
+        {
+          'Observation/o1': const Resultado(
+            id: 'o1',
+            prueba: 'Hemoglobina',
+            valor: ValorNumerico(13.4, 'g/dL'),
+            estado: EstadoDelResultado.validado,
+          ),
+        },
+      );
 
       expect(informe.resultados, hasLength(1));
       expect(informe.resultados.single.id, 'o1');
@@ -216,21 +259,24 @@ void main() {
     });
 
     test('un informe con algo sin firmar no está validado', () {
-      final informe = MapeadorFhir.informe({
-        'resourceType': 'DiagnosticReport',
-        'id': 'inf-1',
-        'issued': '2026-08-08T10:00:00+02:00',
-        'result': [
-          {'reference': 'Observation/o1'},
-        ],
-      }, {
-        'Observation/o1': const Resultado(
-          id: 'o1',
-          prueba: 'Hemoglobina',
-          valor: ValorNumerico(13.4, 'g/dL'),
-          estado: EstadoDelResultado.preliminar,
-        ),
-      });
+      final informe = MapeadorFhir.informe(
+        {
+          'resourceType': 'DiagnosticReport',
+          'id': 'inf-1',
+          'issued': '2026-08-08T10:00:00+02:00',
+          'result': [
+            {'reference': 'Observation/o1'},
+          ],
+        },
+        {
+          'Observation/o1': const Resultado(
+            id: 'o1',
+            prueba: 'Hemoglobina',
+            valor: ValorNumerico(13.4, 'g/dL'),
+            estado: EstadoDelResultado.preliminar,
+          ),
+        },
+      );
 
       expect(informe.validadoPorFacultativo, isFalse);
       expect(informe.pendientesDeValidar, 1);

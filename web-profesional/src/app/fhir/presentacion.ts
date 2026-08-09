@@ -1,4 +1,11 @@
-import { HumanName, Identificador, Observation, RangoDeReferencia, SEXO_EN_SNOMED } from './tipos';
+import {
+  DisparadaPor,
+  HumanName,
+  Identificador,
+  Observation,
+  RangoDeReferencia,
+  SEXO_EN_SNOMED,
+} from './tipos';
 
 /**
  * Cómo se enseñan en pantalla un nombre y un resultado.
@@ -167,6 +174,44 @@ function aplicaA(rango: RangoDeReferencia, codigoDelSexo: string): boolean {
   return (rango.appliesTo ?? []).some((poblacion) =>
     (poblacion.coding ?? []).some((codificacion) => codificacion.code === codigoDelSexo),
   );
+}
+
+/**
+ * Por qué existe esta determinación, **en palabras**.
+ *
+ * ⚠️ `triggeredBy` es nuevo en R5: antes no había dónde decir esto, y el informe enseñaba dos
+ * potasios del mismo día sin nada que aclarase cuál vale.
+ *
+ * Se enseña con una frase y no con un icono, y no es una preferencia estética. Un icono hay que
+ * aprendérselo, no lo lee un lector de pantalla y no distingue una repetición por muestra
+ * hemolizada de una re-ejecución por control de calidad fuera — que es justo lo que el que mira la
+ * historia necesita saber.
+ *
+ * La frase la trae el propio recurso en `reason`, redactada por quien redactó la regla. Solo cuando
+ * no viene —porque la declaró un tercero que se la dejó— se compone una a partir del tipo: es
+ * información de menos, nunca inventada.
+ */
+export function porQueExiste(resultado: Observation): string {
+  const disparo = (resultado.triggeredBy ?? [])[0];
+  if (!disparo) {
+    return '';
+  }
+  return disparo.reason?.trim() || porDefecto(disparo);
+}
+
+function porDefecto(disparo: DisparadaPor): string {
+  switch (disparo.type) {
+    case 'reflex':
+      return 'Añadida por el laboratorio a partir de otra determinación alterada.';
+    case 'repeat':
+      return 'Repetición de una determinación anterior, con el mismo método.';
+    case 're-run':
+      return 'Re-ejecución de una determinación anterior, con otro ajuste del analizador.';
+    default:
+      // Un código que esta versión no conoce. Decir «derivada de otra» es cierto y no supone nada;
+      // callarse dejaría dos cifras sin explicar, que es lo que esto viene a arreglar.
+      return 'Derivada de otra determinación.';
+  }
 }
 
 /** Números a la española: coma decimal y sin ceros de relleno. */

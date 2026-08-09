@@ -109,3 +109,13 @@ table {
   border-left: 3px solid var(--borde);
   padding: 0.6rem 0.8rem;
 }
+
+// La explicación de una prueba refleja o de una repetición. En bloque y no al lado del nombre: es
+// una frase entera, y con el nombre de la prueba en la misma línea se cortaría en cuanto la tabla
+// se estreche. El color más apagado la sitúa como secundaria sin ser el único indicio de que lo es
+// —quien no distinga el color sigue leyendo la frase, que es lo que informa—.
+.derivada {
+  color: var(--texto-secundario);
+  display: block;
+  margin-top: 0.15rem;
+}

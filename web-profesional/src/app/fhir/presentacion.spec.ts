@@ -6,6 +6,7 @@ import {
   fechaLegible,
   identificador,
   nombreCompleto,
+  porQueExiste,
   rangoDeReferencia,
   SIN_VALOR,
   valorConUnidad,
@@ -208,5 +209,47 @@ describe('el rango de referencia', () => {
     const pcr = resultado({ referenceRange: [{ high: { value: 5, unit: 'mg/L' } }] });
 
     expect(rangoDeReferencia(pcr, 'male')).toBe('hasta 5 mg/L');
+  });
+});
+
+describe('por qué existe una determinación que nadie pidió', () => {
+  it('enseña la frase del laboratorio tal cual, con palabras y no con un icono', () => {
+    const t4l = resultado({
+      triggeredBy: [
+        {
+          observation: { reference: 'Observation/1' },
+          type: 'reflex',
+          reason:
+            'Derivada de un TSH alterado: el protocolo de función tiroidea del laboratorio ' +
+            'añade la T4 libre cuando la TSH cae fuera de su rango de referencia.',
+        },
+      ],
+    });
+
+    expect(porQueExiste(t4l)).toContain('Derivada de un TSH alterado');
+  });
+
+  it('la mayoría de los resultados no vienen de ninguna otra determinación', () => {
+    expect(porQueExiste(resultado({}))).toBe('');
+  });
+
+  it('sin frase, se compone una del tipo — pero sin confundir una repetición con una re-ejecución', () => {
+    const repetido = resultado({
+      triggeredBy: [{ observation: { reference: 'Observation/1' }, type: 'repeat' }],
+    });
+    const reejecutado = resultado({
+      triggeredBy: [{ observation: { reference: 'Observation/1' }, type: 're-run' }],
+    });
+
+    expect(porQueExiste(repetido)).toContain('mismo método');
+    expect(porQueExiste(reejecutado)).toContain('otro ajuste del analizador');
+  });
+
+  it('un tipo que esta versión no conoce no se calla ni se inventa el motivo', () => {
+    const raro = resultado({
+      triggeredBy: [{ observation: { reference: 'Observation/1' }, type: 'lo-que-sea' }],
+    });
+
+    expect(porQueExiste(raro)).toBe('Derivada de otra determinación.');
   });
 });

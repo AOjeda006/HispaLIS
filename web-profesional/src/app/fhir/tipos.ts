@@ -105,6 +105,20 @@ export interface RangoDeReferencia {
   readonly appliesTo?: readonly CodeableConcept[];
 }
 
+/**
+ * Por qué existe una determinación que no se pidió por volante.
+ *
+ * ⚠️ **Nuevo en R5.** En R4 no había elemento para esto, así que dos cifras de la misma prueba
+ * aparecían en el informe sin nada que dijera cuál vale ni por qué hay dos.
+ */
+export interface DisparadaPor {
+  readonly observation: Referencia;
+  /** `reflex` | `repeat` | `re-run`. */
+  readonly type: string;
+  /** La frase, ya redactada por quien redactó la regla. Es lo que se enseña. */
+  readonly reason?: string;
+}
+
 export interface Observation {
   readonly resourceType: 'Observation';
   readonly id?: string;
@@ -119,6 +133,7 @@ export interface Observation {
   readonly valueString?: string;
   readonly valueCodeableConcept?: CodeableConcept;
   readonly referenceRange?: readonly RangoDeReferencia[];
+  readonly triggeredBy?: readonly DisparadaPor[];
 }
 
 export interface DiagnosticReport {

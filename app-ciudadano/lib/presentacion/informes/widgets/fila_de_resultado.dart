@@ -23,7 +23,9 @@ class FilaDeResultado extends StatelessWidget {
 
     return Semantics(
       // El lector de pantalla lee la frase entera y no cuatro trozos sueltos.
-      label: '${resultado.prueba}: $valor. Valores de referencia: $rango. ${_estado.descripcion}',
+      label:
+          '${resultado.prueba}: $valor. Valores de referencia: $rango. ${_estado.descripcion}.'
+          '${resultado.porQueExiste == null ? '' : ' ${resultado.porQueExiste}'}',
       excludeSemantics: true,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -38,6 +40,17 @@ class FilaDeResultado extends StatelessWidget {
                 Text(valor, style: tipografia.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
               ],
             ),
+            // R5: `triggeredBy`, con PALABRAS. Un icono habría que aprendérselo, no lo lee un
+            // lector de pantalla y no distingue una repetición por muestra hemolizada de una
+            // re-ejecución por control de calidad fuera. Va justo debajo del nombre porque es parte
+            // de qué es esta determinación, no una nota al margen.
+            if (resultado.porQueExiste != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                resultado.porQueExiste!,
+                style: tipografia.bodySmall?.copyWith(fontStyle: FontStyle.italic),
+              ),
+            ],
             const SizedBox(height: 4),
             Text('Valores de referencia: $rango', style: tipografia.bodySmall),
             const SizedBox(height: 8),

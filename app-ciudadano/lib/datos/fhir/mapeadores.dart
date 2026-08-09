@@ -46,7 +46,22 @@ abstract final class MapeadorFhir {
         _ => EstadoDelResultado.desconocido,
       },
       medidoEn: _fecha(recurso['effectiveDateTime']),
+      porQueExiste: _porQueExiste(recurso),
     );
+  }
+
+  /// La frase que explica por qué existe una determinación que nadie pidió (R5: `triggeredBy`).
+  ///
+  /// Se coge `reason` tal cual y **no se compone nada** cuando falta: sin la frase del laboratorio,
+  /// lo único que la app sabría decir es «derivada de otra», que a una persona no le aclara nada y
+  /// sí le añade una pregunta. La pantalla, entonces, no enseña la línea.
+  static String? _porQueExiste(Map<String, Object?> recurso) {
+    final disparos = recurso['triggeredBy'] as List<Object?>? ?? const [];
+    if (disparos.isEmpty) {
+      return null;
+    }
+    final motivo = (disparos.first as Map<String, Object?>?)?['reason'] as String?;
+    return motivo == null || motivo.trim().isEmpty ? null : motivo.trim();
   }
 
   /// Convierte un `DiagnosticReport` en un informe, cogiendo sus resultados de [porReferencia].
@@ -55,29 +70,25 @@ abstract final class MapeadorFhir {
   /// el laboratorio **omite del resultado de búsqueda** lo que la sesión no puede ver, en vez de
   /// contestar cuántos hay. Reventar aquí convertiría una decisión de consentimiento del servidor en
   /// un error de la app.
-  static Informe informe(
-    Map<String, Object?> recurso,
-    Map<String, Resultado> porReferencia,
-  ) => Informe.emitido(
-    id: recurso['id'] as String? ?? '',
-    fecha: _fecha(recurso['issued']) ?? _fecha(recurso['effectiveDateTime']) ?? DateTime.now(),
-    resultados: _lista(recurso['result'])
-        .whereType<Map<String, Object?>>()
-        .map((referencia) => porReferencia[referencia['reference']])
-        .whereType<Resultado>()
-        .toList(),
-  );
+  static Informe informe(Map<String, Object?> recurso, Map<String, Resultado> porReferencia) =>
+      Informe.emitido(
+        id: recurso['id'] as String? ?? '',
+        fecha: _fecha(recurso['issued']) ?? _fecha(recurso['effectiveDateTime']) ?? DateTime.now(),
+        resultados: _lista(recurso['result'])
+            .whereType<Map<String, Object?>>()
+            .map((referencia) => porReferencia[referencia['reference']])
+            .whereType<Resultado>()
+            .toList(),
+      );
 
   static String _nombreDePrueba(Map<String, Object?> codigo) {
     final texto = codigo['text'];
     if (texto is String && texto.isNotEmpty) {
       return texto;
     }
-    final display = _lista(codigo['coding'])
-        .whereType<Map<String, Object?>>()
-        .map((c) => c['display'])
-        .whereType<String>()
-        .firstOrNull;
+    final display = _lista(
+      codigo['coding'],
+    ).whereType<Map<String, Object?>>().map((c) => c['display']).whereType<String>().firstOrNull;
     return display ?? 'Prueba sin nombre';
   }
 
@@ -135,9 +146,9 @@ abstract final class MapeadorFhir {
 
   static bool _aplicaA(Map<String, Object?> rango, String codigoDelSexo) =>
       _lista(rango['appliesTo']).whereType<Map<String, Object?>>().any(
-        (poblacion) => _lista(poblacion['coding'])
-            .whereType<Map<String, Object?>>()
-            .any((codificacion) => codificacion['code'] == codigoDelSexo),
+        (poblacion) => _lista(poblacion['coding']).whereType<Map<String, Object?>>().any(
+          (codificacion) => codificacion['code'] == codigoDelSexo,
+        ),
       );
 
   static Map<String, Object?>? _primero(Object? valor) =>

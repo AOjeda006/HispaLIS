@@ -75,7 +75,14 @@
       <tbody>
         @for (resultado of vm.resultados(); track resultado.id) {
           <tr>
-            <td>{{ vm.nombreDePrueba(resultado) }}</td>
+            <td>
+              {{ vm.nombreDePrueba(resultado) }}
+              <!-- R5: `triggeredBy`. Va con palabras y no con un icono, y debajo del nombre de la
+                   prueba, porque es parte de qué es esta determinación y no una anotación al margen. -->
+              @if (porQueExiste(resultado); as porQue) {
+                <small class="derivada">{{ porQue }}</small>
+              }
+            </td>
             <td class="valor">{{ valorConUnidad(resultado) }}</td>
             <td class="secundario">{{ rangoDe(resultado) || '—' }}</td>
           </tr>
