@@ -287,6 +287,36 @@
       }
     },
     {
+      "name": "user/Practitioner.u",
+      "description": "Mantener el directorio de facultativos. Sembrarlo es un PUT con id elegido —el número de colegiado ES el id—, y «.c» es crear, donde el id lo pone el servidor.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "Mantener el directorio de facultativos"
+      }
+    },
+    {
+      "name": "user/DiagnosticReport.c",
+      "description": "Emitir el informe del laboratorio. Es el último acto del facultativo sobre un volante, y lo que dispara el ORU^R01 de vuelta al HIS.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "Emitir informes de laboratorio"
+      }
+    },
+    {
+      "name": "user/Observation.u",
+      "description": "Validar resultados: firmar con `$validar` lo que el analizador midió. SMART no tiene scopes de operación, así que una operación se autoriza por lo que le hace al recurso, y esta actualiza un Observation.",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true",
+        "consent.screen.text": "Validar resultados de laboratorio"
+      }
+    },
+    {
       "name": "user/ServiceRequest.c",
       "description": "Registrar líneas de petición.",
       "protocol": "openid-connect",
@@ -403,7 +433,10 @@
         "launch/patient",
         "user/*.rs",
         "user/Patient.c",
+        "user/DiagnosticReport.c",
+        "user/Observation.u",
         "user/Practitioner.c",
+        "user/Practitioner.u",
         "user/ServiceRequest.c"
       ],
       "protocolMappers": [

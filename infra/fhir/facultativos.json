@@ -1,0 +1,22 @@
+[
+  {
+    "id": "COL12345",
+    "colegio": "com-sevilla",
+    "colegioNombre": "Ilustre Colegio Oficial de Médicos de Sevilla",
+    "apellidos": "Ruiz Pérez",
+    "apellidoPadre": "Ruiz",
+    "apellidoMadre": "Pérez",
+    "nombre": "Carmen",
+    "porQue": "La peticionaria que manda el HIS en ORC-12 de su OML^O21. Sin ella, el mensaje acaba en la bandeja de errores."
+  },
+  {
+    "id": "COL41902",
+    "colegio": "com-sevilla",
+    "colegioNombre": "Ilustre Colegio Oficial de Médicos de Sevilla",
+    "apellidos": "Muñoz de la Torre",
+    "apellidoPadre": "Muñoz de la Torre",
+    "apellidoMadre": null,
+    "nombre": "Ángel",
+    "porQue": "Un apellido compuesto con partícula, para que el sembrado ejercite lo mismo que el resto del proyecto: el apellido va entero y NO se parte por el espacio."
+  }
+]
