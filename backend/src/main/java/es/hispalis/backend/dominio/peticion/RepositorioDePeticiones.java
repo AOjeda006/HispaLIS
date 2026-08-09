@@ -29,6 +29,19 @@ public interface RepositorioDePeticiones {
     List<Peticion> buscarLineasDeVolantes(Collection<String> numerosDePeticion, UUID pacienteId);
 
     /**
+     * Si ese volante ya tiene pedida esa prueba, para esa persona.
+     *
+     * <p>Existe por la <strong>prueba refleja</strong>: informar dos veces la misma TSH alterada no
+     * puede añadir dos T4 libres. Se pregunta por volante y no por resultado porque lo que no debe
+     * duplicarse es la <em>petición</em> — y da igual si la primera la pidió el clínico o la añadió
+     * el laboratorio.
+     *
+     * <p>Devuelve un booleano y no la línea a propósito: quien pregunta esto no va a hacer nada con
+     * la línea existente, solo decidir si añade otra.
+     */
+    boolean yaPedidaEnElVolante(String numeroDePeticion, UUID pacienteId, String codigoDePrueba);
+
+    /**
      * Todo lo de un paciente. Lo pide el reconciliador (§15), que regenera la proyección desde el
      * dominio y necesita recorrerlo por persona: es lo que le permite ejecutarse sobre un subconjunto
      * en vez de sobre el laboratorio entero.

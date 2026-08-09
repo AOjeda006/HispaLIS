@@ -1,8 +1,10 @@
 package es.hispalis.backend.infraestructura.persistencia;
 
+import es.hispalis.backend.dominio.resultado.Disparo;
 import es.hispalis.backend.dominio.resultado.Medicion;
 import es.hispalis.backend.dominio.resultado.RepositorioDeResultados;
 import es.hispalis.backend.dominio.resultado.Resultado;
+import es.hispalis.backend.dominio.resultado.TipoDeDisparo;
 import es.hispalis.backend.dominio.resultado.Validacion;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -25,10 +27,10 @@ public class RepositorioDeResultadosSql implements RepositorioDeResultados {
             """
             INSERT INTO dominio.resultado (
                 id, especimen_id, paciente_id, peticion_id, codigo_de_prueba, valor, unidad_ucum, valor_textual,
-                medido_en, realizado_por)
+                medido_en, realizado_por, disparo_origen, disparo_tipo, disparo_motivo)
             VALUES (
                 :id, :especimenId, :pacienteId, :peticionId, :codigoDePrueba, :valor, :unidadUcum, :valorTextual,
-                :medidoEn, :realizadoPor)
+                :medidoEn, :realizadoPor, :disparoOrigen, :disparoTipo, :disparoMotivo)
             """;
 
     private static final String VALIDAR =
@@ -41,7 +43,8 @@ public class RepositorioDeResultadosSql implements RepositorioDeResultados {
     private static final String BUSCAR_POR_ID =
             """
             SELECT id, especimen_id, paciente_id, peticion_id, codigo_de_prueba, valor, unidad_ucum, valor_textual,
-                   medido_en, realizado_por, validado_por, validado_en
+                   medido_en, realizado_por, validado_por, validado_en,
+                   disparo_origen, disparo_tipo, disparo_motivo
               FROM dominio.resultado
              WHERE id = :id
             """;
@@ -56,7 +59,8 @@ public class RepositorioDeResultadosSql implements RepositorioDeResultados {
     private static final String BUSCAR_DE_PACIENTE =
             """
             SELECT id, especimen_id, paciente_id, peticion_id, codigo_de_prueba, valor, unidad_ucum, valor_textual,
-                   medido_en, realizado_por, validado_por, validado_en
+                   medido_en, realizado_por, validado_por, validado_en,
+                   disparo_origen, disparo_tipo, disparo_motivo
               FROM dominio.resultado
              WHERE paciente_id = :pacienteId
              ORDER BY codigo_de_prueba, id
@@ -92,7 +96,20 @@ public class RepositorioDeResultadosSql implements RepositorioDeResultados {
                                         .orElse(null))
                         .addValue(
                                 "realizadoPor",
-                                resultado.medicion().realizadaPor().orElse(null)));
+                                resultado.medicion().realizadaPor().orElse(null))
+                        .addValue(
+                                "disparoOrigen",
+                                resultado.disparadoPor().map(Disparo::origen).orElse(null))
+                        .addValue(
+                                "disparoTipo",
+                                resultado
+                                        .disparadoPor()
+                                        .map(Disparo::tipo)
+                                        .map(TipoDeDisparo::codigoFhir)
+                                        .orElse(null))
+                        .addValue(
+                                "disparoMotivo",
+                                resultado.disparadoPor().map(Disparo::motivo).orElse(null)));
     }
 
     @Override
@@ -155,6 +172,19 @@ public class RepositorioDeResultadosSql implements RepositorioDeResultados {
                 fila.getString("unidad_ucum"),
                 fila.getString("valor_textual"),
                 Medicion.de(medidoEn == null ? null : medidoEn.toInstant(), fila.getString("realizado_por")),
-                validadoPor == null ? null : Validacion.por(validadoPor, validadoEn.toInstant()));
+                validadoPor == null ? null : Validacion.por(validadoPor, validadoEn.toInstant()),
+                disparoDe(fila));
+    }
+
+    /** El disparo, si esta determinación viene de otra. La restricción de la V11 garantiza los tres o ninguno. */
+    private static Disparo disparoDe(ResultSet fila) throws SQLException {
+        String origen = fila.getString("disparo_origen");
+        if (origen == null) {
+            return null;
+        }
+        return new Disparo(
+                UUID.fromString(origen),
+                TipoDeDisparo.deCodigoFhir(fila.getString("disparo_tipo")),
+                fila.getString("disparo_motivo"));
     }
 }

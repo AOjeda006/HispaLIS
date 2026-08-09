@@ -36,6 +36,8 @@ public final class Peticion {
     private final EstadoDeLinea estado;
     private final String motivoDeAnulacion;
     private final Instant anuladaEn;
+    private final UUID disparadaPor;
+    private final String motivoDelDisparo;
 
     private Peticion(
             UUID id,
@@ -46,7 +48,9 @@ public final class Peticion {
             Instant solicitadaEn,
             EstadoDeLinea estado,
             String motivoDeAnulacion,
-            Instant anuladaEn) {
+            Instant anuladaEn,
+            UUID disparadaPor,
+            String motivoDelDisparo) {
         this.id = id;
         this.numeroDePeticion = numeroDePeticion;
         this.pacienteId = pacienteId;
@@ -56,6 +60,8 @@ public final class Peticion {
         this.estado = estado;
         this.motivoDeAnulacion = motivoDeAnulacion;
         this.anuladaEn = anuladaEn;
+        this.disparadaPor = disparadaPor;
+        this.motivoDelDisparo = motivoDelDisparo;
     }
 
     /**
@@ -93,7 +99,58 @@ public final class Peticion {
                 solicitadaEn == null ? Instant.now() : solicitadaEn,
                 EstadoDeLinea.ACTIVA,
                 null,
+                null,
+                null,
                 null);
+    }
+
+    /**
+     * Añade una línea que <strong>no pidió el peticionario</strong>: la prueba refleja.
+     *
+     * <p>Hereda el volante, el paciente y el solicitante de la línea que la disparó, y no es un
+     * atajo: R5 lo dice explícitamente en la definición del código {@code reflex} — la petición
+     * original es «the one that provided the authorization». El laboratorio decide <em>qué</em> se
+     * añade; quién lo autorizó sigue siendo el clínico que firmó el volante.
+     *
+     * <p>Por eso mismo, una determinación informada <strong>sin línea</strong> no puede disparar
+     * ninguna refleja: no hay volante del que colgar la autorización ni a quién devolverle el
+     * resultado añadido. Es una limitación deliberada, no un hueco.
+     *
+     * @param queLaDispara la línea de la prueba que salió alterada
+     * @param codigoReflejo la prueba que el catálogo manda añadir
+     * @param resultadoQueLaDispara el resultado alterado, que es lo que se enlaza después
+     * @param motivo la frase del catálogo que explica por qué existe
+     * @throws DatoInvalido si falta cualquiera de los tres
+     */
+    public static Peticion refleja(
+            Peticion queLaDispara, String codigoReflejo, UUID resultadoQueLaDispara, String motivo) {
+        if (queLaDispara == null) {
+            throw new DatoInvalido("Una refleja cuelga de la línea que la disparó: sin ella no hay volante.");
+        }
+        if (codigoReflejo == null || codigoReflejo.isBlank()) {
+            throw new DatoInvalido("Hay que decir qué prueba se añade.");
+        }
+        if (resultadoQueLaDispara == null) {
+            throw new DatoInvalido("Una refleja tiene que decir qué resultado la provocó.");
+        }
+        if (motivo == null || motivo.isBlank()) {
+            throw new DatoInvalido(
+                    ("La refleja de «%s» no trae motivo, y sin él aparecería en el informe una prueba que "
+                                    + "nadie pidió y que no se puede explicar.")
+                            .formatted(queLaDispara.codigoDePrueba));
+        }
+        return new Peticion(
+                UUID.randomUUID(),
+                queLaDispara.numeroDePeticion,
+                queLaDispara.pacienteId,
+                codigoReflejo.strip(),
+                queLaDispara.solicitante,
+                Instant.now(),
+                EstadoDeLinea.ACTIVA,
+                null,
+                null,
+                resultadoQueLaDispara,
+                motivo.strip());
     }
 
     /**
@@ -137,7 +194,9 @@ public final class Peticion {
                 solicitadaEn,
                 EstadoDeLinea.ANULADA,
                 motivo.strip(),
-                cuando == null ? Instant.now() : cuando);
+                cuando == null ? Instant.now() : cuando,
+                disparadaPor,
+                motivoDelDisparo);
     }
 
     /**
@@ -169,7 +228,9 @@ public final class Peticion {
             Instant solicitadaEn,
             EstadoDeLinea estado,
             String motivoDeAnulacion,
-            Instant anuladaEn) {
+            Instant anuladaEn,
+            UUID disparadaPor,
+            String motivoDelDisparo) {
         return new Peticion(
                 id,
                 numeroDePeticion,
@@ -179,7 +240,9 @@ public final class Peticion {
                 solicitadaEn,
                 estado,
                 motivoDeAnulacion,
-                anuladaEn);
+                anuladaEn,
+                disparadaPor,
+                motivoDelDisparo);
     }
 
     public UUID id() {
@@ -220,5 +283,19 @@ public final class Peticion {
 
     public Optional<Instant> anuladaEn() {
         return Optional.ofNullable(anuladaEn);
+    }
+
+    /**
+     * El resultado que provocó esta línea, si la añadió el laboratorio por su cuenta.
+     *
+     * <p>Vacío en todo lo que se pidió por volante, que es la inmensa mayoría.
+     */
+    public Optional<UUID> disparadaPor() {
+        return Optional.ofNullable(disparadaPor);
+    }
+
+    /** Por qué la añadió, en la frase que el catálogo trae redactada. */
+    public Optional<String> motivoDelDisparo() {
+        return Optional.ofNullable(motivoDelDisparo);
     }
 }

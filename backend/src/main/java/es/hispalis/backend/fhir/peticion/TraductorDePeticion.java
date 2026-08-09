@@ -60,7 +60,12 @@ public class TraductorDePeticion {
         recurso.setStatus(peticion.estaAnulada() ? RequestStatus.REVOKED : RequestStatus.ACTIVE);
         peticion.motivoDeAnulacion().ifPresent(motivo -> recurso.addNote(new Annotation().setText(motivo)));
 
-        recurso.setIntent(RequestIntent.ORDER);
+        // `reflex-order` en vez de `order` cuando la añadió el laboratorio. No es cosmético: es la
+        // diferencia entre «esto lo pidió el clínico» y «esto lo añadió el laboratorio siguiendo su
+        // protocolo», y quien reciba el recurso la necesita para saber a quién preguntarle por qué.
+        // FHIR ya lo modela en `intent`, así que no hace falta extensión ninguna.
+        recurso.setIntent(peticion.disparadaPor().isPresent() ? RequestIntent.REFLEXORDER : RequestIntent.ORDER);
+        peticion.motivoDelDisparo().ifPresent(motivo -> recurso.addNote(new Annotation().setText(motivo)));
         recurso.getRequisition().setValue(peticion.numeroDePeticion());
         recurso.setSubject(new Reference("Patient/" + peticion.pacienteId()));
         recurso.setRequester(new Reference(peticion.solicitante()));

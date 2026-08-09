@@ -113,6 +113,6 @@ class ResultadoTest {
                 EstadoDeEspecimen.DISPONIBLE,
                 null);
         return Resultado.informarCuantitativo(
-                muestra, null, "GLU", new BigDecimal("92"), "mg/dL", Medicion.sinConstancia());
+                muestra, null, "GLU", new BigDecimal("92"), "mg/dL", Medicion.sinConstancia(), null);
     }
 }

@@ -22,14 +22,16 @@ public class RepositorioDePeticionesSql implements RepositorioDePeticiones {
     private static final String COLUMNAS =
             """
             id, numero_de_peticion, paciente_id, codigo_de_prueba, solicitante, solicitada_en,
-            estado, motivo_de_anulacion, anulada_en
+            estado, motivo_de_anulacion, anulada_en, disparada_por, motivo_del_disparo
             """;
 
     private static final String INSERTAR =
             """
             INSERT INTO dominio.peticion (
-                id, numero_de_peticion, paciente_id, codigo_de_prueba, solicitante, solicitada_en, estado)
-            VALUES (:id, :numero, :pacienteId, :codigoDePrueba, :solicitante, :solicitadaEn, :estado)
+                id, numero_de_peticion, paciente_id, codigo_de_prueba, solicitante, solicitada_en, estado,
+                disparada_por, motivo_del_disparo)
+            VALUES (:id, :numero, :pacienteId, :codigoDePrueba, :solicitante, :solicitadaEn, :estado,
+                :disparadaPor, :motivoDelDisparo)
             """;
 
     private static final String ANULAR =
@@ -56,6 +58,15 @@ public class RepositorioDePeticionesSql implements RepositorioDePeticiones {
             ORDER BY numero_de_peticion, codigo_de_prueba
             """;
 
+    private static final String YA_PEDIDA =
+            """
+            SELECT count(*)
+              FROM dominio.peticion
+             WHERE paciente_id = :pacienteId
+               AND numero_de_peticion = :numero
+               AND codigo_de_prueba = :codigoDePrueba
+            """;
+
     private static final RowMapper<Peticion> FILA_A_PETICION = RepositorioDePeticionesSql::aPeticion;
 
     private final NamedParameterJdbcTemplate jdbc;
@@ -75,7 +86,10 @@ public class RepositorioDePeticionesSql implements RepositorioDePeticiones {
                         .addValue("codigoDePrueba", peticion.codigoDePrueba())
                         .addValue("solicitante", peticion.solicitante())
                         .addValue("solicitadaEn", Timestamp.from(peticion.solicitadaEn()))
-                        .addValue("estado", peticion.estado().name()));
+                        .addValue("estado", peticion.estado().name())
+                        .addValue("disparadaPor", peticion.disparadaPor().orElse(null))
+                        .addValue(
+                                "motivoDelDisparo", peticion.motivoDelDisparo().orElse(null)));
     }
 
     @Override
@@ -116,12 +130,25 @@ public class RepositorioDePeticionesSql implements RepositorioDePeticiones {
     }
 
     @Override
+    public boolean yaPedidaEnElVolante(String numeroDePeticion, UUID pacienteId, String codigoDePrueba) {
+        Integer cuantas = jdbc.queryForObject(
+                YA_PEDIDA,
+                new MapSqlParameterSource()
+                        .addValue("pacienteId", pacienteId)
+                        .addValue("numero", numeroDePeticion)
+                        .addValue("codigoDePrueba", codigoDePrueba),
+                Integer.class);
+        return cuantas != null && cuantas > 0;
+    }
+
+    @Override
     public List<Peticion> buscarDePaciente(UUID pacienteId) {
         return jdbc.query(BUSCAR_DE_PACIENTE, new MapSqlParameterSource("pacienteId", pacienteId), FILA_A_PETICION);
     }
 
     private static Peticion aPeticion(ResultSet fila, int numeroDeFila) throws SQLException {
         Timestamp anuladaEn = fila.getTimestamp("anulada_en");
+        String disparadaPor = fila.getString("disparada_por");
         return Peticion.reconstruir(
                 UUID.fromString(fila.getString("id")),
                 fila.getString("numero_de_peticion"),
@@ -131,6 +158,8 @@ public class RepositorioDePeticionesSql implements RepositorioDePeticiones {
                 fila.getTimestamp("solicitada_en").toInstant(),
                 EstadoDeLinea.valueOf(fila.getString("estado")),
                 fila.getString("motivo_de_anulacion"),
-                anuladaEn == null ? null : anuladaEn.toInstant());
+                anuladaEn == null ? null : anuladaEn.toInstant(),
+                disparadaPor == null ? null : UUID.fromString(disparadaPor),
+                fila.getString("motivo_del_disparo"));
     }
 }

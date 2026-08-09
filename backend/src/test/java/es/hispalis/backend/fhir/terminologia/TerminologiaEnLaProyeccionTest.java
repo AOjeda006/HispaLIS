@@ -15,6 +15,7 @@ import java.math.BigDecimal;
 import java.util.Optional;
 import java.util.function.Supplier;
 import org.hl7.fhir.r5.model.CodeSystem;
+import org.hl7.fhir.r5.model.CodeType;
 import org.hl7.fhir.r5.model.CodeableConcept;
 import org.hl7.fhir.r5.model.CodeableReference;
 import org.hl7.fhir.r5.model.Coding;
@@ -187,6 +188,22 @@ class TerminologiaEnLaProyeccionTest extends TestDeIntegracion {
     }
 
     @Test
+    @DisplayName("la regla refleja sale del catálogo, con su frase ya redactada")
+    void laReglaReflejaSaleDelCatalogo() {
+        assertThat(terminologia.reflejaDe("TSH")).hasValueSatisfying(regla -> {
+            assertThat(regla.codigoReflejo()).isEqualTo("T4L");
+            assertThat(regla.motivo()).startsWith("Derivada de un TSH alterado");
+        });
+    }
+
+    @Test
+    @DisplayName("una prueba que no refleja nada no refleja nada, y eso no es un fallo")
+    void laPruebaQueNoReflejaNada() {
+        assertThat(terminologia.reflejaDe("GLU")).isEmpty();
+        assertThat(terminologia.reflejaDe("T4L")).isEmpty();
+    }
+
+    @Test
     @DisplayName("un potasio en otra unidad no se declara «no crítico»: se rechaza la comparación")
     void enOtraUnidadNoSeCompara() {
         assertThatThrownBy(() -> terminologia.esCritico("K", new BigDecimal("7.5"), "mg/dL"))
@@ -215,8 +232,25 @@ class TerminologiaEnLaProyeccionTest extends TestDeIntegracion {
         catalogo.addProperty().setCode("limite-critico-bajo").setType(CodeSystem.PropertyType.DECIMAL);
         catalogo.addProperty().setCode("limite-critico-alto").setType(CodeSystem.PropertyType.DECIMAL);
         catalogo.addProperty().setCode("procedencia-del-valor-critico").setType(CodeSystem.PropertyType.STRING);
+        catalogo.addProperty().setCode("prueba-refleja").setType(CodeSystem.PropertyType.CODE);
+        catalogo.addProperty().setCode("motivo-de-la-refleja").setType(CodeSystem.PropertyType.STRING);
         catalogo.addConcept().setCode("GLU").setDisplay("Glucosa");
         catalogo.addConcept().setCode("HTO").setDisplay("Hematocrito");
+
+        // El par de la refleja, con la forma que tiene en la guía: la TSH dice a qué prueba refleja y
+        // con qué palabras se cuenta; la T4 libre no refleja a nada, que también hay que comprobarlo.
+        CodeSystem.ConceptDefinitionComponent tsh =
+                catalogo.addConcept().setCode("TSH").setDisplay("TSH (tirotropina)");
+        tsh.addProperty().setCode("unidad-ucum").setValue(new Coding(UCUM, "u[IU]/mL", null));
+        tsh.addProperty().setCode("prueba-refleja").setValue(new CodeType("T4L"));
+        tsh.addProperty()
+                .setCode("motivo-de-la-refleja")
+                .setValue(new StringType("Derivada de un TSH alterado: el protocolo de función tiroidea del "
+                        + "laboratorio añade la T4 libre cuando la TSH cae fuera de su rango de referencia."));
+
+        CodeSystem.ConceptDefinitionComponent t4l =
+                catalogo.addConcept().setCode("T4L").setDisplay("T4 libre");
+        t4l.addProperty().setCode("unidad-ucum").setValue(new Coding(UCUM, "ng/dL", null));
 
         // El potasio, con la forma exacta que tiene en la guía: la unidad, los dos límites y la
         // procedencia. Las cifras son las publicadas — SEQC 2010, tabla 6, consulta externa—, y aquí
@@ -326,6 +360,11 @@ class TerminologiaEnLaProyeccionTest extends TestDeIntegracion {
         @Override
         public Optional<UmbralCritico> umbralDe(String codigoDePrueba) {
             return construir().umbralDe(codigoDePrueba);
+        }
+
+        @Override
+        public Optional<es.hispalis.backend.dominio.resultado.ReglaRefleja> reflejaDe(String codigoDePrueba) {
+            return construir().reflejaDe(codigoDePrueba);
         }
 
         private TerminologiaDelServidor construir() {

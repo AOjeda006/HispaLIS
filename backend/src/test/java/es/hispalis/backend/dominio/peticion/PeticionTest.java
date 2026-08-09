@@ -106,6 +106,12 @@ class PeticionTest {
                 EstadoDeEspecimen.DISPONIBLE,
                 null);
         return Resultado.informarCuantitativo(
-                muestra, linea, linea.codigoDePrueba(), new BigDecimal("1.02"), "mg/dL", Medicion.sinConstancia());
+                muestra,
+                linea,
+                linea.codigoDePrueba(),
+                new BigDecimal("1.02"),
+                "mg/dL",
+                Medicion.sinConstancia(),
+                null);
     }
 }

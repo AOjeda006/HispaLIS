@@ -60,7 +60,7 @@ class EspecimenTest {
         Especimen rechazada = muestra(EstadoDeEspecimen.RECHAZADA, "Coagulada");
 
         assertThatThrownBy(() -> Resultado.informarCuantitativo(
-                        rechazada, SIN_PETICION, "GLU", new BigDecimal("92"), "mg/dL", Medicion.sinConstancia()))
+                        rechazada, SIN_PETICION, "GLU", new BigDecimal("92"), "mg/dL", Medicion.sinConstancia(), null))
                 .isInstanceOf(ReglaDeNegocioIncumplida.class);
     }
 
@@ -85,7 +85,7 @@ class EspecimenTest {
         Especimen disponible = muestra(EstadoDeEspecimen.DISPONIBLE, null);
 
         Resultado resultado = Resultado.informarCuantitativo(
-                disponible, SIN_PETICION, "GLU", new BigDecimal("92"), "mg/dL", Medicion.sinConstancia());
+                disponible, SIN_PETICION, "GLU", new BigDecimal("92"), "mg/dL", Medicion.sinConstancia(), null);
 
         assertThat(resultado.especimenId()).isEqualTo(disponible.id());
         assertThat(resultado.pacienteId()).isEqualTo(UN_PACIENTE);
@@ -97,7 +97,7 @@ class EspecimenTest {
         Especimen disponible = muestra(EstadoDeEspecimen.DISPONIBLE, null);
 
         assertThatThrownBy(() -> Resultado.informarCuantitativo(
-                        disponible, SIN_PETICION, "GLU", new BigDecimal("92"), null, Medicion.sinConstancia()))
+                        disponible, SIN_PETICION, "GLU", new BigDecimal("92"), null, Medicion.sinConstancia(), null))
                 .isInstanceOf(DatoInvalido.class)
                 .hasMessageContaining("UCUM");
     }

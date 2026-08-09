@@ -1,14 +1,18 @@
 package es.hispalis.backend.fhir.resultado;
 
 import es.hispalis.backend.dominio.DatoInvalido;
+import es.hispalis.backend.dominio.ReglaDeNegocioIncumplida;
 import es.hispalis.backend.dominio.especimen.Especimen;
 import es.hispalis.backend.dominio.peticion.Peticion;
 import es.hispalis.backend.dominio.resultado.CatalogoDeRangosDeReferencia;
+import es.hispalis.backend.dominio.resultado.Disparo;
 import es.hispalis.backend.dominio.resultado.Medicion;
 import es.hispalis.backend.dominio.resultado.RangoDeReferencia;
 import es.hispalis.backend.dominio.resultado.Resultado;
+import es.hispalis.backend.dominio.resultado.TipoDeDisparo;
 import es.hispalis.backend.fhir.CatalogoDePruebas;
 import es.hispalis.backend.fhir.PerfilesDeLaGuia;
+import es.hispalis.backend.fhir.Referencias;
 import es.hispalis.backend.fhir.terminologia.Terminologia;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -20,6 +24,8 @@ import org.hl7.fhir.r5.model.DateTimeType;
 import org.hl7.fhir.r5.model.Enumerations.ObservationStatus;
 import org.hl7.fhir.r5.model.Observation;
 import org.hl7.fhir.r5.model.Observation.ObservationReferenceRangeComponent;
+import org.hl7.fhir.r5.model.Observation.ObservationTriggeredByComponent;
+import org.hl7.fhir.r5.model.Observation.TriggeredBytype;
 import org.hl7.fhir.r5.model.Quantity;
 import org.hl7.fhir.r5.model.Reference;
 import org.hl7.fhir.r5.model.StringType;
@@ -54,6 +60,7 @@ public class TraductorDeResultado {
     public Resultado aDominio(Observation recurso, Especimen especimen, Peticion linea) {
         String codigo = codigoDelCatalogo(recurso);
         Medicion medicion = medicionDe(recurso);
+        Disparo disparo = disparoDe(recurso, linea);
 
         if (recurso.hasValueQuantity()) {
             Quantity cantidad = recurso.getValueQuantity();
@@ -63,11 +70,12 @@ public class TraductorDeResultado {
                     codigo,
                     cantidad.getValue(),
                     cantidad.hasCode() ? cantidad.getCode() : cantidad.getUnit(),
-                    medicion);
+                    medicion,
+                    disparo);
         }
         if (recurso.hasValueStringType()) {
             return Resultado.informarTextual(
-                    especimen, linea, codigo, recurso.getValueStringType().getValue(), medicion);
+                    especimen, linea, codigo, recurso.getValueStringType().getValue(), medicion, disparo);
         }
         if (recurso.hasValueCodeableConcept()) {
             CodeableConcept valor = recurso.getValueCodeableConcept();
@@ -78,7 +86,8 @@ public class TraductorDeResultado {
                     valor.hasText()
                             ? valor.getText()
                             : valor.getCodingFirstRep().getCode(),
-                    medicion);
+                    medicion,
+                    disparo);
         }
         throw new DatoInvalido(
                 "El resultado no trae valor. Si no consta, hay que decirlo con `dataAbsentReason`, no dejarlo vacío.");
@@ -124,7 +133,55 @@ public class TraductorDeResultado {
         // creatinina. Se publican TODOS los de la prueba, cada uno diciendo a quién aplica, porque
         // aquí no se conoce al paciente — y porque es para eso para lo que FHIR hizo `appliesTo`.
         rangos.buscarPorPrueba(resultado.codigoDePrueba()).forEach(rango -> recurso.addReferenceRange(aFhir(rango)));
+
+        // ⚠️ R5: `triggeredBy` no existe en R4. Es lo que permite decir, de forma procesable, que
+        // esta determinación existe PORQUE otra salió alterada, se repitió o se re-ejecutó — y el
+        // `reason` es lo que lo cuenta con palabras a quien lee el informe.
+        resultado.disparadoPor().ifPresent(disparo -> recurso.addTriggeredBy()
+                .setObservation(new Reference(disparo.referenciaDelOrigen()))
+                .setType(TriggeredBytype.fromCode(disparo.tipo().codigoFhir()))
+                .setReason(disparo.motivo()));
         return recurso;
+    }
+
+    /**
+     * De dónde viene esta determinación, decidido en el orden en que manda el proyecto.
+     *
+     * <p><strong>{@code reflex} no lo declara el cliente.</strong> A qué prueba refleja cada prueba
+     * es el protocolo del laboratorio y vive en su catálogo; admitirlo por la puerta de entrada
+     * dejaría que quien manda un resultado se inventase un protocolo que el laboratorio no tiene, y
+     * el {@code reason} publicado diría lo que él quisiera. Se rechaza con {@code 422}: el recurso
+     * está bien formado, lo que incumple es una regla de negocio.
+     *
+     * <p>{@code repeat} y {@code re-run} sí, y tienen que serlo: la hemólisis del tubo y el control
+     * de calidad del turno solo los ve quien repite. El laboratorio no tiene forma de deducirlos.
+     *
+     * <p>Cuando no viene nada declarado, el disparo sale de la <strong>línea</strong>: si la añadió
+     * el laboratorio como refleja, el resultado que se informe contra ella hereda su origen y su
+     * motivo sin que el cliente tenga que saber nada.
+     */
+    private static Disparo disparoDe(Observation recurso, Peticion linea) {
+        if (recurso.hasTriggeredBy()) {
+            ObservationTriggeredByComponent declarado = recurso.getTriggeredByFirstRep();
+            TipoDeDisparo tipo = TipoDeDisparo.deCodigoFhir(
+                    declarado.hasType() ? declarado.getType().toCode() : null);
+            if (tipo == TipoDeDisparo.REFLEJA) {
+                throw new ReglaDeNegocioIncumplida(
+                        "Una prueba refleja la decide el laboratorio con la regla de su catálogo, no quien manda "
+                                + "el resultado. Si esta determinación repite a otra, dilo con `repeat` o `re-run`.");
+            }
+            return new Disparo(
+                    Referencias.identidadDe(declarado.getObservation(), "resultado que lo disparó"),
+                    tipo,
+                    declarado.hasReason() ? declarado.getReason() : null);
+        }
+        if (linea == null || linea.disparadaPor().isEmpty()) {
+            return null;
+        }
+        return new Disparo(
+                linea.disparadaPor().orElseThrow(),
+                TipoDeDisparo.REFLEJA,
+                linea.motivoDelDisparo().orElse(null));
     }
 
     private static ObservationReferenceRangeComponent aFhir(RangoDeReferencia rango) {

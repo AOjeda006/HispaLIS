@@ -180,6 +180,6 @@ class InformeTest {
         Especimen muestra = Especimen.registrar(
                 new NumeroDeAcceso("A" + UUID.randomUUID()), paciente, "122555007", EstadoDeEspecimen.DISPONIBLE, null);
         return Resultado.informarCuantitativo(
-                muestra, linea, codigo, new BigDecimal("92"), "mg/dL", Medicion.sinConstancia());
+                muestra, linea, codigo, new BigDecimal("92"), "mg/dL", Medicion.sinConstancia(), null);
     }
 }

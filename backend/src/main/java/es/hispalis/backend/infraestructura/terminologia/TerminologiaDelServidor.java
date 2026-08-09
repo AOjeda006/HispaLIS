@@ -4,6 +4,7 @@ import ca.uhn.fhir.rest.client.api.IGenericClient;
 import es.hispalis.backend.dominio.DatoInvalido;
 import es.hispalis.backend.dominio.ReglaDeNegocioIncumplida;
 import es.hispalis.backend.dominio.resultado.NoSeSabeSiEsCritico;
+import es.hispalis.backend.dominio.resultado.ReglaRefleja;
 import es.hispalis.backend.dominio.resultado.UmbralCritico;
 import es.hispalis.backend.fhir.CatalogoDePruebas;
 import es.hispalis.backend.fhir.terminologia.Terminologia;
@@ -75,6 +76,9 @@ public class TerminologiaDelServidor implements Terminologia {
     /** Los umbrales ya resueltos, incluido «esta prueba no tiene», que también es una respuesta. */
     private final Map<String, Optional<UmbralCritico>> umbrales = new ConcurrentHashMap<>();
 
+    /** Las reglas reflejas ya resueltas, incluido «esta prueba no dispara ninguna». */
+    private final Map<String, Optional<ReglaRefleja>> reflejas = new ConcurrentHashMap<>();
+
     private final AtomicBoolean avisadoDeQueNoEsta = new AtomicBoolean();
 
     public TerminologiaDelServidor(IGenericClient cliente) {
@@ -118,6 +122,69 @@ public class TerminologiaDelServidor implements Terminologia {
         Optional<UmbralCritico> umbral = umbralEn(salida, codigoDePrueba);
         umbrales.put(codigoDePrueba, umbral);
         return umbral;
+    }
+
+    /**
+     * {@code $lookup} una vez más, y aquí la política de caída vuelve a ser la general: se degrada.
+     *
+     * <p>Sin respuesta se contesta «no hay refleja» en vez de lanzar, al revés que en
+     * {@link #umbralDe}, y la asimetría está pensada: con un umbral crítico, callarse
+     * <strong>invierte</strong> la respuesta y alguien no recibe una llamada; con una refleja,
+     * callarse solo <strong>omite</strong> una prueba añadida, y el facultativo que valide la TSH la
+     * va a ver marcada como alta igual. Bloquear el registro de resultados porque no se puede
+     * consultar el protocolo sería cambiar un problema de terminología por uno clínico.
+     *
+     * <p>Por eso mismo <strong>una respuesta que no llegó no se cachea</strong>: la próxima vuelve a
+     * preguntar, y en cuanto el servidor conteste las reflejas se reanudan solas.
+     */
+    @Override
+    public Optional<ReglaRefleja> reflejaDe(String codigoDePrueba) {
+        Optional<ReglaRefleja> sabido = reflejas.get(codigoDePrueba);
+        if (sabido != null) {
+            return sabido;
+        }
+        Parameters entrada = new Parameters();
+        entrada.addParameter("system", new UriType(CatalogoDePruebas.SYSTEM));
+        entrada.addParameter("code", new CodeType(codigoDePrueba));
+
+        Optional<Parameters> salida = invocar(CodeSystem.class, "$lookup", entrada);
+        if (salida.isEmpty()) {
+            return Optional.empty();
+        }
+        Optional<ReglaRefleja> regla = reglaEn(salida.get(), codigoDePrueba);
+        reflejas.put(codigoDePrueba, regla);
+        return regla;
+    }
+
+    /**
+     * Arma la regla con lo que el concepto declara, o dice que esa prueba no refleja nada.
+     *
+     * <p>Una regla mal declarada —una prueba refleja sin su motivo, o una que se refleja a sí
+     * misma— <strong>no se aplica</strong>, y se avisa nombrando el concepto. No se lanza, a
+     * diferencia del umbral crítico: aquí el defecto del catálogo hace que falte una prueba, no que
+     * se dé por buena una cifra peligrosa, y tumbar el registro del resultado sería peor.
+     */
+    private static Optional<ReglaRefleja> reglaEn(Parameters salida, String codigoDePrueba) {
+        Optional<String> refleja =
+                propiedad(salida, "prueba-refleja").map(org.hl7.fhir.r5.model.DataType::primitiveValue);
+        if (refleja.isEmpty()) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(new ReglaRefleja(
+                    codigoDePrueba,
+                    refleja.get(),
+                    propiedad(salida, "motivo-de-la-refleja")
+                            .map(org.hl7.fhir.r5.model.DataType::primitiveValue)
+                            .orElse(null)));
+        } catch (DatoInvalido malDeclarada) {
+            LOG.warn(
+                    "El catálogo declara una prueba refleja para «{}» que no se puede aplicar, así que no se "
+                            + "añade ninguna: {}",
+                    codigoDePrueba,
+                    malDeclarada.getMessage());
+            return Optional.empty();
+        }
     }
 
     @Override

@@ -1,6 +1,7 @@
 package es.hispalis.backend.infraestructura.terminologia;
 
 import es.hispalis.backend.dominio.resultado.NoSeSabeSiEsCritico;
+import es.hispalis.backend.dominio.resultado.ReglaRefleja;
 import es.hispalis.backend.dominio.resultado.UmbralCritico;
 import es.hispalis.backend.fhir.CatalogoDePruebas;
 import es.hispalis.backend.fhir.terminologia.Terminologia;
@@ -44,5 +45,17 @@ public class SinServidorDeTerminologia implements Terminologia {
                 "No hay servidor de terminología configurado, así que no se puede saber si «%s» tiene umbral crítico. "
                                 .formatted(codigoDePrueba)
                         + "Los umbrales los publica la guía y no hay a quién preguntárselos.");
+    }
+
+    /**
+     * Y aquí sí se degrada, aunque la regla también venga del catálogo.
+     *
+     * <p>La diferencia con el umbral está en <strong>qué se pierde</strong>: sin refleja falta una
+     * prueba añadida, que el facultativo va a echar en falta al ver la TSH marcada como alta; sin
+     * umbral se afirma que una cifra peligrosa no lo es. Omitir no es lo mismo que mentir.
+     */
+    @Override
+    public Optional<ReglaRefleja> reflejaDe(String codigoDePrueba) {
+        return Optional.empty();
     }
 }
