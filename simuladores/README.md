@@ -6,6 +6,7 @@
 | `his/` | Simulador del **HIS** de la clínica: emite `ADT^A01`/`A08` y `OML^O21` por MLLP | 2 |
 | `analizador/` | Simulador del **analizador**: emite `ORU^R01` por MLLP | 2 |
 | `mllp/` | El **sobre** MLLP, compartido por los dos: son sistemas distintos que hablan el mismo transporte | 2 |
+| `receptor/` | Receptor de **notificaciones de `Subscription`**: el sistema al que el laboratorio entrega | 3 |
 
 > **Nunca datos reales de pacientes.** Todo lo que sale de aquí es sintético, en cualquier entorno.
 
@@ -99,3 +100,28 @@ python -m analizador --acceso ACC70000001 --medidas 2345-7:92:mg/dL,2160-0:0.9:m
   `MUÑOZ DE LA TORRE` de apellido por defecto, un desajuste entre las dos cosas se ve en el acuse.
 - **Un `ORU^R01` que entra no está validado.** `OBX-11 = F` es «final del analizador»; la validación
   es de un facultativo y va por el otro camino.
+
+## El receptor de notificaciones (hito 3)
+
+El otro extremo de una `Subscription` de R5. No es un doble del cliente HTTP del backend: es un
+tercero al otro lado de un puerto, y por eso puede aceptar, negarse o no estar — que es lo que hace
+falta para comprobar el corte.
+
+Comprueba las tres cosas que un receptor de verdad tendría que comprobar:
+
+1. **La firma** cuadra con el secreto compartido, y la marca de tiempo no es de ayer. Sin clave, el
+   receptor **no arranca**: aceptar sin firma es aceptar de cualquiera.
+2. **La carga es `id-only`.** Una entrada con el recurso dentro se rechaza con `400`. Un receptor que
+   se traga un recurso que no pidió acaba almacenando historia clínica sin saber de dónde salió.
+3. **No falta ningún `eventNumber`.** Para eso existe el número: con entrega «al menos una vez» y un
+   canal que puede caerse, no hay otra forma de enterarse de lo que **no** llegó. Lo que falte se
+   recupera con `Subscription/{id}/$events`.
+
+```bash
+# dentro del compose, detrás de su perfil
+docker compose -f ../infra/compose/docker-compose.yml --profile notificaciones up -d receptor
+docker compose -f ../infra/compose/docker-compose.yml logs -f receptor
+
+# o suelto
+HISPALIS_CLAVE_HIS=$(openssl rand -hex 32) python -m receptor --puerto 8090
+```
