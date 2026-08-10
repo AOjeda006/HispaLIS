@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import ca.uhn.fhir.context.FhirContext;
 import es.hispalis.backend.TestDeIntegracion;
+import es.hispalis.backend.dominio.edo.ModalidadDeDeclaracion;
 import es.hispalis.backend.dominio.edo.ReglaDeDeclaracion;
 import es.hispalis.backend.dominio.hecho.TipoDeHecho;
 import es.hispalis.backend.dominio.resultado.ReglaRefleja;
@@ -12,6 +13,7 @@ import es.hispalis.backend.fhir.CatalogoDePruebas;
 import es.hispalis.backend.fhir.CircuitoDePrueba;
 import es.hispalis.backend.fhir.ResultadosCualitativos;
 import es.hispalis.backend.fhir.terminologia.Terminologia;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -258,7 +260,13 @@ class DeclaracionObligatoriaTest extends TestDeIntegracion {
                 @Override
                 public Optional<ReglaDeDeclaracion> declaracionDe(String codigoDePrueba) {
                     return LEGIONELLA.equals(codigoDePrueba)
-                            ? Optional.of(new ReglaDeDeclaracion(LEGIONELLA, "LEGIONELOSIS", "Legionelosis", "POS"))
+                            ? Optional.of(new ReglaDeDeclaracion(
+                                    LEGIONELLA,
+                                    "LEGIONELOSIS",
+                                    "Legionelosis",
+                                    "POS",
+                                    ModalidadDeDeclaracion.URGENTE,
+                                    Duration.ofHours(24)))
                             : Optional.empty();
                 }
             };

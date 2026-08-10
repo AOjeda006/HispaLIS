@@ -6,6 +6,7 @@ import ca.uhn.fhir.context.FhirContext;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import es.hispalis.backend.TestDeIntegracion;
+import es.hispalis.backend.dominio.edo.ModalidadDeDeclaracion;
 import es.hispalis.backend.dominio.edo.ReglaDeDeclaracion;
 import es.hispalis.backend.dominio.resultado.ReglaRefleja;
 import es.hispalis.backend.dominio.resultado.UmbralCritico;
@@ -156,7 +157,9 @@ class NotificadorEdoTest extends TestDeIntegracion {
         assertThat(acuseDe(declaracion))
                 .as("el acuse es el número de registro que devuelve Salud Pública, y se guarda")
                 .isEqualTo("SVEA-2026-000123");
-        assertThat(saludPublica.recibidas()).hasSize(1);
+        assertThat(loRecibidoSobre(resultado))
+                .as("una declaración acusada no se vuelve a mandar: la obligación está cumplida")
+                .hasSize(1);
     }
 
     /**
@@ -180,7 +183,7 @@ class NotificadorEdoTest extends TestDeIntegracion {
 
         // Primero se espera a que el intento llegue de verdad al otro lado: comprobar el estado antes
         // de eso miraría la tarea recién abierta y el test pasaría sin haber ejercitado nada.
-        esperarA(saludPublica::recibidas, intentos -> !intentos.isEmpty());
+        esperarA(() -> loRecibidoSobre(resultado), intentos -> !intentos.isEmpty());
 
         Task declaracion = esperarLaDeclaracionEn(resultado, "PENDIENTE");
         assertThat(estadoDe(declaracion))
@@ -291,7 +294,7 @@ class NotificadorEdoTest extends TestDeIntegracion {
         circuito.validar(resultado);
         esperarLaDeclaracionEn(resultado, "ACUSADA");
 
-        String enviado = saludPublica.recibidas().get(0);
+        String enviado = loRecibidoSobre(resultado).get(0);
         assertThat(enviado)
                 .doesNotContain(CircuitoDePrueba.APELLIDOS)
                 .doesNotContain(CircuitoDePrueba.NOMBRE_DE_PILA)
@@ -314,7 +317,7 @@ class NotificadorEdoTest extends TestDeIntegracion {
         assertThat(declaracionesDe(resultado))
                 .as("un negativo de una prueba EDO no es información para Salud Pública")
                 .isEmpty();
-        assertThat(saludPublica.recibidas()).isEmpty();
+        assertThat(loRecibidoSobre(resultado)).isEmpty();
     }
 
     // ─── Andamiaje ──────────────────────────────────────────────────────────
@@ -360,6 +363,19 @@ class NotificadorEdoTest extends TestDeIntegracion {
      * el test dice. Esperar solo a que exista devolvería la tarea recién abierta, antes de intentar
      * nada, y todos los tests pasarían mirando el mismo instante.
      */
+    /**
+     * Lo que Salud Pública ha recibido <strong>de este resultado</strong>.
+     *
+     * <p>Filtrar hace falta: estos tests comparten base de datos y el notificador sigue reintentando
+     * las declaraciones que otros dejaron abiertas, así que un recuento global mediría el ruido de los
+     * vecinos en vez de lo que este caso hizo.
+     */
+    private List<String> loRecibidoSobre(String resultado) {
+        return saludPublica.recibidas().stream()
+                .filter(cuerpo -> cuerpo.contains(CircuitoDePrueba.identidadDe(resultado)))
+                .toList();
+    }
+
     private Task esperarLaDeclaracionEn(String resultado, String estado) {
         return esperarA(
                         () -> declaracionesDe(resultado),
@@ -539,10 +555,24 @@ class NotificadorEdoTest extends TestDeIntegracion {
                 @Override
                 public Optional<ReglaDeDeclaracion> declaracionDe(String codigoDePrueba) {
                     return switch (codigoDePrueba) {
-                        case LEGIONELLA -> Optional.of(
-                                new ReglaDeDeclaracion(LEGIONELLA, "LEGIONELOSIS", "Legionelosis", "POS"));
-                        case SARAMPION -> Optional.of(
-                                new ReglaDeDeclaracion(SARAMPION, "SARAMPION", "Sarampión", "POS"));
+                        case LEGIONELLA -> Optional.of(new ReglaDeDeclaracion(
+                                LEGIONELLA,
+                                "LEGIONELOSIS",
+                                "Legionelosis",
+                                "POS",
+                                ModalidadDeDeclaracion.URGENTE,
+                                Duration.ofHours(24)));
+                            // Un milisegundo de plazo: el vencimiento queda en el pasado en cuanto se
+                            // abre la declaración. El plazo real del sarampión son horas y esperarlas
+                            // en un test no es una opción; lo que se prueba aquí no es cuántas dice el
+                            // catálogo, sino que un vencimiento pasado se pueda encontrar.
+                        case SARAMPION -> Optional.of(new ReglaDeDeclaracion(
+                                SARAMPION,
+                                "SARAMPION",
+                                "Sarampión",
+                                "POS",
+                                ModalidadDeDeclaracion.URGENTE,
+                                Duration.ofMillis(1)));
                         default -> Optional.empty();
                     };
                 }

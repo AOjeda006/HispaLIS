@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import ca.uhn.fhir.context.FhirContext;
 import ca.uhn.fhir.rest.client.api.ServerValidationModeEnum;
 import es.hispalis.backend.TestDeIntegracion;
+import es.hispalis.backend.dominio.edo.ModalidadDeDeclaracion;
 import es.hispalis.backend.dominio.resultado.NoSeSabeSiEsCritico;
 import es.hispalis.backend.dominio.resultado.UmbralCritico;
 import es.hispalis.backend.fhir.CatalogoDePruebas;
@@ -13,6 +14,7 @@ import es.hispalis.backend.fhir.CircuitoDePrueba;
 import es.hispalis.backend.fhir.ResultadosCualitativos;
 import es.hispalis.backend.infraestructura.terminologia.TerminologiaDelServidor;
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.Optional;
 import java.util.function.Supplier;
 import org.hl7.fhir.r5.model.CodeSystem;
@@ -25,6 +27,7 @@ import org.hl7.fhir.r5.model.DecimalType;
 import org.hl7.fhir.r5.model.Enumerations;
 import org.hl7.fhir.r5.model.Enumerations.ConceptMapRelationship;
 import org.hl7.fhir.r5.model.Enumerations.PublicationStatus;
+import org.hl7.fhir.r5.model.IntegerType;
 import org.hl7.fhir.r5.model.Observation;
 import org.hl7.fhir.r5.model.ServiceRequest;
 import org.hl7.fhir.r5.model.StringType;
@@ -71,6 +74,8 @@ class TerminologiaEnLaProyeccionTest extends TestDeIntegracion {
     private static final String UCUM = "http://unitsofmeasure.org";
     private static final String ENFERMEDADES_EDO =
             "https://aojeda006.github.io/HispaLIS/fhir/CodeSystem/enfermedades-edo";
+    private static final String MODALIDADES =
+            "https://aojeda006.github.io/HispaLIS/fhir/CodeSystem/modalidades-declaracion-edo";
 
     @Autowired
     private TestRestTemplate rest;
@@ -87,6 +92,11 @@ class TerminologiaEnLaProyeccionTest extends TestDeIntegracion {
     void cargarLaTerminologia() {
         circuito = new CircuitoDePrueba(rest, contexto);
         subir("CodeSystem/catalogo-pruebas", catalogo());
+        // Son DOS sistemas de códigos y no uno, igual que en la guía: el catálogo de pruebas dice
+        // qué enfermedad declara cada técnica, y el de enfermedades en cuánto tiempo hay que
+        // declararla. Sin este segundo, la regla no se arma — y esa dependencia es justo lo que
+        // este test tiene que ejercitar contra un servidor de verdad.
+        subir("CodeSystem/enfermedades-edo", enfermedades());
         subir("ValueSet/pruebas-del-catalogo", conjuntoDePruebas());
         subir("ConceptMap/catalogo-a-loinc", mapaALoinc());
     }
@@ -211,15 +221,16 @@ class TerminologiaEnLaProyeccionTest extends TestDeIntegracion {
     }
 
     /**
-     * La regla de declaración obligatoria, leída de un {@code $lookup} de verdad.
+     * La regla de declaración obligatoria, leída de dos {@code $lookup} de verdad.
      *
      * <p>Es lo que este test aporta y ningún doble puede aportar: que un servidor FHIR real
-     * <strong>devuelva</strong> las dos propiedades de tipo {@code Coding}, con su {@code system},
-     * su código y su nombre. Que el código Java sepa interpretarlas lo prueba
-     * {@code DeclaracionObligatoriaTest}; que lleguen, solo esto.
+     * <strong>devuelva</strong> las propiedades de tipo {@code Coding} e {@code integer}, con su
+     * {@code system}, su código y su nombre, y que la regla se arme <strong>atravesando dos sistemas
+     * de códigos</strong> — el del catálogo y el de las enfermedades—. Que el código Java sepa
+     * interpretarlas lo prueba {@code DeclaracionObligatoriaTest}; que lleguen, solo esto.
      */
     @Test
-    @DisplayName("qué enfermedad declara una prueba, y con qué resultado, sale del catálogo")
+    @DisplayName("qué enfermedad declara una prueba, con qué resultado y en cuánto, sale del catálogo")
     void laReglaDeDeclaracionSaleDelCatalogo() {
         assertThat(terminologia.declaracionDe("LEGIOAG")).hasValueSatisfying(regla -> {
             assertThat(regla.codigoDeEnfermedad()).isEqualTo("LEGIONELOSIS");
@@ -230,7 +241,21 @@ class TerminologiaEnLaProyeccionTest extends TestDeIntegracion {
             assertThat(regla.laDispara("IND"))
                     .as("el criterio es un código concreto, no «todo lo que no sea negativo»")
                     .isFalse();
+            // El plazo viene del OTRO sistema de códigos, y por eso está aquí: si el segundo
+            // `$lookup` no se hiciera, la regla no existiría y el test de arriba tampoco pasaría.
+            assertThat(regla.modalidad()).isEqualTo(ModalidadDeDeclaracion.URGENTE);
+            assertThat(regla.plazo()).isEqualTo(Duration.ofHours(24));
         });
+    }
+
+    @Test
+    @DisplayName("una enfermedad sin plazo publicado no abre declaración: una obligación sin plazo no se vigila")
+    void sinPlazoNoHayRegla() {
+        // TUBERCULOSIS está en el catálogo de enfermedades sin `plazo-horas` a propósito. Podría
+        // parecer que lo razonable es suponer «ordinaria» y seguir; sería darle siete días a algo
+        // que la norma quizá quiere en veinticuatro horas, y ese error no se detecta hasta que
+        // llega la inspección.
+        assertThat(terminologia.declaracionDe("BAAR")).isEmpty();
     }
 
     @Test
@@ -289,6 +314,19 @@ class TerminologiaEnLaProyeccionTest extends TestDeIntegracion {
                 .setCode("resultado-que-declara")
                 .setValue(new Coding(ResultadosCualitativos.SYSTEM, "POS", "Positivo"));
 
+        // La baciloscopia declara tuberculosis, y la tuberculosis es la enfermedad a la que este
+        // recorte le quita el plazo. Ver `sinPlazoNoHayRegla`.
+        CodeSystem.ConceptDefinitionComponent baciloscopia =
+                catalogo.addConcept().setCode("BAAR").setDisplay("Baciloscopia de esputo");
+        baciloscopia
+                .addProperty()
+                .setCode("enfermedad-edo")
+                .setValue(new Coding(ENFERMEDADES_EDO, "TUBERCULOSIS", "Tuberculosis"));
+        baciloscopia
+                .addProperty()
+                .setCode("resultado-que-declara")
+                .setValue(new Coding(ResultadosCualitativos.SYSTEM, "POS", "Positivo"));
+
         // El par de la refleja, con la forma que tiene en la guía: la TSH dice a qué prueba refleja y
         // con qué palabras se cuenta; la T4 libre no refleja a nada, que también hay que comprobarlo.
         CodeSystem.ConceptDefinitionComponent tsh =
@@ -318,6 +356,38 @@ class TerminologiaEnLaProyeccionTest extends TestDeIntegracion {
                         new StringType(
                                 "SEQC 2010, tabla 6: mediana declarada para consulta externa (Rev Lab Clin. 2010;3(4):177-182)."));
         return catalogo;
+    }
+
+    /**
+     * El catálogo de enfermedades EDO, recortado a dos, con la forma que tiene en la guía.
+     *
+     * <p>El plazo cuelga de la <strong>enfermedad</strong> y no de la prueba a propósito: una
+     * legionelosis es urgente la detecte la técnica que la detecte. Colgarlo de la prueba obligaría
+     * a repetirlo en cada técnica que confirme lo mismo, y el día que dos discrepasen no habría
+     * forma de saber cuál manda.
+     */
+    private static CodeSystem enfermedades() {
+        CodeSystem enfermedades = new CodeSystem();
+        enfermedades.setId("enfermedades-edo");
+        enfermedades.setUrl(ENFERMEDADES_EDO);
+        enfermedades.setStatus(PublicationStatus.DRAFT);
+        enfermedades.setContent(Enumerations.CodeSystemContentMode.COMPLETE);
+        enfermedades.setCaseSensitive(true);
+        enfermedades.addProperty().setCode("modalidad-declaracion").setType(CodeSystem.PropertyType.CODING);
+        enfermedades.addProperty().setCode("plazo-horas").setType(CodeSystem.PropertyType.INTEGER);
+
+        CodeSystem.ConceptDefinitionComponent legionelosis =
+                enfermedades.addConcept().setCode("LEGIONELOSIS").setDisplay("Legionelosis");
+        legionelosis
+                .addProperty()
+                .setCode("modalidad-declaracion")
+                .setValue(new Coding(MODALIDADES, "URGENTE", "Declaración urgente"));
+        legionelosis.addProperty().setCode("plazo-horas").setValue(new IntegerType(24));
+
+        // Sin plazo, y no es un olvido: es el caso de catálogo incompleto que `sinPlazoNoHayRegla`
+        // ejercita. En la guía sí lo lleva.
+        enfermedades.addConcept().setCode("TUBERCULOSIS").setDisplay("Tuberculosis");
+        return enfermedades;
     }
 
     private static ValueSet conjuntoDePruebas() {

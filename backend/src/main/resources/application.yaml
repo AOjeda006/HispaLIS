@@ -102,6 +102,24 @@ hispalis:
     secretos:
       his-2026: ${HISPALIS_CLAVE_HIS:}
 
+  # La declaración de enfermedades obligatorias a Salud Pública (ítem 48). Detectar la obligación es
+  # siempre —lo hace el ítem 47 dentro de la transacción de la validación—; lo que se puede apagar es
+  # DECLARARLA. Apagarlo no cambia lo que el laboratorio considera declarable: los hechos se apuntan
+  # igual y quedan esperando.
+  edo:
+    habilitado: ${HISPALIS_EDO:true}
+    # El servicio de declaraciones del SVEA. VACÍO por defecto y a propósito: el destinatario depende
+    # del despliegue y no hay un valor sensato que poner. Sin destino, las obligaciones se registran
+    # y NO salen — mejor eso que salir hacia una dirección adivinada.
+    destino: ${HISPALIS_EDO_DESTINO:}
+    destinatario: ${HISPALIS_EDO_DESTINATARIO:Vigilancia Epidemiológica (simulado)}
+    intervalo: PT5S
+    tanda: 50
+    tiempo-de-espera: PT5S
+    # Tres intentos y se deja de intentar solo. El corte NO borra la obligación: la declaración se
+    # queda abierta y, pasado el plazo, vencida y visible. Ver `NotificadorEdo`.
+    intentos: 3
+
   bus:
     # Encendido por defecto: que el laboratorio no publique lo que ya ha apuntado tiene que ser una
     # decisión escrita, no un valor que falta. Con el broker caído no pasa nada — el hecho se queda

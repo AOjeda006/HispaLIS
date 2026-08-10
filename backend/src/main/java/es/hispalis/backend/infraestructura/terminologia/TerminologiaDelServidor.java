@@ -3,6 +3,7 @@ package es.hispalis.backend.infraestructura.terminologia;
 import ca.uhn.fhir.rest.client.api.IGenericClient;
 import es.hispalis.backend.dominio.DatoInvalido;
 import es.hispalis.backend.dominio.ReglaDeNegocioIncumplida;
+import es.hispalis.backend.dominio.edo.ModalidadDeDeclaracion;
 import es.hispalis.backend.dominio.edo.ReglaDeDeclaracion;
 import es.hispalis.backend.dominio.resultado.NoSeSabeSiEsCritico;
 import es.hispalis.backend.dominio.resultado.ReglaRefleja;
@@ -11,6 +12,7 @@ import es.hispalis.backend.fhir.CatalogoDePruebas;
 import es.hispalis.backend.fhir.ResultadosCualitativos;
 import es.hispalis.backend.fhir.terminologia.Terminologia;
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -21,6 +23,7 @@ import org.hl7.fhir.r5.model.CodeType;
 import org.hl7.fhir.r5.model.CodeableConcept;
 import org.hl7.fhir.r5.model.Coding;
 import org.hl7.fhir.r5.model.ConceptMap;
+import org.hl7.fhir.r5.model.IntegerType;
 import org.hl7.fhir.r5.model.Parameters;
 import org.hl7.fhir.r5.model.UriType;
 import org.hl7.fhir.r5.model.ValueSet;
@@ -122,10 +125,15 @@ public class TerminologiaDelServidor implements Terminologia {
     }
 
     /**
-     * Qué enfermedad declara una prueba y con qué resultado, leído del mismo concepto del catálogo.
+     * Qué enfermedad declara una prueba, con qué resultado y en cuánto tiempo.
      *
-     * <p>Un solo {@code $lookup} trae las dos propiedades, que es el motivo de que estén en el
-     * concepto y no en un {@code ConceptMap} aparte (ver el comentario de {@code CatalogoPruebas.fsh}).
+     * <p>Son <strong>dos</strong> {@code $lookup} y no uno, y la partición no es arbitraria: qué
+     * declara cada prueba es del catálogo local ({@code enfermedad-edo}, {@code resultado-que-declara}),
+     * y en cuánto tiempo hay que declararlo es de la enfermedad ({@code modalidad-declaracion},
+     * {@code plazo-horas}). Una legionelosis es urgente la detecte la técnica que la detecte; colgar el
+     * plazo de la prueba obligaría a repetirlo en cada técnica que confirme lo mismo, y el día que dos
+     * discrepasen no habría forma de saber cuál manda. Las dos respuestas se cachean juntas, así que el
+     * segundo viaje se paga una vez por prueba.
      *
      * <p>Sin respuesta del servidor se contesta vacío en vez de lanzar, al revés que en
      * {@link #umbralDe}, y aquí conviene decir por qué no es una incoherencia: este método solo se
@@ -162,11 +170,21 @@ public class TerminologiaDelServidor implements Terminologia {
      * catálogo dejaría al paciente sin informe además de a Salud Pública sin declaración. El aviso es
      * para quien mantiene la guía.
      */
-    private static Optional<ReglaDeDeclaracion> declaracionEn(Parameters salida, String codigoDePrueba) {
+    private Optional<ReglaDeDeclaracion> declaracionEn(Parameters salida, String codigoDePrueba) {
         Optional<Coding> enfermedad = propiedad(salida, "enfermedad-edo")
                 .filter(Coding.class::isInstance)
                 .map(Coding.class::cast);
         if (enfermedad.isEmpty()) {
+            return Optional.empty();
+        }
+        Optional<Plazo> plazo = plazoDe(enfermedad.get());
+        if (plazo.isEmpty()) {
+            LOG.warn(
+                    "«{}» declara la enfermedad «{}», pero el catálogo de enfermedades no dice en cuánto tiempo "
+                            + "hay que declararla, así que NO se declarará nada. Una obligación sin plazo no se "
+                            + "puede vigilar.",
+                    codigoDePrueba,
+                    enfermedad.get().getCode());
             return Optional.empty();
         }
         try {
@@ -177,13 +195,56 @@ public class TerminologiaDelServidor implements Terminologia {
                     propiedad(salida, "resultado-que-declara")
                             .filter(Coding.class::isInstance)
                             .map(valor -> ((Coding) valor).getCode())
-                            .orElse(null)));
+                            .orElse(null),
+                    plazo.get().modalidad(),
+                    plazo.get().ventana()));
         } catch (DatoInvalido malDeclarada) {
             LOG.warn(
                     "El catálogo declara «{}» como prueba de declaración obligatoria pero la regla no se puede "
                             + "aplicar, así que NO se declarará nada: {}",
                     codigoDePrueba,
                     malDeclarada.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    /** Modalidad y ventana, que van juntas o no van: ver {@code EnfermedadesEdo.fsh}. */
+    private record Plazo(ModalidadDeDeclaracion modalidad, Duration ventana) {}
+
+    /**
+     * El segundo {@code $lookup}: cuánto tiempo hay para declarar esta enfermedad.
+     *
+     * <p>Una modalidad que el catálogo publique y este código no conozca <strong>no se inventa</strong>:
+     * se avisa y la declaración no se abre. Traducirla a «ordinaria por defecto» daría siete días a
+     * algo que la norma quizá quiere en veinticuatro horas, y ese error no lo detecta nadie hasta que
+     * llega la inspección.
+     */
+    private Optional<Plazo> plazoDe(Coding enfermedad) {
+        Parameters entrada = new Parameters();
+        entrada.addParameter("system", new UriType(enfermedad.getSystem()));
+        entrada.addParameter("code", new CodeType(enfermedad.getCode()));
+
+        Optional<Parameters> salida = invocar(CodeSystem.class, "$lookup", entrada);
+        if (salida.isEmpty()) {
+            return Optional.empty();
+        }
+        Optional<String> modalidad = propiedad(salida.get(), "modalidad-declaracion")
+                .filter(Coding.class::isInstance)
+                .map(valor -> ((Coding) valor).getCode());
+        Optional<Integer> horas = propiedad(salida.get(), "plazo-horas")
+                .filter(IntegerType.class::isInstance)
+                .map(valor -> ((IntegerType) valor).getValue());
+        if (modalidad.isEmpty() || horas.isEmpty() || horas.get() <= 0) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(new Plazo(ModalidadDeDeclaracion.de(modalidad.get()), Duration.ofHours(horas.get())));
+        } catch (IllegalArgumentException desconocida) {
+            LOG.warn(
+                    "El catálogo declara la modalidad «{}» para «{}» y este laboratorio no la conoce: no se abrirá "
+                            + "la declaración. Suponer un plazo sería darle días a algo que puede ser de horas.",
+                    modalidad.get(),
+                    enfermedad.getCode());
             return Optional.empty();
         }
     }

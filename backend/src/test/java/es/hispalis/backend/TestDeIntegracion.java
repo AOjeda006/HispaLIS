@@ -44,7 +44,11 @@ import org.springframework.test.context.DynamicPropertySource;
             // Y la ENTREGA de notificaciones, por la misma razón que el bus: un relay saliendo cada
             // dos segundos en doscientos tests no prueba nada y ensucia el log. Lo que NO se apaga es
             // anotar lo notificable — eso pasa siempre, y apagarlo cambiaría lo que se está probando.
-            "hispalis.notificaciones.habilitado=false"
+            "hispalis.notificaciones.habilitado=false",
+            // Y el notificador EDO, por lo mismo: un hilo declarando a Salud Pública en doscientos
+            // tests no prueba nada. Lo que NO se apaga es DETECTAR lo declarable — eso pasa siempre,
+            // en la transacción de la validación, y apagarlo cambiaría lo que se está probando.
+            "hispalis.edo.habilitado=false"
         })
 public abstract class TestDeIntegracion {
 
