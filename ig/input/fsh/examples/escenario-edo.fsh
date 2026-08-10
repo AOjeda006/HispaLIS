@@ -77,35 +77,120 @@ para Salud Pública: es información para el clínico, que sigue buscando la cau
 Instance: declaracion-de-legionelosis
 InstanceOf: NotificacionEDO
 Usage: #example
-Title: "Declaración de la legionelosis a Salud Pública"
+Title: "Declaración de la legionelosis: acusada por Salud Pública"
 Description: """
-La obligación, convertida en algo que se puede seguir: **a quién**, **por qué resultado** y **en qué
-estado va**.
+La obligación cumplida, y con qué se demuestra: **a quién**, **por qué resultado**, **en qué plazo** y
+**con qué número de registro**.
 
-Este ejemplo es el CONTRATO, no el circuito: quien crea estas tareas de verdad, las envía y recoge el
-acuse es el notificador del ítem 48. Lo que el ítem 47 deja resuelto es lo de antes — decidir, sobre
-códigos, que este resultado y no el otro obliga a declarar.
+Los dos estados dicen cosas distintas y por eso están los dos. `status = completed` es la tarea
+cerrada dentro del laboratorio; `businessStatus = ACUSADA` es la administración diciendo que la tiene.
+Fundirlos haría imposible distinguir «no lo hemos mandado» de «lo mandamos y no contestan», que es
+justo lo que hay que poder decir cuando alguien pregunte si se declaró en plazo.
 
-`businessStatus` va aparte de `status` porque son dos ciclos distintos: el `Task` puede estar
-`in-progress` mientras la declaración está «enviada y sin acusar». Fundirlos haría imposible
-distinguir «no lo hemos mandado» de «lo mandamos y no contestan», que es justo lo que hay que poder
-decir cuando alguien pregunte si se declaró en plazo.
+**El `output` es la prueba.** Sin número de registro esto no es una declaración hecha, por muy bien
+que haya ido el envío: es un mensaje que salió. Va como `Identifier` y no como texto porque el número
+es de Salud Pública y el `system` dice de quién es.
+
+El plazo está en `restriction.period.end`: la legionelosis es de declaración **urgente**, veinticuatro
+horas desde que el resultado quedó validado. De ahí también el `priority = stat`.
 """
-* status = #in-progress
+* status = #completed
 * intent = #order
 * code = $TIPOS_DE_TAREA#fulfill "Fulfill the focal request"
 * code.text = "Declaración de enfermedad de declaración obligatoria"
-// Solo texto, y a propósito: un `Coding` sin `system` no es un código, es una cadena disfrazada —el
-// validador lo dice—, y el vocabulario de estados frente a Redalerta lo fija el notificador del ítem
-// 48, que es quien conoce el ciclo. Hasta entonces, `text` dice la verdad sin fingir codificación.
-* businessStatus.text = "Enviada a Redalerta, pendiente de acuse"
+* businessStatus = EstadosDeclaracionEdo#ACUSADA "Acusada por Salud Pública"
+* priority = #stat
+* reason.concept = EnfermedadesEdo#LEGIONELOSIS "Legionelosis"
 * focus = Reference(resultado-legionella-positivo)
 * for = Reference(paciente-ejemplo)
 * requester = Reference(laboratorio-ejemplo)
 * owner = Reference(salud-publica-ejemplo)
 * authoredOn = "2026-08-03T19:41:00+02:00"
 * lastModified = "2026-08-03T19:41:12+02:00"
+* restriction.period.end = "2026-08-04T19:41:00+02:00"
+* output[0].type.text = "Número de registro de la declaración en Salud Pública"
+* output[0].valueIdentifier.system = "https://ejemplo-svea.simulado/registro-de-declaraciones"
+* output[0].valueIdentifier.value = "SVEA-2026-000123"
 * note[0].text = "Legionelosis. Declaración urgente por la posibilidad de un foco ambiental común."
+
+
+Instance: declaracion-de-salmonelosis-vencida
+InstanceOf: NotificacionEDO
+Usage: #example
+Title: "Declaración fuera de plazo: enviada y sin acusar"
+Description: """
+El caso incómodo, que es el que hay que poder enseñar.
+
+La obligación se registró, el envío salió y **Salud Pública no ha devuelto número de registro**. El
+plazo terminó el 27 de julio y hoy sigue así. La declaración **no está hecha**, y el sistema lo dice
+en vez de darla por buena porque el envío no dio error.
+
+Así es como se encuentra, con el `SearchParameter` que publica esta guía y el `business-status`, que
+sí es estándar:
+
+```
+GET [base]/Task?business-status=PENDIENTE,ENVIADA&vencimiento=lt2026-08-03
+```
+
+Existe como ejemplo por lo mismo que existe el resultado `preliminary`: es el estado que más fácil se
+malinterpreta. Un `Task` con `status = in-progress` parece que va bien. Lo que dice de verdad es que
+hay una obligación legal incumplida esperando a que alguien la mire.
+"""
+* status = #in-progress
+* intent = #order
+* code = $TIPOS_DE_TAREA#fulfill "Fulfill the focal request"
+* code.text = "Declaración de enfermedad de declaración obligatoria"
+* businessStatus = EstadosDeclaracionEdo#ENVIADA "Enviada, sin acuse"
+// Ordinaria, no urgente: una salmonelosis se declara dentro de la semana epidemiológica. Que el plazo
+// sea más largo no lo hace menos plazo.
+* priority = #routine
+* reason.concept = EnfermedadesEdo#SALMONELOSIS "Salmonelosis"
+* focus = Reference(resultado-salmonella-positivo)
+* for = Reference(paciente-ejemplo)
+* requester = Reference(laboratorio-ejemplo)
+* owner = Reference(salud-publica-ejemplo)
+* authoredOn = "2026-07-20T09:14:00+02:00"
+* lastModified = "2026-07-20T09:14:30+02:00"
+* restriction.period.end = "2026-07-27T09:14:00+02:00"
+* note[0].text = "Sin acuse tras los reintentos. Requiere gestión manual con la unidad de protección de la salud."
+
+
+Instance: especimen-heces-salmonella
+InstanceOf: EspecimenLab
+Usage: #example
+Title: "Heces para coprocultivo"
+Description: "Muestra de heces de un caso de gastroenteritis aguda tras una comida colectiva."
+* status = #available
+* accessionIdentifier.system = "https://aojeda006.github.io/HispaLIS/sid/acceso"
+* accessionIdentifier.value = "26-0198004"
+* type = $SCT#119339001
+* subject = Reference(paciente-ejemplo)
+* receivedTime = "2026-07-20T08:40:00+02:00"
+* collection.collectedDateTime = "2026-07-19T21:30:00+02:00"
+
+
+Instance: resultado-salmonella-positivo
+InstanceOf: ResultadoLab
+Usage: #example
+Title: "Coprocultivo: Salmonella POSITIVO — declarable, plazo ordinario"
+Description: """
+El otro extremo del plazo. Es igual de declarable que la legionelosis —el criterio es el mismo, un
+`#POS` sobre una prueba con `enfermedad-edo`—, pero la salmonelosis es de declaración **ordinaria**: se
+declara dentro de la semana epidemiológica, no en veinticuatro horas.
+
+Que la urgencia dependa de la **enfermedad** y no de la prueba es el motivo de que el plazo viva en
+`CodeSystem/enfermedades-edo` y no en el catálogo de pruebas: si mañana el laboratorio añade una PCR
+de Salmonella, hereda el plazo sin que nadie lo copie.
+"""
+* status = #final
+* code = CatalogoPruebas#COPROSALM "Coprocultivo: Salmonella"
+* subject = Reference(paciente-ejemplo)
+* specimen = Reference(especimen-heces-salmonella)
+* performer[0] = Reference(facultativo-ejemplo)
+* effectiveDateTime = "2026-07-20T09:10:00+02:00"
+* issued = "2026-07-20T09:14:00+02:00"
+* valueCodeableConcept = ResultadosCualitativos#POS "Positivo"
+* interpretation[0] = $INTERPRETACION#POS "Positive"
 
 
 Instance: salud-publica-ejemplo

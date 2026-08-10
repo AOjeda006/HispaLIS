@@ -28,17 +28,88 @@ Qué prueba declara cada una y con qué resultado vive en `CodeSystem/catalogo-p
 propiedades `enfermedad-edo` y `resultado-que-declara` de cada concepto. Aquí solo están las
 enfermedades: mezclar las dos cosas en un sitio sería confundir el catálogo de lo que se oferta con
 el de lo que se declara.
+
+**El plazo, en cambio, sí vive aquí**, y es deliberado: una legionelosis es urgente la detecte la
+prueba que la detecte. Colgar el plazo de la prueba obligaría a repetirlo en cada técnica que
+confirme la misma enfermedad, y el día que dos discrepasen no habría forma de saber cuál manda.
 """
 
 * ^caseSensitive = true
 * ^content = #complete
 * ^valueSet = Canonical(EnfermedadesDeclarables)
 
+// Las dos van juntas o no van, que es la misma regla que en `catalogo-pruebas`: una modalidad sin
+// plazo no se puede vigilar y un plazo sin modalidad no se puede explicar a quien pregunta por qué
+// hay prisa. `Coding` y no `code` porque la modalidad NO es un concepto de este CodeSystem —
+// `URGENTE` no es una enfermedad—; es el mismo motivo por el que `unidad-ucum` es `Coding`.
+* ^property[0].code = #modalidad-declaracion
+* ^property[0].description = "Si la declaración es urgente u ordinaria, según la normativa andaluza. Obligatoria en todo concepto de esta lista."
+* ^property[0].type = #Coding
+* ^property[1].code = #plazo-horas
+* ^property[1].description = "Horas de las que dispone el laboratorio para declarar, contadas desde que el resultado queda validado. Es el plazo modelado, no el literal de la norma: ver la advertencia del recurso."
+* ^property[1].type = #integer
+
 * #LEGIONELOSIS "Legionelosis" "Infección por Legionella pneumophila. Declaración urgente: un caso aislado puede ser la punta de un brote de origen ambiental."
+* #LEGIONELOSIS ^property[0].code = #modalidad-declaracion
+* #LEGIONELOSIS ^property[0].valueCoding = ModalidadesDeclaracionEdo#URGENTE
+* #LEGIONELOSIS ^property[1].code = #plazo-horas
+* #LEGIONELOSIS ^property[1].valueInteger = 24
+
 * #SALMONELOSIS "Salmonelosis" "Infección por Salmonella no tifoidea."
+* #SALMONELOSIS ^property[0].code = #modalidad-declaracion
+* #SALMONELOSIS ^property[0].valueCoding = ModalidadesDeclaracionEdo#ORDINARIA
+* #SALMONELOSIS ^property[1].code = #plazo-horas
+* #SALMONELOSIS ^property[1].valueInteger = 168
+
 * #TUBERCULOSIS "Tuberculosis" "Enfermedad por el complejo Mycobacterium tuberculosis."
+* #TUBERCULOSIS ^property[0].code = #modalidad-declaracion
+* #TUBERCULOSIS ^property[0].valueCoding = ModalidadesDeclaracionEdo#ORDINARIA
+* #TUBERCULOSIS ^property[1].code = #plazo-horas
+* #TUBERCULOSIS ^property[1].valueInteger = 168
+
 * #HEPATITIS-A "Hepatitis A" "Infección aguda por el virus de la hepatitis A."
+* #HEPATITIS-A ^property[0].code = #modalidad-declaracion
+* #HEPATITIS-A ^property[0].valueCoding = ModalidadesDeclaracionEdo#URGENTE
+* #HEPATITIS-A ^property[1].code = #plazo-horas
+* #HEPATITIS-A ^property[1].valueInteger = 24
+
 * #SARAMPION "Sarampión" "Infección por el virus del sarampión. En un país con eliminación declarada, un solo caso obliga a investigar."
+* #SARAMPION ^property[0].code = #modalidad-declaracion
+* #SARAMPION ^property[0].valueCoding = ModalidadesDeclaracionEdo#URGENTE
+* #SARAMPION ^property[1].code = #plazo-horas
+* #SARAMPION ^property[1].valueInteger = 24
+
+
+// Cómo de urgente es declarar, que en la normativa no es un adjetivo sino dos regímenes distintos.
+CodeSystem: ModalidadesDeclaracionEdo
+Id: modalidades-declaracion-edo
+Title: "Modalidades de declaración obligatoria"
+Description: """
+Los dos regímenes con los que se declara una EDO en Andalucía.
+
+⚠️ **El plazo en horas que acompaña a cada enfermedad es una simplificación declarada.** La norma no
+habla de horas para la declaración ordinaria: habla de la **semana epidemiológica**, que termina el
+domingo, de modo que el plazo real de un caso confirmado en lunes y el de uno confirmado en sábado no
+son el mismo número. Modelarlo como una ventana fija de 168 horas mantiene la propiedad que importa
+—que el plazo existe, se cuenta y se puede incumplir— sin fingir un calendario epidemiológico que
+este sistema no implementa. La urgente sí se corresponde con lo que dice la norma: sin demora, y como
+mucho en 24 horas.
+"""
+
+* ^caseSensitive = true
+* ^content = #complete
+* ^valueSet = Canonical(ModalidadesDeDeclaracion)
+
+* #URGENTE "Declaración urgente" "Se declara sin esperar, en cuanto el laboratorio confirma. Son las enfermedades en las que un solo caso puede obligar a intervenir sobre un foco."
+* #ORDINARIA "Declaración ordinaria" "Se declara dentro de la semana epidemiológica. La vigilancia es de tendencia, no de alerta."
+
+
+ValueSet: ModalidadesDeDeclaracion
+Id: modalidades-de-declaracion
+Title: "Modalidades de declaración"
+Description: "Las dos de `CodeSystem/modalidades-declaracion-edo`."
+
+* include codes from system ModalidadesDeclaracionEdo
 
 
 ValueSet: EnfermedadesDeclarables
