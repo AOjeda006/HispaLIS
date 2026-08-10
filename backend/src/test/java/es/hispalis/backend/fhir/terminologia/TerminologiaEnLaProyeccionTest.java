@@ -10,6 +10,7 @@ import es.hispalis.backend.dominio.resultado.NoSeSabeSiEsCritico;
 import es.hispalis.backend.dominio.resultado.UmbralCritico;
 import es.hispalis.backend.fhir.CatalogoDePruebas;
 import es.hispalis.backend.fhir.CircuitoDePrueba;
+import es.hispalis.backend.fhir.ResultadosCualitativos;
 import es.hispalis.backend.infraestructura.terminologia.TerminologiaDelServidor;
 import java.math.BigDecimal;
 import java.util.Optional;
@@ -68,6 +69,8 @@ class TerminologiaEnLaProyeccionTest extends TestDeIntegracion {
     private static final String MAPA = "https://aojeda006.github.io/HispaLIS/fhir/ConceptMap/catalogo-a-loinc";
     private static final String LOINC = "http://loinc.org";
     private static final String UCUM = "http://unitsofmeasure.org";
+    private static final String ENFERMEDADES_EDO =
+            "https://aojeda006.github.io/HispaLIS/fhir/CodeSystem/enfermedades-edo";
 
     @Autowired
     private TestRestTemplate rest;
@@ -207,6 +210,36 @@ class TerminologiaEnLaProyeccionTest extends TestDeIntegracion {
         assertThat(terminologia.reflejaDe("T4L")).isEmpty();
     }
 
+    /**
+     * La regla de declaración obligatoria, leída de un {@code $lookup} de verdad.
+     *
+     * <p>Es lo que este test aporta y ningún doble puede aportar: que un servidor FHIR real
+     * <strong>devuelva</strong> las dos propiedades de tipo {@code Coding}, con su {@code system},
+     * su código y su nombre. Que el código Java sepa interpretarlas lo prueba
+     * {@code DeclaracionObligatoriaTest}; que lleguen, solo esto.
+     */
+    @Test
+    @DisplayName("qué enfermedad declara una prueba, y con qué resultado, sale del catálogo")
+    void laReglaDeDeclaracionSaleDelCatalogo() {
+        assertThat(terminologia.declaracionDe("LEGIOAG")).hasValueSatisfying(regla -> {
+            assertThat(regla.codigoDeEnfermedad()).isEqualTo("LEGIONELOSIS");
+            assertThat(regla.nombreDeLaEnfermedad()).isEqualTo("Legionelosis");
+            assertThat(regla.resultadoQueDeclara()).isEqualTo("POS");
+            assertThat(regla.laDispara("POS")).isTrue();
+            assertThat(regla.laDispara("NEG")).isFalse();
+            assertThat(regla.laDispara("IND"))
+                    .as("el criterio es un código concreto, no «todo lo que no sea negativo»")
+                    .isFalse();
+        });
+    }
+
+    @Test
+    @DisplayName("una prueba que no es de declaración obligatoria no declara nada")
+    void laPruebaQueNoDeclaraNada() {
+        assertThat(terminologia.declaracionDe("GLU")).isEmpty();
+        assertThat(terminologia.declaracionDe("K")).isEmpty();
+    }
+
     @Test
     @DisplayName("un potasio en otra unidad no se declara «no crítico»: se rechaza la comparación")
     void enOtraUnidadNoSeCompara() {
@@ -238,8 +271,23 @@ class TerminologiaEnLaProyeccionTest extends TestDeIntegracion {
         catalogo.addProperty().setCode("procedencia-del-valor-critico").setType(CodeSystem.PropertyType.STRING);
         catalogo.addProperty().setCode("prueba-refleja").setType(CodeSystem.PropertyType.CODE);
         catalogo.addProperty().setCode("motivo-de-la-refleja").setType(CodeSystem.PropertyType.STRING);
+        catalogo.addProperty().setCode("enfermedad-edo").setType(CodeSystem.PropertyType.CODING);
+        catalogo.addProperty().setCode("resultado-que-declara").setType(CodeSystem.PropertyType.CODING);
         catalogo.addConcept().setCode("GLU").setDisplay("Glucosa");
         catalogo.addConcept().setCode("HTO").setDisplay("Hematocrito");
+
+        // La prueba de declaración obligatoria, con sus dos propiedades. Están las dos porque por
+        // separado no dicen nada: la enfermedad sin criterio declararía también los negativos.
+        CodeSystem.ConceptDefinitionComponent legionella =
+                catalogo.addConcept().setCode("LEGIOAG").setDisplay("Antígeno de Legionella en orina");
+        legionella
+                .addProperty()
+                .setCode("enfermedad-edo")
+                .setValue(new Coding(ENFERMEDADES_EDO, "LEGIONELOSIS", "Legionelosis"));
+        legionella
+                .addProperty()
+                .setCode("resultado-que-declara")
+                .setValue(new Coding(ResultadosCualitativos.SYSTEM, "POS", "Positivo"));
 
         // El par de la refleja, con la forma que tiene en la guía: la TSH dice a qué prueba refleja y
         // con qué palabras se cuenta; la T4 libre no refleja a nada, que también hay que comprobarlo.

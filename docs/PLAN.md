@@ -1281,7 +1281,7 @@ backend sigue **idéntica** a la de la guía.
 
 | Verificación | Resultado |
 |---|---|
-| Backend | **252 tests**, `BUILD SUCCESS` (eran 245) |
+| Backend | **254 tests**, `BUILD SUCCESS` (eran 245) |
 | Simuladores | **129 tests**, `ruff check` y `ruff format --check` limpios |
 | SUSHI | 0 errores, 0 avisos |
 | Validador oficial, invocación exacta de `ci-ig` | **0 errores**, `exit 0` |
