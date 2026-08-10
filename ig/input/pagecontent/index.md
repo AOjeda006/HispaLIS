@@ -65,7 +65,28 @@ para acreditarse. La norma se cita únicamente como justificación de diseño de
 | [PruebasDelCatalogo](ValueSet-pruebas-del-catalogo.html) | Todas las pruebas ofertadas; es a lo que se atan `PeticionLab.code` y `ResultadoLab.code` |
 | [TiposMuestra](ValueSet-tipos-muestra.html) | Tipos de espécimen aceptados, en SNOMED CT |
 | [MotivosRechazoMuestra](ValueSet-motivos-rechazo-muestra.html) | Por qué se rechaza una muestra |
+| [ResultadosCualitativos](CodeSystem-resultados-cualitativos.html) | Positivo, negativo e **indeterminado**: los valores de una prueba que no da cifra |
 | [CatalogoEdo](ValueSet-catalogo-edo.html) | Pruebas cuyo resultado positivo obliga a declarar a Salud Pública |
+| [EnfermedadesEdo](CodeSystem-enfermedades-edo.html) | Las enfermedades que se declaran. **Relación simulada, no la oficial** |
+
+#### Dónde vive la regla de una declaración obligatoria
+
+En el propio concepto de [CatalogoPruebas](CodeSystem-catalogo-pruebas.html), en dos propiedades que
+van juntas: `enfermedad-edo` dice **qué** se declara y `resultado-que-declara`, **con qué valor**.
+Un `LEGIOAG` con `POS` obliga a declarar una legionelosis; con `NEG` o con `IND`, no.
+
+Está ahí y no en un `ConceptMap` a propósito. R5 tiene un elemento hecho para condicionar un mapeo
+—`ConceptMap.additionalAttribute` con `element.target.dependsOn`— y sería el sitio natural, pero el
+servidor de terminología de referencia de esta guía **no lo sirve** (HAPI 8.10 no acepta el parámetro
+`dependency` de `$translate` ni devuelve `dependsOn`). Publicarlo ahí dejaría la mitad de la regla en
+un elemento que nadie puede leer, así que la regla entera vive donde un solo `$lookup` la trae
+completa — el mismo sitio que el umbral crítico y la prueba refleja.
+
+> **La obligación es real; el catálogo y el destinatario, simulados.** Todos los centros sanitarios
+> de Andalucía, **públicos y privados**, forman parte del Sistema de Vigilancia Epidemiológica
+> (Decreto 66/1996), y la relación de EDO la fija la Orden de 19 de diciembre de 1996, actualizada
+> por la de 12 de noviembre de 2015. La relación real es mucho más amplia que la de aquí, y el
+> contrato de Redalerta no es público.
 
 Todos los *bindings* son **extensibles**, nunca `required`: ninguno de estos conjuntos está cerrado
 en la práctica, y declarar cerrado lo que no lo está solo produce rechazos falsos.

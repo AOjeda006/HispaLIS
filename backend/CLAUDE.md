@@ -31,6 +31,7 @@ respuesta de IA o librería basada en R4 que se copie sin mirar va a fallar aqu�
 | `Observation.triggeredBy` | no existe | **`0..*`** | El gancho de las pruebas reflejas |
 | `Subscription.criteria` | cadena de búsqueda **dentro** de la suscripción | **no existe** → el criterio es un `SubscriptionTopic` aparte | Cambia el modelo entero, no un elemento |
 | `Subscription.error` | `string` dentro del recurso | **eliminado** → `SubscriptionStatus.error` (`CodeableConcept`), por `$status` | Buscarlo y no encontrarlo invita a inventarse una extensión |
+| `ConceptMap…dependsOn.property` (`uri`) | así se llama | **`dependsOn.attribute`** (`code`) + `ConceptMap.additionalAttribute`, nuevo | Modela «este mapeo solo vale si…»; **HAPI 8.10 no lo sirve** (ver abajo) |
 | `Observation.bodyStructure` | no existe | `0..1 Reference` | |
 | `DiagnosticReport.composition` | no existe | `0..1 Reference` | |
 | `Specimen.combined` / `.role` / `.feature` | no existen | nuevos | |
@@ -134,6 +135,25 @@ cambiar esa línea.
 - **⚠️ `$translate` en R5** manda `sourceCode`/`targetSystem`, no `code`/`targetsystem`. HAPI acepta
   los dos, así que copiar un ejemplo de R4 *funciona aquí* y falla contra un servidor estricto. A la
   vuelta pasa lo contrario: HAPI aún devuelve `match.equivalence` de R4, así que se leen las dos.
+- **⚠️ Y HAPI 8.10 no implementa `dependsOn` en `$translate`**, ni a la entrada (`dependency`) ni a
+  la salida. Medido sobre `TranslationQuery`. Es justo el elemento con el que R5 modelaría «este
+  mapeo solo vale si el resultado es `POS`», así que **el criterio de una regla condicionada no se
+  publica en el `ConceptMap`**: iría a un elemento que el servidor no sirve y habría que leerlo de
+  otro sitio — dos fuentes de verdad. Va como propiedad del concepto, con un solo `$lookup`.
+
+## Lo que la regla del crítico y la del EDO comparten (ítems 46 y 47)
+
+- **El agregado recibe el puerto y pregunta él.** `Resultado.validar(ValoresCriticos, …)` y
+  `Resultado.obligaADeclarar(CatalogoEdo)`. Pasar un `boolean` ya calculado deja la regla en el caso
+  de uso, y con ella fuera del alcance de la siguiente puerta de entrada que aparezca.
+- **Firmado ≠ validado.** Un crítico con una firma está firmado y no validado: `estaValidado()` es
+  «tiene todas las que hacían falta». Cuántas hacían falta se pregunta **una vez** y se graba, para
+  que ni una caída ni un cambio del catálogo alteren una validación ya empezada.
+- **Un resultado cualitativo se guarda codificado.** El `text` no gana al código: de ese código
+  depende que se declare una enfermedad, y comparar cadenas para eso es una apuesta.
+- **Lo que va al bus son referencias, y el `switch` de `RutaDelHecho` obliga a decidir el tópico** de
+  cada hecho nuevo. `RESULTADO_DECLARABLE` no lleva la enfermedad: el tipo ya dice que hay algo que
+  declarar, y eso es el mínimo con el que el notificador del ítem 48 puede existir.
 
 ## Invariantes de negocio que FHIR no puede expresar (§10)
 

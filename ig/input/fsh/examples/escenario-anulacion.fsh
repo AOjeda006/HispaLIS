@@ -54,13 +54,21 @@ firmado todavía**.
 
 Existe como ejemplo porque es el estado que más se malinterpreta. Un `preliminary` es un dato
 técnico correcto —tiene su unidad y su rango— del que el laboratorio **no responde**, y por eso no
-entra en ningún `InformeLab` y no tiene ningún `ProcedenciaValidacion` apuntándole. Una aplicación
-que lo enseñe sin decirlo está presentando como resultado clínico algo que puede cambiar.
+entra en ningún `InformeLab`. Una aplicación que lo enseñe sin decirlo está presentando como
+resultado clínico algo que puede cambiar.
+
+⚠️ Lo que **no** se puede deducir es lo contrario: un `preliminary` sí puede tener una
+`ProcedenciaValidacion` apuntándole. Un valor crítico exige dos firmas, y entre la primera y la
+segunda el resultado está firmado y todavía no es definitivo. Este de aquí no tiene ninguna porque es
+una urea normal, no porque sea preliminar. **Quien pregunte «¿está validado?» tiene que mirar
+`status`**, no si existe procedencia.
 """
 * status = #preliminary
 * code = CatalogoPruebas#UREA "Urea"
 * subject = Reference(paciente-ejemplo)
 * specimen = Reference(especimen-ejemplo)
+// Que no lo haya firmado nadie no significa que no lo midiera nadie: lo midió el laboratorio.
+* performer[0] = Reference(laboratorio-ejemplo)
 * effectiveDateTime = "2026-07-28T08:41:00+02:00"
 * valueQuantity.value = 38
 * valueQuantity.unit = "mg/dL"

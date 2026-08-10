@@ -45,6 +45,12 @@ degenerar en una historia clínica electrónica en miniatura.
 >
 > **La API FHIR exige testigo**: lo que antes se recorría con `curl` a pelo ahora necesita uno, y el
 > laboratorio decide **recurso a recurso** de quién son los datos.
+>
+> **Hito 3 en marcha.** Los valores críticos publicados con su fuente citada, las notificaciones de
+> `SubscriptionTopic` entregando `id-only`, las pruebas reflejas con `Observation.triggeredBy`, la
+> **doble validación del resultado crítico** —dos firmas de facultativos distintos— y la **detección
+> de enfermedades de declaración obligatoria**, que decide sobre códigos y sin mirar quién es el
+> paciente.
 
 ## Arquitectura en tres frases
 

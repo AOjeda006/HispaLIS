@@ -80,6 +80,23 @@ respuesta de IA o snippet basado en R4 que se copie sin mirar va a fallar aquí:
 `codigo-ine`, el `CodeSystem` del catálogo local, el `ConceptMap` catálogo → LOINC y los `ValueSet`
 de tipos de muestra, motivos de rechazo y catálogo EDO.
 
+A eso se han ido sumando, con su ítem: `ProcedenciaValidacion`, el `SubscriptionTopic` del resultado
+validado (ítem 44) y los `CodeSystem` de **enfermedades EDO** y **resultados cualitativos** (ítem 47).
+
+### Las reglas del laboratorio viven en propiedades de `catalogo-pruebas`
+
+Umbral crítico (43), prueba refleja (45) y declaración obligatoria (47) son **propiedades del
+concepto**, no `CodeSystem` ni `ConceptMap` aparte. El motivo es el mismo cada vez: un catálogo
+paralelo con los mismos códigos crea *conceptos distintos con el mismo código*, y un `$lookup` deja de
+traerlo todo junto. Si añades una regla nueva, sigue el patrón — y **declara juntas las propiedades
+que no valen por separado** (una refleja sin motivo, un umbral sin unidad, una EDO sin criterio).
+
+⚠️ Y una tentación medida y descartada: R5 tiene `ConceptMap.additionalAttribute` +
+`element.target.dependsOn` para condicionar un mapeo a un valor, que es exactamente lo que pide el
+criterio de positividad de una EDO. **HAPI 8.10 no lo sirve** (`TranslationQuery` no tiene
+`dependency`), así que publicarlo dejaría la regla en un sitio del que el backend no puede leerla.
+Detalle en el comentario de `CatalogoPruebas.fsh` y en `docs/PLAN.md`.
+
 ## ⚠️ Trampas de la cadena de construcción — ya resueltas, no las reabras
 
 Las cuatro salieron al andamiar la IG, **antes de que existiera un solo perfil**, y ninguna da un

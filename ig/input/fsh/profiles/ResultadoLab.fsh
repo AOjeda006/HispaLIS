@@ -48,6 +48,9 @@ re-ejecución por fallo técnico. En R4 esto había que inventarlo.
 // depende que se declare o no una enfermedad a Salud Pública. Con «Positivo» en texto libre, la
 // regla sería una comparación de cadenas. El enlace es extensible porque un grupo sanguíneo o un
 // serotipo también son resultados codificados y no caben en el conjunto.
+// El `MS` no es decorativo: `value[x]` lo es, y una rebanada suya sin marcar hace que el publisher
+// avise de que la rebanada contradice al elemento que la define.
+* valueCodeableConcept MS
 * valueCodeableConcept from ResultadoCualitativo (extensible)
 * valueCodeableConcept ^short = "Resultado de una prueba cualitativa: positivo, negativo o indeterminado"
 * valueQuantity MS

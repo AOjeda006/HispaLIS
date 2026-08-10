@@ -273,10 +273,94 @@ aceptable bajo ninguna de las tres opciones. Si algún día se implementa (a), e
   lado de la regla, en `TerminologiaDelServidor`. El motivo: con un nombre de prueba, callarse degrada
   la respuesta; con un umbral, callarse la **invierte**. `NoSeSabeSiEsCritico` existe para que «no lo
   sé» no pueda confundirse con «no tiene».
-  *Pendiente para el ítem 46:* `NoSeSabeSiEsCritico` no es un `ErrorDeDominio` y **todavía no tiene
-  traducción a HTTP** —hoy no hay quien la lance por la API, porque nadie la llama—. Quien enchufe la
-  doble validación decide si es un `503` o si la validación se bloquea, y lo añade a
-  `TraduccionDeErroresDeDominio`.
+  *Resuelto en el ítem 46 (2026-08-10):* es un **`503`**, y la validación **se bloquea** — las dos
+  cosas, que no eran alternativas. Lo que llegó está bien y la acción procede; lo que pasa es que el
+  laboratorio no puede completarla ahora, y el cliente necesita saber que reintentar es lo correcto.
+  Va en `TraduccionDeErroresDeDominio` con una rama propia, porque `NoSeSabeSiEsCritico` sigue sin
+  ser un `ErrorDeDominio` y el buscador de causas se generalizó para poder pescar los dos.
+
+### Decisiones tomadas al cerrar lo clínico y lo legal (ítems 46 y 47)
+
+- **2026-08-10 — El agregado recibe el puerto `ValoresCriticos`, no un `boolean esCritico`.** Es la
+  diferencia entre tener la regla y aparentarla: con un booleano, cuántas firmas hacen falta lo
+  decide quien llama, y basta una segunda puerta de entrada —el motor de integración es una— para que
+  el invariante deje de aplicarse sin que nada avise. Recibiendo el puerto **no existe la forma de
+  validar sin haber preguntado**.
+
+- **2026-08-10 — Cuántas firmas hacen falta se pregunta UNA vez y se graba.** `firmas_exigidas` se
+  fija en la primera firma. Dos consecuencias buscadas: una caída de la terminología entre las dos
+  firmas no deja el resultado atascado —la obligación ya está establecida—, y un cambio del catálogo a
+  mitad de camino **no puede rebajar a una firma lo que empezó exigiendo dos**. Preguntar en cada
+  firma habría hecho lo contrario.
+
+- **2026-08-10 — Las firmas van en su propia tabla, no en un par de columnas más.** `validado_por_2`
+  habría sido más corto y dos cosas se habrían perdido: el `UNIQUE (resultado_id, facultativo)`, que
+  es la regla del ítem escrita donde no se puede rodear, y el `orden`, que distingue la revisión
+  inicial de la contra-revisión. Con columnas paralelas el orden sería el de las columnas y no el de
+  los hechos.
+
+- **2026-08-10 — Una procedencia por firma, y su identidad lleva el orden, no el firmante.**
+  Fundirlas en un `Provenance` con dos agentes diría que las dos personas firmaron a la vez lo mismo,
+  cuando lo que pasó es que una revisó y otra contra-revisó, en momentos distintos. La identidad se
+  deriva de `resultado + orden` porque el identificador de un recurso público **no debe poder leerse
+  al revés** para saber quién firmó.
+  *Consecuencia asumida:* las procedencias escritas antes de este ítem quedan con la identidad vieja.
+  El reconciliador las detecta como «sobra sin agregado detrás», que es para lo que existe.
+
+- **2026-08-10 — `RESULTADO_VALIDADO` solo se apunta cuando el resultado queda validado.** La primera
+  firma de un crítico no es publicable, y anunciarla haría que el HIS incorporase a la historia una
+  cifra a la que le falta la revisión que el propio laboratorio se ha impuesto. No hay hecho para «se
+  ha puesto la primera firma»: el `Provenance` ya deja constancia y el bus no tiene por qué enterarse.
+
+- **2026-08-10 — El mapeo EDO y el criterio de positividad van como propiedades del concepto, no en
+  un `ConceptMap`** (`adr-0028`). *Y R5 tiene un sitio hecho a medida que se descartó midiendo:*
+  `ConceptMap.additionalAttribute` + `element.target.dependsOn` dice literalmente «este mapeo solo
+  vale si tal atributo tiene tal valor» —en R4 era `dependsOn.property`, una `uri`, y no existía
+  `additionalAttribute`—, y el `$translate` de R5 lo lleva a la entrada (`dependency`) y a la salida
+  (`match.dependsOn`). **HAPI 8.10 no implementa ninguno de los dos**: comprobado sobre
+  `TranslationQuery`, que no tiene `dependency`. Publicarlo ahí dejaría el criterio en un elemento que
+  el servidor no sirve y obligaría al backend a leerlo de otro sitio: dos fuentes de verdad para la
+  misma regla. Como propiedades, un solo `$lookup` trae la enfermedad y el criterio — el mismo patrón
+  del umbral crítico y de la refleja.
+
+- **2026-08-10 — Las EDO tienen `CodeSystem` propio y no se codifican con CIE-10-ES.** El proyecto usa
+  CIE-10-ES para diagnósticos (§4.3), y una EDO **no es un diagnóstico**: es una entrada de una lista
+  administrativa con sus propios criterios de caso. Lo que el laboratorio sabe es que una muestra dio
+  positivo, no que la persona esté enferma; ponerle el CIE-10 del cuadro clínico afirmaría un
+  diagnóstico que no ha hecho.
+
+- **2026-08-10 — El criterio de positividad es un código concreto, no «todo lo que no sea negativo».**
+  Un `IND` no declara. Una serología en zona gris no es un caso confirmado, y declararla mete en el
+  sistema de vigilancia casos que hay que retirar después — cada retirada cuesta una investigación.
+  Por eso `resultados-cualitativos` tiene tres códigos y no dos.
+
+- **2026-08-10 — El hecho `RESULTADO_DECLARABLE` no lleva la enfermedad dentro.** `{pacienteId,
+  enfermedad: LEGIONELOSIS}` en un tópico replicado dice «esta persona tiene legionelosis», que es
+  historia clínica en el bus (invariante 6) y lo más difícil de borrar que hay. Va la referencia al
+  resultado; qué enfermedad es se lee de la API, donde se aplica el consentimiento.
+  *Lo que sí revela, y se asume:* el **tipo** del hecho dice que hay *algo* que declarar. Es el mínimo
+  con el que un notificador puede existir, y la alternativa —que el notificador lo dedujese él
+  consultando el catálogo— dejaría la obligación sin registrar si su consulta fallase.
+
+- **2026-08-10 — Sin terminología no se puede validar, y por eso la detección EDO puede degradar sin
+  abrir un agujero.** `declaracionDe` contesta vacío cuando el servidor no está, al revés que
+  `umbralDe`, que lanza. Parece la asimetría peligrosa —callarse una declaración obligatoria es
+  incumplir la ley— y no llega a darse: la detección **solo se consulta después de validar**, y
+  validar ya se ha negado a seguir. No existe el camino «se validó y no se preguntó».
+
+- **2026-08-10 — El resultado cualitativo se guarda codificado, y el código gana al `text`.** Antes un
+  `{coding:[{code:"POS"}], text:"Positivo"}` se aplanaba a la cadena «Positivo» y el código se perdía.
+  Para leer un informe daba igual; para una regla que compara códigos significa **no ver nunca un
+  positivo**. Es el mismo error que informar una cifra sin unidad, en cualitativo, y estaba desde el
+  hito 1. Solo cuando no viene ningún código se cae al texto: eso ya no es un resultado codificado, es
+  una descripción.
+
+- **2026-08-10 — Los tests de integración llevan una terminología por defecto.** Desde el ítem 46 no
+  se valida sin preguntar si es crítico, y `SinServidorDeTerminologia` contesta a eso lanzando — la
+  decisión correcta, y la que comprueba `DobleValidacionTest`. Sin un doble compartido, los diez tests
+  que validan de paso para llegar a otra cosa se convertirían en `503`. Se activa/desactiva con
+  `hispalis.test.terminologia`, porque dos beans `@Primary` del mismo tipo no conviven y dejar que
+  gane el último registrado depende de un orden que nadie declara.
 
 ### Decisiones tomadas al cerrar lo que el hito 2 dejó abierto (prompt 14)
 
@@ -1149,6 +1233,65 @@ comprobación de que cada perfil tiene ejemplo (10/10), el **IG Publisher dentro
 error de plantilla, y los dos avisos que el artefacto nuevo suma son los que ya tienen los otros
 cuatro `ValueSet`— y el **validador oficial con la misma invocación de la CI**, `-ig
 ig/output/package.tgz` incluido: **0 errores**. Falta solo el push.
+
+### Lo clínico y lo legal (ítems 46 y 47, 2026-08-10)
+
+**El invariante que quedaba de §10 está cerrado.** Un resultado cuyo valor cae en el catálogo de
+críticos **no se publica con una sola firma**: exige una segunda de un facultativo distinto, cada una
+con su `Provenance`. Y con él se cierra el cabo que el ítem 43 dejó anotado: `NoSeSabeSiEsCritico`
+tiene traducción a HTTP, y es **`503`**.
+
+| | |
+|---|---|
+| El rojo | `86d8c01` — cinco fallos de aserción, ninguno de compilación, y dos controles negativos ya en verde |
+| El verde | `90a54ab` |
+| Dónde vive la regla | `Resultado.validar(ValoresCriticos, …)`: el agregado **pregunta**, no recibe un booleano |
+| Cuándo se pregunta | Una vez, en la primera firma. El número queda grabado en `firmas_exigidas` |
+| La red de la base de datos | `UNIQUE (resultado_id, facultativo)` en `dominio.validacion_de_resultado` (V13) |
+| El caso que da sentido a todo | El mismo facultativo firmando dos veces → `422` **con el motivo**, no «ya está validado» |
+| Sin poder preguntar | `503`, y el resultado se queda preliminar. Nunca `200` con un `final` a ciegas |
+
+**Y la obligación legal española queda abierta por su primera mitad: la detección.** Al validarse un
+resultado, el laboratorio decide si obliga a declararlo a Salud Pública, y lo decide **sobre dos
+códigos** — el de la prueba y el del valor.
+
+| | |
+|---|---|
+| Dónde vive el catálogo | Propiedades `enfermedad-edo` y `resultado-que-declara` de `catalogo-pruebas`, más `CodeSystem/enfermedades-edo` y `CodeSystem/resultados-cualitativos` |
+| El criterio | `LEGIOAG` + `POS` → declara · `NEG` → no · `IND` → **no** · `HBSAG` + `POS` → no |
+| Qué se apunta | `RESULTADO_DECLARABLE` en la transacción de la validación, **sin la enfermedad dentro** |
+| Qué NO hace | Crear el `Task`, enviarlo ni recoger el acuse: eso es el ítem 48 |
+| Verificado | 7 tests, con los dos controles negativos; y `252 tests` en total, `BUILD SUCCESS` |
+
+Lo que hizo falta para que la decisión fuese posible: **el resultado cualitativo se guarda
+codificado** (V14). Antes un `valueCodeableConcept` se aplanaba a su `text` y el código se perdía, así
+que una regla que compara códigos no habría visto nunca un positivo. Es el mismo error que informar
+una cifra sin unidad, en cualitativo, y estaba ahí desde el hito 1.
+
+**Lo que la guía decía y ha dejado de ser cierto.** `flujo-y-estados.md` y `ProcedenciaValidacion`
+afirmaban que la correspondencia entre resultado y procedencia es **uno a uno**. Con la doble
+validación deja de serlo en una dirección: un crítico tiene dos procedencias. El `target 1..1` del
+perfil sigue bien —cada procedencia da fe de un acto sobre una cifra—, y lo que se ha reescrito es la
+prosa, más un aviso que un cliente necesita: **un `preliminary` puede tener ya un `Provenance`**, así
+que buscar procedencias no responde «¿está validado?». Eso lo dice `Observation.status`, y solo eso.
+
+**`ci-ig` no ha corrido en GitHub** —esta tanda también termina sin push—, pero sus dos puertas se han
+reproducido en local: los 10 perfiles tienen ejemplo y la copia del `SubscriptionTopic` que lleva el
+backend sigue **idéntica** a la de la guía.
+
+| Verificación | Resultado |
+|---|---|
+| Backend | **252 tests**, `BUILD SUCCESS` (eran 245) |
+| Simuladores | **129 tests**, `ruff check` y `ruff format --check` limpios |
+| SUSHI | 0 errores, 0 avisos |
+| Validador oficial, invocación exacta de `ci-ig` | **0 errores**, `exit 0` |
+| Recurso cualitativo del generador, contra su perfil | **0 errores** (solo el `dom-6` de narrativa que sale en todos) |
+| IG Publisher, imagen oficial | `exit 0` · **1 error**, el mismo de plantilla que la base publicada |
+
+Lo que la construcción de la guía cazó y las pruebas no: un `Observation` preliminar **sin
+`performer`** que venía del ítem 17 —una cifra sin nadie detrás no se puede reclamar— y una rebanada
+`valueCodeableConcept` **sin `Must Support`** cuando el elemento que la define sí lo es. Los dos
+avisos se ven al construir y no antes.
 
 ### Los criterios del hito 2, uno a uno
 
@@ -2278,20 +2421,35 @@ contra la pila del `compose` levantada desde el clon limpio, no contra un doble.
 
 ### Lo clínico que el hito 2 dejó a medias
 
-- [ ] **46 — Doble validación del resultado crítico (§10).**
+- [x] **46 — Doble validación del resultado crítico (§10).** *(2026-08-10)*
   La otra mitad del invariante que el ítem 18 dejó fuera, y que necesitaba el ítem 43.
   *Criterio:* un resultado cuyo valor cae en el catálogo de críticos **no se puede validar con una
   sola firma**: exige una segunda de un facultativo **distinto**, con su `Provenance` propio. El
   gancho ya está puesto en `Resultado.validar`. Test rojo primero: el mismo facultativo firmando dos
   veces **no** cuenta como doble validación.
+  *Hecho:* el rojo está en el historial (`86d8c01`, cinco fallos de aserción y dos controles
+  negativos ya en verde) y el verde detrás (`90a54ab`). `Resultado.validar` recibe el puerto
+  `ValoresCriticos` y **pregunta él**: con un `boolean` la regla la decidiría quien llama. Se
+  pregunta una vez, en la primera firma, y el número queda grabado. `validacion` pasa a ser `firmas`
+  y aparece el estado `PENDIENTE_DE_SEGUNDA_FIRMA`. La V13 mueve las firmas a su tabla con
+  `UNIQUE (resultado_id, facultativo)`, que es la regla escrita donde no se puede rodear. Una
+  procedencia por firma. `NoSeSabeSiEsCritico` → **503**.
 
 ### La obligación legal española
 
-- [ ] **47 — Catálogo EDO y detección sobre el resultado validado.**
+- [x] **47 — Catálogo EDO y detección sobre el resultado validado.** *(2026-08-10)*
   *Criterio:* el catálogo de enfermedades de declaración obligatoria en la guía, con el mapeo desde
   el código de prueba y el criterio de positividad; y un caso de uso que, al validarse un resultado,
   decide si es declarable **sin mirar el nombre del paciente**. Un `Legionella` positivo dispara; uno
   negativo, no.
+  *Hecho:* `CodeSystem/enfermedades-edo` y `CodeSystem/resultados-cualitativos` en la guía, con el
+  mapeo y el criterio como propiedades del concepto de `catalogo-pruebas` (`enfermedad-edo`,
+  `resultado-que-declara`) — el mismo patrón del umbral crítico y la refleja, y un solo `$lookup`
+  trae los dos. `DetectarDeclaracionObligatoria` decide sobre dos códigos y apunta
+  `RESULTADO_DECLARABLE` **en la transacción de la validación**, sin la enfermedad dentro. Siete
+  tests, con `IND` y con una prueba no-EDO como controles negativos. Lo que faltaba para que la
+  decisión fuese posible: el resultado cualitativo ahora se guarda **codificado** (V14) — antes el
+  `text` ganaba al código y la regla no habría visto nunca un positivo.
 
 - [ ] **48 — Notificador EDO al SVEA, con `Task`.**
   *Criterio:* la notificación se modela como `Task` con su estado, su destinatario y su acuse, y se
@@ -2329,6 +2487,25 @@ contra la pila del `compose` levantada desde el clon limpio, no contra un doble.
 
 ## Notas / riesgos
 
+- **⚠️ HAPI 8.10 tampoco implementa `dependsOn` en `$translate`.** R5 modela «este mapeo solo vale si
+  tal atributo tiene tal valor» con `ConceptMap.additionalAttribute` + `element.target.dependsOn`, y
+  la operación lo lleva a la entrada (`dependency`) y a la salida (`match.dependsOn`). Comprobado
+  sobre `ca.uhn.fhir.jpa.api.model.TranslationQuery`: **no tiene `dependency`**, y el `match` que
+  devuelve no trae `dependsOn`. Es la misma clase de sorpresa que `$status`/`$events`, y la
+  consecuencia aquí fue de diseño: el criterio de positividad de una EDO vive como propiedad del
+  concepto y no en el mapa. Si algún día se cambia de servidor, esto es lo primero que conviene
+  volver a medir.
+- **La detección EDO se apoya en que validar bloquea sin terminología.** `declaracionDe` degrada a
+  vacío y `umbralDe` lanza, así que hoy no existe el camino «se validó y no se preguntó si era
+  declarable». Es una dependencia entre dos reglas que están en clases distintas, y **no hay nada que
+  la haga cumplirse**: si mañana alguien decide que un resultado sin umbral conocido se puede validar
+  igual, esta garantía desaparece en silencio. Está escrita en el javadoc de las dos, y el ítem 48
+  —que crea el `Task`— es el sitio natural donde ponerle una red.
+- **Un facultativo duplicado en el directorio burla la doble validación.** La segunda firma se compara
+  por la referencia literal (`Practitioner/{id}`), así que la misma persona dada de alta dos veces
+  podría firmar las dos. Es un problema del directorio de profesionales —que es dato maestro y no
+  tiene agregado (§10)— y no de la regla, pero conviene tenerlo escrito antes de que alguien lo
+  descubra en producción.
 - **⚠️ HAPI 8.10 NO trae `$status` ni `$events` de `Subscription`.** Tiene el motor de suscripciones
   entero —`SubscriptionTopicConfig`, `SubscriptionTopicDispatcher`, `R5NotificationStatusBuilder`— y
   publica `$trigger-subscription`, pero de las dos operaciones que R5 define sobre `Subscription` no

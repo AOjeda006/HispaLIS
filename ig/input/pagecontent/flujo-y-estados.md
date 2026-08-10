@@ -32,7 +32,22 @@ petición ──► extracción ──► espécimen ──► medición ──�
   del valor, y existe un [ProcedenciaValidacion](StructureDefinition-procedencia-validacion.html)
   que dice **quién** y **cuándo**.
 
-Tres consecuencias que un cliente tiene que implementar:
+#### Un valor crítico necesita dos firmas, y de personas distintas
+
+Cuando la cifra alcanza el umbral que publica el catálogo
+([ValoresCriticos](ValueSet-valores-criticos.html)), una sola revisión no basta: el resultado se
+queda en **`preliminary` con una firma puesta** hasta que lo valide un **segundo facultativo
+distinto**. Cada firma deja su propia `ProcedenciaValidacion`, porque cada una es un acto de una
+persona concreta en un momento concreto.
+
+Un potasio de 6,9 mmol/L no es «un valor alto»: es una cifra por la que se llama por teléfono antes
+de que el informe salga, y la respuesta clásica del oficio es que **lo mire otra persona**. Que sea
+otra es la mitad que importa — la misma mirando dos veces no es una revisión independiente.
+
+Para un cliente, esto significa que **un `preliminary` puede tener ya un `Provenance`**. Buscar
+procedencias no responde «¿está validado?»; eso lo dice `Observation.status`, y solo eso.
+
+Tres consecuencias más que un cliente tiene que implementar:
 
 1. **Un `InformeLab` solo contiene resultados `final`.** No hay informes «provisionales» con
    determinaciones sin firmar dentro. Si una línea del volante todavía no tiene resultado validado,
@@ -44,9 +59,15 @@ Tres consecuencias que un cliente tiene que implementar:
 3. **`Observation.status` no basta para saber quién firmó.** Eso está en el `Provenance`, y se
    consulta con `POST Provenance/_search` y `target=Observation/{id}`.
 
-**Revalidar está prohibido.** Un resultado se valida una vez; corregirlo es emitir una corrección
-(`status = corrected`), no volver a firmar el mismo. Por eso la correspondencia entre resultado y
-procedencia es uno a uno y el perfil declara `target 1..1`.
+**Revalidar está prohibido.** Un resultado se valida las veces que su regla exige —una, o dos si es
+crítico— y ni una más; corregirlo es emitir una corrección (`status = corrected`), no volver a firmar
+el mismo. Una firma de más taparía a las anteriores y reescribiría sin dejar constancia el rastro de
+quién respondió del valor.
+
+Por eso el perfil declara `target 1..1`: **cada procedencia da fe de un acto y apunta a un solo
+resultado**. Lo que no es uno a uno es la relación inversa — un crítico tiene dos procedencias—, y
+fundirlas en una con dos agentes diría que las dos personas firmaron a la vez lo mismo, cuando lo que
+pasó fue una revisión y después una contra-revisión.
 
 **La procedencia no se puede escribir desde fuera.** `POST` y `PUT` contra `Provenance` se rechazan:
 un cliente que pudiera crearla estaría certificando una validación que aquí no ha ocurrido. Para
