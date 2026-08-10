@@ -1,0 +1,37 @@
+{
+  "resourceType": "SearchParameter",
+  "id": "notificacion-edo-vencimiento",
+  "url": "https://aojeda006.github.io/HispaLIS/fhir/SearchParameter/notificacion-edo-vencimiento",
+  "title": "Búsqueda: vencimiento de la declaración",
+  "description": "Permite `GET [base]/Task?vencimiento=lt2026-08-04` — las declaraciones cuyo plazo termina antes de esa\nfecha.\n\nCombinado con `business-status`, que sí es estándar, responde a la pregunta que importa:\n**qué obligaciones se han pasado de plazo sin acusar**.\n\n```\nGET [base]/Task?business-status=PENDIENTE,ENVIADA&vencimiento=lt2026-08-04T12:00:00%2B02:00\n```\n\nEs un parámetro **propio de esta guía**, con URI canónica propia, como todo lo demás que aquí se\npublica. Un servidor que sirva estos perfiles y no lo indexe seguirá siendo conforme a FHIR: lo que no\npodrá es contestar esa pregunta.",
+  "version": "0.1.0",
+  "name": "BusquedaPorVencimiento",
+  "status": "active",
+  "experimental": true,
+  "date": "2026-08-10",
+  "publisher": "Andrés Ojeda Rodríguez",
+  "jurisdiction": [
+    {
+      "coding": [
+        {
+          "code": "ES",
+          "system": "urn:iso:std:iso:3166",
+          "display": "Spain"
+        }
+      ]
+    }
+  ],
+  "code": "vencimiento",
+  "base": [
+    "Task"
+  ],
+  "type": "date",
+  "expression": "Task.restriction.period.end",
+  "comparator": [
+    "eq",
+    "lt",
+    "gt",
+    "le",
+    "ge"
+  ]
+}
