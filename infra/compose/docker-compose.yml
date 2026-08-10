@@ -292,6 +292,11 @@ services:
       # El secreto con el que se FIRMA la notificación saliente. Nunca va dentro del recurso
       # `Subscription`, que se lee por la API: ahí solo va el identificador de la clave.
       HISPALIS_CLAVE_HIS: ${HISPALIS_CLAVE_HIS:-}
+      # Dónde se declara a Salud Pública. Apunta al servicio `svea`, que va detrás del perfil `edo`
+      # y NORMALMENTE NO ESTÁ LEVANTADO — y así tiene que ser: con el destinatario caído, el
+      # resultado se valida igual y la declaración se queda pendiente. Levantar el perfil es lo que
+      # cierra el circuito, no lo que lo permite.
+      HISPALIS_EDO_DESTINO: 'http://svea:8091/declaraciones'
     ports:
       # Se publica aunque la web no lo necesite —le llega por el proxy—, porque el circuito se
       # recorre con `curl` y el validador oficial también entra por aquí.
@@ -446,6 +451,35 @@ services:
     ports:
       # Se publica para poder mirar el log y para probarlo con `curl` desde el equipo.
       - '8090:8090'
+
+  # ─── Salud Pública: el servicio de declaraciones del SVEA (ítem 48) ─────────
+  #
+  # Detrás de un perfil por lo mismo que el receptor, y con una razón propia encima: el laboratorio
+  # NO depende de que Salud Pública esté levantada. Con este servicio parado, un resultado
+  # declarable se valida igual y su declaración se queda pendiente hasta que haya alguien al otro
+  # lado — que es exactamente lo que hay que poder demostrar.
+  #
+  #   docker compose --profile edo up -d svea
+  #
+  # Para ver los caminos malos se cambia el modo y se vuelve a levantar:
+  #
+  #   docker compose --profile edo run --rm -p 8091:8091 svea --modo rechaza
+  #
+  # ⚠️ Es una simulación VEROSÍMIL, NO FIEL: el contrato de Redalerta no es público, así que lo que
+  # se manda es el `Task` que publica la propia guía, y va SIN FILIACIÓN — una declaración de verdad
+  # la lleva. Está escrito en `docs/PLAN.md`, en el perfil `NotificacionEDO` y en el propio módulo.
+  svea:
+    profiles: ['edo']
+    build:
+      context: ../..
+      dockerfile: simuladores/Dockerfile.svea
+    # `acusa` es el camino normal. Los otros tres —`rechaza`, `sin-registro`, `silencio`— existen
+    # porque son los cuatro finales que el notificador distingue, y sin poder provocarlos solo se
+    # ejercita el bueno.
+    command: ['--modo', '${HISPALIS_SVEA_MODO:-acusa}']
+    ports:
+      # Se publica para mirar el libro de registro con `curl http://localhost:8091/declaraciones`.
+      - '8091:8091'
 
 volumes:
   # El almacén PKCS#12 del listener MLLP, generado al levantar y nunca versionado.

@@ -1,0 +1,25 @@
+# El servicio de declaraciones del SVEA: Salud Pública, simulada por el lado que recibe.
+#
+# Se construye desde la raíz del repositorio:
+#   docker build -f simuladores/Dockerfile.svea -t hispalis-svea .
+#
+# Fichero aparte del `Dockerfile` del receptor, y no un `ARG` que elija paquete: son dos terceros
+# distintos —el hospital y la administración— y compartir imagen los haría parecer el mismo
+# sistema con dos banderas. Cuesta doce líneas y se lee de un vistazo.
+
+FROM python:3.13-slim
+
+WORKDIR /simuladores
+
+# Sin `pip install`: esto no tiene ni una dependencia fuera de la biblioteca estándar.
+COPY simuladores/svea ./svea
+ENV PYTHONPATH=/simuladores \
+    PYTHONUNBUFFERED=1
+
+# Corre sin privilegios: es un servidor HTTP expuesto en la red del compose.
+RUN useradd --system --uid 10004 svea
+USER 10004
+
+EXPOSE 8091
+
+ENTRYPOINT ["python", "-m", "svea"]
