@@ -11,6 +11,7 @@
 @../../BibliotecaDocumentacion/fundamentos/datos-distribuidos/convenciones.md
 @../../BibliotecaDocumentacion/interoperabilidad/terminologia/convenciones.md
 @../../BibliotecaDocumentacion/interoperabilidad/smart-on-fhir/convenciones.md
+@../../BibliotecaDocumentacion/interoperabilidad/bulk-data/convenciones.md
 @../../BibliotecaDocumentacion/patrones/repository-y-dto.md
 @../../BibliotecaDocumentacion/patrones/inyeccion-dependencias.md
 @../../BibliotecaDocumentacion/herramientas/docker.md

@@ -37,10 +37,10 @@ import java.util.List;
  * <p>Es <strong>uno para toda la ejecución</strong>: la clave y el puerto no cambian entre clases de
  * test, así que un solo contexto de Spring sirve para todas.
  */
-final class ServidorDeIdentidadDePruebas {
+public final class ServidorDeIdentidadDePruebas {
 
     /** La base FHIR por la que se llega a este laboratorio. Un testigo con otro {@code aud} no vale. */
-    static final String AUDIENCIA = "https://laboratorio.pruebas.hispalis/fhir";
+    public static final String AUDIENCIA = "https://laboratorio.pruebas.hispalis/fhir";
 
     private static final ServidorDeIdentidadDePruebas INSTANCIA = new ServidorDeIdentidadDePruebas();
 
@@ -70,11 +70,11 @@ final class ServidorDeIdentidadDePruebas {
         }
     }
 
-    static ServidorDeIdentidadDePruebas elDeSiempre() {
+    public static ServidorDeIdentidadDePruebas elDeSiempre() {
         return INSTANCIA;
     }
 
-    String emisor() {
+    public String emisor() {
         return emisor;
     }
 
@@ -86,7 +86,7 @@ final class ServidorDeIdentidadDePruebas {
      * @param paciente el paciente del contexto de lanzamiento, o {@code null} si no lo hay
      * @param fhirUser el recurso que representa al usuario, o {@code null}
      */
-    String testigo(String sujeto, String scope, String paciente, String fhirUser) {
+    public String testigo(String sujeto, String scope, String paciente, String fhirUser) {
         return firmar(reclamaciones(sujeto, scope, paciente, fhirUser)
                 .audience(List.of(AUDIENCIA))
                 .expirationTime(Date.from(Instant.now().plus(30, ChronoUnit.MINUTES)))
@@ -94,7 +94,7 @@ final class ServidorDeIdentidadDePruebas {
     }
 
     /** Un testigo legítimo, bien firmado y sin caducar, pero emitido para otro servidor de recursos. */
-    String testigoParaOtroServidor(String sujeto, String scope) {
+    public String testigoParaOtroServidor(String sujeto, String scope) {
         return firmar(reclamaciones(sujeto, scope, null, null)
                 .audience(List.of("https://otro-hospital.example/fhir"))
                 .expirationTime(Date.from(Instant.now().plus(30, ChronoUnit.MINUTES)))
@@ -102,7 +102,7 @@ final class ServidorDeIdentidadDePruebas {
     }
 
     /** Un testigo con todo correcto salvo que caducó hace un minuto. */
-    String testigoCaducado(String sujeto, String scope) {
+    public String testigoCaducado(String sujeto, String scope) {
         return firmar(reclamaciones(sujeto, scope, null, null)
                 .audience(List.of(AUDIENCIA))
                 .expirationTime(Date.from(Instant.now().minus(1, ChronoUnit.MINUTES)))
