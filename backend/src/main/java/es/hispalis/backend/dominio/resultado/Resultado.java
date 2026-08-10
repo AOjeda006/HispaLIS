@@ -2,6 +2,8 @@ package es.hispalis.backend.dominio.resultado;
 
 import es.hispalis.backend.dominio.DatoInvalido;
 import es.hispalis.backend.dominio.ReglaDeNegocioIncumplida;
+import es.hispalis.backend.dominio.edo.CatalogoEdo;
+import es.hispalis.backend.dominio.edo.ReglaDeDeclaracion;
 import es.hispalis.backend.dominio.especimen.Especimen;
 import es.hispalis.backend.dominio.peticion.Peticion;
 import java.math.BigDecimal;
@@ -33,6 +35,7 @@ public final class Resultado {
     private final BigDecimal valor;
     private final String unidadUcum;
     private final String valorTextual;
+    private final String valorCodificado;
     private final Medicion medicion;
     private final List<Validacion> firmas;
     private final Integer firmasExigidas;
@@ -47,6 +50,7 @@ public final class Resultado {
             BigDecimal valor,
             String unidadUcum,
             String valorTextual,
+            String valorCodificado,
             Medicion medicion,
             List<Validacion> firmas,
             Integer firmasExigidas,
@@ -59,6 +63,7 @@ public final class Resultado {
         this.valor = valor;
         this.unidadUcum = unidadUcum;
         this.valorTextual = valorTextual;
+        this.valorCodificado = valorCodificado;
         this.medicion = medicion == null ? Medicion.sinConstancia() : medicion;
         this.firmas = firmas == null ? List.of() : List.copyOf(firmas);
         this.firmasExigidas = firmasExigidas;
@@ -110,6 +115,7 @@ public final class Resultado {
                 valor,
                 unidadUcum.strip(),
                 null,
+                null,
                 medicion,
                 // Recién salido del analizador. Lo que hay aquí es una cifra medida; que sea un
                 // resultado publicable lo deciden después una o dos personas.
@@ -148,6 +154,52 @@ public final class Resultado {
                 null,
                 null,
                 texto.strip(),
+                null,
+                medicion,
+                List.of(),
+                null,
+                disparo);
+    }
+
+    /**
+     * Informa un resultado cualitativo: lo que no se mide pero sí se codifica.
+     *
+     * <p>Es una fábrica aparte de {@link #informarTextual} y no un caso suyo, aunque las dos guarden
+     * una cadena. La diferencia es la que hay entre un dato y su descripción: de este código depende
+     * que se declare o no una enfermedad a Salud Pública, y esa decisión no se toma comparando
+     * textos. «Positivo», «POSITIVO» y «Se detecta» son la misma respuesta clínica y tres cadenas
+     * distintas — es el mismo error que informar una cifra sin unidad, en cualitativo.
+     *
+     * @param codigoDelValor código de {@code CodeSystem/resultados-cualitativos} ({@code POS},
+     *     {@code NEG}, {@code IND}) o del vocabulario que corresponda a la prueba
+     * @throws es.hispalis.backend.dominio.ReglaDeNegocioIncumplida si la muestra no puede producir
+     *     resultados o si la línea está anulada
+     */
+    public static Resultado informarCualitativo(
+            Especimen especimen,
+            Peticion linea,
+            String codigoDePrueba,
+            String codigoDelValor,
+            Medicion medicion,
+            Disparo disparo) {
+        exigirQueSePuedaInformar(especimen, linea);
+
+        if (codigoDePrueba == null || codigoDePrueba.isBlank()) {
+            throw new DatoInvalido("Un resultado sin código de prueba no dice qué se ha medido.");
+        }
+        if (codigoDelValor == null || codigoDelValor.isBlank()) {
+            throw new DatoInvalido("Un resultado cualitativo necesita el código de su valor.");
+        }
+        return new Resultado(
+                UUID.randomUUID(),
+                especimen.id(),
+                especimen.pacienteId(),
+                identidadDe(linea),
+                codigoDePrueba.strip(),
+                null,
+                null,
+                null,
+                codigoDelValor.strip(),
                 medicion,
                 List.of(),
                 null,
@@ -200,7 +252,8 @@ public final class Resultado {
         if (estaValidado()) {
             throw new ReglaDeNegocioIncumplida(
                     "El resultado %s ya está validado por %s: revalidar taparía la firma anterior."
-                            .formatted(codigoDePrueba, ultimaFirma().orElseThrow().facultativo()));
+                            .formatted(
+                                    codigoDePrueba, ultimaFirma().orElseThrow().facultativo()));
         }
 
         int exigidas = firmasExigidas != null ? firmasExigidas : cuantasFirmasPide(criticos);
@@ -217,6 +270,7 @@ public final class Resultado {
                 valor,
                 unidadUcum,
                 valorTextual,
+                valorCodificado,
                 medicion,
                 conLaNueva,
                 exigidas,
@@ -247,8 +301,8 @@ public final class Resultado {
         if (repite) {
             throw new ReglaDeNegocioIncumplida(
                     ("El resultado %s es crítico y necesita una segunda firma de otro facultativo. %s ya lo ha "
-                                            + "firmado, y la misma persona mirando dos veces no es una segunda "
-                                            + "revisión: es la primera contada dos veces.")
+                                    + "firmado, y la misma persona mirando dos veces no es una segunda "
+                                    + "revisión: es la primera contada dos veces.")
                             .formatted(codigoDePrueba, firma.facultativo()));
         }
     }
@@ -288,6 +342,7 @@ public final class Resultado {
             BigDecimal valor,
             String unidadUcum,
             String valorTextual,
+            String valorCodificado,
             Medicion medicion,
             List<Validacion> firmas,
             Integer firmasExigidas,
@@ -301,6 +356,7 @@ public final class Resultado {
                 valor,
                 unidadUcum,
                 valorTextual,
+                valorCodificado,
                 medicion,
                 firmas,
                 firmasExigidas,
@@ -343,6 +399,16 @@ public final class Resultado {
 
     public Optional<String> valorTextual() {
         return Optional.ofNullable(valorTextual);
+    }
+
+    /**
+     * El valor de una prueba cualitativa, como código.
+     *
+     * <p>Es el que mira la regla de declaración obligatoria. Va aparte de {@link #valorTextual()}
+     * porque son cosas distintas: uno se compara, el otro se lee.
+     */
+    public Optional<String> valorCodificado() {
+        return Optional.ofNullable(valorCodificado);
     }
 
     /** Cuándo se hizo la determinación y quién la hizo. Nunca {@code null}; puede no constar. */
@@ -415,6 +481,30 @@ public final class Resultado {
         return !comparables.isEmpty()
                 && comparables.stream()
                         .allMatch(rango -> valor.compareTo(rango.bajo()) < 0 || valor.compareTo(rango.alto()) > 0);
+    }
+
+    /**
+     * Si este resultado obliga a declarar a Salud Pública, y qué.
+     *
+     * <p><strong>Dos condiciones y ninguna es el paciente.</strong> Que la prueba esté en el catálogo
+     * EDO y que su valor sea el que la regla declara: un {@code LEGIOAG} positivo dispara y uno
+     * negativo no, y la diferencia es un código. El agregado ni siquiera guarda el nombre de la
+     * persona —solo su identificador—, así que la regla no podría mirarlo aunque quisiera. No es una
+     * omisión que haya que recordar mantener: es una imposibilidad.
+     *
+     * <p>Y una tercera que no es un código: <strong>tiene que estar validado</strong>. Se declara lo
+     * que el laboratorio da por definitivo, no lo que salió del analizador. Declarar sobre un
+     * preliminar pondría en marcha una investigación epidemiológica —en la legionelosis, la búsqueda
+     * de un foco ambiental— a partir de una cifra que todavía podía retirarse.
+     *
+     * @param catalogo la autoridad que dice qué prueba declara qué y con qué resultado
+     * @return la enfermedad que hay que declarar, o vacío si esta no lo es
+     */
+    public Optional<ReglaDeDeclaracion> obligaADeclarar(CatalogoEdo catalogo) {
+        if (!estaValidado() || valorCodificado == null) {
+            return Optional.empty();
+        }
+        return catalogo.declaracionDe(codigoDePrueba).filter(regla -> regla.laDispara(valorCodificado));
     }
 
     /** Se deriva de las firmas y no se guarda aparte: ver {@link EstadoDeResultado}. */

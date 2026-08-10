@@ -2,6 +2,7 @@ package es.hispalis.backend.aplicacion.resultado;
 
 import ca.uhn.fhir.jpa.api.dao.DaoRegistry;
 import ca.uhn.fhir.rest.api.server.RequestDetails;
+import es.hispalis.backend.aplicacion.edo.DetectarDeclaracionObligatoria;
 import es.hispalis.backend.dominio.DatoInvalido;
 import es.hispalis.backend.dominio.ReglaDeNegocioIncumplida;
 import es.hispalis.backend.dominio.hecho.Hecho;
@@ -43,6 +44,7 @@ public class ValidarResultado {
     private final RepositorioDeResultados resultados;
     private final RepositorioDeHechos hechos;
     private final ValoresCriticos criticos;
+    private final DetectarDeclaracionObligatoria declaraciones;
     private final TraductorDeResultado traductor;
     private final TraductorDeProcedencia traductorDeProcedencia;
     private final DaoRegistry daos;
@@ -51,12 +53,14 @@ public class ValidarResultado {
             RepositorioDeResultados resultados,
             RepositorioDeHechos hechos,
             ValoresCriticos criticos,
+            DetectarDeclaracionObligatoria declaraciones,
             TraductorDeResultado traductor,
             TraductorDeProcedencia traductorDeProcedencia,
             DaoRegistry daos) {
         this.resultados = resultados;
         this.hechos = hechos;
         this.criticos = criticos;
+        this.declaraciones = declaraciones;
         this.traductor = traductor;
         this.traductorDeProcedencia = traductorDeProcedencia;
         this.daos = daos;
@@ -103,15 +107,19 @@ public class ValidarResultado {
                             "Provenance/"
                                     + TraductorDeProcedencia.identidadDe(
                                             validado, validado.firmas().size()))));
+
+            // Y aquí, en la misma transacción, la obligación legal: si el resultado cae en el
+            // catálogo EDO queda apuntada antes de que nadie pueda perderla. La decisión es del
+            // caso de uso de al lado, y se toma sobre códigos.
+            declaraciones.ejecutar(validado);
         }
 
         // Las procedencias van primero porque son las que dan fe del cambio: si algo revienta
         // después, la transacción entera se deshace y no queda ni un resultado `final` sin firma ni
         // una firma sin resultado. Todas las escrituras son de la misma transacción, no de pasos
         // encadenados.
-        traductorDeProcedencia
-                .aFhir(validado)
-                .forEach(procedencia -> daos.getResourceDao(Provenance.class).update(procedencia, peticionHttp));
+        traductorDeProcedencia.aFhir(validado).forEach(procedencia -> daos.getResourceDao(Provenance.class)
+                .update(procedencia, peticionHttp));
 
         return (Observation) daos.getResourceDao(Observation.class)
                 .update(traductor.aFhir(validado), peticionHttp)

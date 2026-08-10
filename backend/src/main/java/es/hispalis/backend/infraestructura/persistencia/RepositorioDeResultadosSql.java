@@ -29,10 +29,10 @@ public class RepositorioDeResultadosSql implements RepositorioDeResultados {
             """
             INSERT INTO dominio.resultado (
                 id, especimen_id, paciente_id, peticion_id, codigo_de_prueba, valor, unidad_ucum, valor_textual,
-                medido_en, realizado_por, disparo_origen, disparo_tipo, disparo_motivo)
+                valor_codificado, medido_en, realizado_por, disparo_origen, disparo_tipo, disparo_motivo)
             VALUES (
                 :id, :especimenId, :pacienteId, :peticionId, :codigoDePrueba, :valor, :unidadUcum, :valorTextual,
-                :medidoEn, :realizadoPor, :disparoOrigen, :disparoTipo, :disparoMotivo)
+                :valorCodificado, :medidoEn, :realizadoPor, :disparoOrigen, :disparoTipo, :disparoMotivo)
             """;
 
     private static final String FIJAR_LAS_FIRMAS_EXIGIDAS =
@@ -64,7 +64,7 @@ public class RepositorioDeResultadosSql implements RepositorioDeResultados {
     private static final String COLUMNAS =
             """
             r.id, r.especimen_id, r.paciente_id, r.peticion_id, r.codigo_de_prueba, r.valor, r.unidad_ucum,
-            r.valor_textual, r.medido_en, r.realizado_por, r.firmas_exigidas,
+            r.valor_textual, r.valor_codificado, r.medido_en, r.realizado_por, r.firmas_exigidas,
             r.disparo_origen, r.disparo_tipo, r.disparo_motivo,
             (SELECT array_agg(v.facultativo ORDER BY v.orden)
                FROM dominio.validacion_de_resultado v WHERE v.resultado_id = r.id) AS firmantes,
@@ -109,6 +109,7 @@ public class RepositorioDeResultadosSql implements RepositorioDeResultados {
                         .addValue("valor", resultado.valor().orElse(null))
                         .addValue("unidadUcum", resultado.unidadUcum().orElse(null))
                         .addValue("valorTextual", resultado.valorTextual().orElse(null))
+                        .addValue("valorCodificado", resultado.valorCodificado().orElse(null))
                         .addValue(
                                 "medidoEn",
                                 resultado
@@ -194,6 +195,7 @@ public class RepositorioDeResultadosSql implements RepositorioDeResultados {
                 fila.getBigDecimal("valor"),
                 fila.getString("unidad_ucum"),
                 fila.getString("valor_textual"),
+                fila.getString("valor_codificado"),
                 Medicion.de(medidoEn == null ? null : medidoEn.toInstant(), fila.getString("realizado_por")),
                 firmasDe(fila),
                 fila.wasNull() ? null : firmasExigidas,

@@ -38,6 +38,23 @@ public enum TipoDeHecho {
      */
     RESULTADO_VALIDADO,
 
+    /**
+     * El resultado validado cae en el catálogo de declaración obligatoria.
+     *
+     * <p>Es una <strong>obligación legal contraída</strong>, apuntada en la misma transacción en la
+     * que nace. Por eso se decide al validar y no lo deduce después el consumidor: si la decisión
+     * viviera en el notificador, un fallo suyo consultando el catálogo dejaría la declaración sin
+     * hacer y sin rastro de que tocaba hacerla.
+     *
+     * <p><strong>No lleva la enfermedad dentro, y es deliberado.</strong> Un hecho con
+     * {@code {pacienteId, enfermedad}} en un tópico replicado dice «esta persona tiene
+     * legionelosis», y eso es historia clínica en el bus — invariante 6. Aquí va la referencia al
+     * resultado; qué enfermedad es se lee de la API, donde se aplica el consentimiento. Queda que el
+     * tipo del hecho revela que hay <em>algo</em> que declarar, y es el mínimo con el que un
+     * notificador puede existir.
+     */
+    RESULTADO_DECLARABLE,
+
     /** El informe salió. */
     INFORME_EMITIDO
 }

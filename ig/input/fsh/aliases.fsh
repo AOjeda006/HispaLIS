@@ -41,6 +41,15 @@ Alias: $AYUNO_HL7              = http://terminology.hl7.org/CodeSystem/v2-0916
 // procedencia que publica da fe de UNA cosa, que un facultativo firmó un resultado.
 Alias: $PARTICIPANTE_PROCEDENCIA = http://terminology.hl7.org/CodeSystem/provenance-participant-type
 
+// Qué clase de tarea es un `Task`. La declaración EDO usa `fulfill`: cumplir con lo que otra cosa
+// —aquí, la ley— exige a partir de un resultado ya emitido.
+Alias: $TIPOS_DE_TAREA = http://hl7.org/fhir/CodeSystem/task-code
+
+// Interpretación de un resultado (`Observation.interpretation`). En una prueba cualitativa dice si el
+// hallazgo es el buscado, que NO es lo mismo que el valor: `POS` interpreta, `ResultadosCualitativos#POS`
+// informa. El primero es del vocabulario común; el segundo, del dialecto del laboratorio.
+Alias: $INTERPRETACION = http://terminology.hl7.org/CodeSystem/v3-ObservationInterpretation
+
 
 // ─── `Identifier.system` — ADOPTADOS de la IG española de ÚNICAS ─────────────
 //

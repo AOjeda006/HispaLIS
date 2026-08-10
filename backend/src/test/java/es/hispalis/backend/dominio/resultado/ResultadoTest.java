@@ -105,7 +105,8 @@ class ResultadoTest {
         Resultado medido = informar();
         Instant manana = Instant.now().plus(Duration.ofDays(1));
 
-        assertThatThrownBy(() -> medido.validar(SIN_UMBRALES, FACULTATIVA, manana)).isInstanceOf(DatoInvalido.class);
+        assertThatThrownBy(() -> medido.validar(SIN_UMBRALES, FACULTATIVA, manana))
+                .isInstanceOf(DatoInvalido.class);
     }
 
     @Test
@@ -201,8 +202,7 @@ class ResultadoTest {
         };
         Resultado medido = potasio("6.9");
 
-        assertThatThrownBy(() -> medido.validar(noContesta, FACULTATIVA, null))
-                .isInstanceOf(NoSeSabeSiEsCritico.class);
+        assertThatThrownBy(() -> medido.validar(noContesta, FACULTATIVA, null)).isInstanceOf(NoSeSabeSiEsCritico.class);
         assertThat(medido.estaValidado()).isFalse();
     }
 

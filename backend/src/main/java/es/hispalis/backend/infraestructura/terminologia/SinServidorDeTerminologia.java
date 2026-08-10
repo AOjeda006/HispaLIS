@@ -1,9 +1,11 @@
 package es.hispalis.backend.infraestructura.terminologia;
 
+import es.hispalis.backend.dominio.edo.ReglaDeDeclaracion;
 import es.hispalis.backend.dominio.resultado.NoSeSabeSiEsCritico;
 import es.hispalis.backend.dominio.resultado.ReglaRefleja;
 import es.hispalis.backend.dominio.resultado.UmbralCritico;
 import es.hispalis.backend.fhir.CatalogoDePruebas;
+import es.hispalis.backend.fhir.ResultadosCualitativos;
 import es.hispalis.backend.fhir.terminologia.Terminologia;
 import java.util.Optional;
 import org.hl7.fhir.r5.model.CodeableConcept;
@@ -25,6 +27,25 @@ public class SinServidorDeTerminologia implements Terminologia {
     public CodeableConcept pruebaDelCatalogo(String codigoLocal) {
         return new CodeableConcept()
                 .addCoding(new Coding().setSystem(CatalogoDePruebas.SYSTEM).setCode(codigoLocal));
+    }
+
+    @Override
+    public CodeableConcept valorCualitativo(String codigoLocal) {
+        return new CodeableConcept()
+                .addCoding(new Coding().setSystem(ResultadosCualitativos.SYSTEM).setCode(codigoLocal));
+    }
+
+    /**
+     * Sin catálogo no hay nada que declarar, y eso no deja ninguna obligación sin cumplir.
+     *
+     * <p>Parece la degradación peligrosa —callarse una declaración obligatoria es incumplir la ley—,
+     * pero no llega a darse: esto solo se pregunta al validar un resultado, y validar aquí es
+     * imposible, porque {@link #umbralDe} lanza. Sin terminología no hay validación, y sin validación
+     * no hay nada que declarar. La puerta ya está cerrada un paso antes.
+     */
+    @Override
+    public Optional<ReglaDeDeclaracion> declaracionDe(String codigoDePrueba) {
+        return Optional.empty();
     }
 
     @Override

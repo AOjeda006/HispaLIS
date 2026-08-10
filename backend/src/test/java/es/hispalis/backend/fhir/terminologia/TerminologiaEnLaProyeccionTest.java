@@ -37,11 +37,11 @@ import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
-import org.springframework.test.context.TestPropertySource;
 import org.springframework.core.env.Environment;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.test.context.TestPropertySource;
 
 /**
  * El nombre de la prueba sale del servidor de terminología y llega hasta el recurso publicado.
@@ -369,6 +369,16 @@ class TerminologiaEnLaProyeccionTest extends TestDeIntegracion {
         @Override
         public Optional<es.hispalis.backend.dominio.resultado.ReglaRefleja> reflejaDe(String codigoDePrueba) {
             return construir().reflejaDe(codigoDePrueba);
+        }
+
+        @Override
+        public CodeableConcept valorCualitativo(String codigoLocal) {
+            return construir().valorCualitativo(codigoLocal);
+        }
+
+        @Override
+        public Optional<es.hispalis.backend.dominio.edo.ReglaDeDeclaracion> declaracionDe(String codigoDePrueba) {
+            return construir().declaracionDe(codigoDePrueba);
         }
 
         private TerminologiaDelServidor construir() {

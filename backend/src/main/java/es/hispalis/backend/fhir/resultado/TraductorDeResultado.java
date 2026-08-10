@@ -13,6 +13,7 @@ import es.hispalis.backend.dominio.resultado.TipoDeDisparo;
 import es.hispalis.backend.fhir.CatalogoDePruebas;
 import es.hispalis.backend.fhir.PerfilesDeLaGuia;
 import es.hispalis.backend.fhir.Referencias;
+import es.hispalis.backend.fhir.ResultadosCualitativos;
 import es.hispalis.backend.fhir.terminologia.Terminologia;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -79,15 +80,16 @@ public class TraductorDeResultado {
         }
         if (recurso.hasValueCodeableConcept()) {
             CodeableConcept valor = recurso.getValueCodeableConcept();
-            return Resultado.informarTextual(
-                    especimen,
-                    linea,
-                    codigo,
-                    valor.hasText()
-                            ? valor.getText()
-                            : valor.getCodingFirstRep().getCode(),
-                    medicion,
-                    disparo);
+            // ⚠️ El CÓDIGO manda sobre el `text`, y antes era al revés. Un `{coding:[{code:"POS"}],
+            // text:"Positivo"}` se guardaba como la cadena «Positivo» y el código se perdía — con lo
+            // que la regla de declaración obligatoria, que compara códigos, no habría visto nunca un
+            // positivo. Solo cuando no viene ningún código se cae al texto: eso ya no es un resultado
+            // codificado, es una descripción, y como tal se guarda.
+            return ResultadosCualitativos.codigoDe(valor)
+                    .map(codigoDelValor ->
+                            Resultado.informarCualitativo(especimen, linea, codigo, codigoDelValor, medicion, disparo))
+                    .orElseGet(() ->
+                            Resultado.informarTextual(especimen, linea, codigo, valor.getText(), medicion, disparo));
         }
         throw new DatoInvalido(
                 "El resultado no trae valor. Si no consta, hay que decirlo con `dataAbsentReason`, no dejarlo vacío.");
@@ -120,6 +122,10 @@ public class TraductorDeResultado {
                         .setSystem(UCUM)
                         .setCode(resultado.unidadUcum().orElseThrow())));
         resultado.valorTextual().ifPresent(texto -> recurso.setValue(new StringType(texto)));
+        // Un cualitativo sale CODIFICADO y con su nombre en español dentro. Publicar `POS` a secas
+        // dejaría a la web y a la app enseñando un hueco: las dos leen `text` o `display`, que es lo
+        // correcto —el código es para la máquina— y por eso el nombre tiene que venir puesto.
+        resultado.valorCodificado().ifPresent(codigo -> recurso.setValue(terminologia.valorCualitativo(codigo)));
 
         // `Must Support` no significa «obligatorio»: significa que si llega, el servidor lo guarda y
         // lo devuelve. Aquí se cierra esa segunda mitad.

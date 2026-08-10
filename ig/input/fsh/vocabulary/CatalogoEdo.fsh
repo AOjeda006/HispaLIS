@@ -13,9 +13,16 @@ positivo de una de estas pruebas, se genera una `NotificacionEDO`.
 **Este conjunto es verosímil, no fiel.** La relación real de EDO es mucho más amplia y el contrato de
 Redalerta no es público: aquí hay una muestra suficiente para que la regla sea demostrable.
 
-No es el `binding` de ningún elemento: lo consume la **regla de notificación**, que compara el código
-del resultado validado contra este conjunto. Publicarlo como `ValueSet` es lo que impide que esa
-lista acabe incrustada en el código.
+No es el `binding` de ningún elemento y **no es la regla**: es la lista, publicada para poder leerla
+de un vistazo. La regla que ejecuta el laboratorio son las propiedades `enfermedad-edo` y
+`resultado-que-declara` del concepto en `CodeSystem/catalogo-pruebas`, que dicen además *qué*
+enfermedad se declara y *con qué* resultado — dos cosas que una lista de códigos no puede decir.
+Estar aquí y tener esas propiedades es lo mismo, y en el laboratorio se comprueba que no se
+desincronizan.
+
+Que exista de todas formas no es redundancia: un clínico que quiera saber qué pruebas de este
+catálogo acaban en una declaración a Salud Pública lo lee aquí, sin tener que recorrer concepto a
+concepto.
 """
 
 * CatalogoPruebas#LEGIOAG

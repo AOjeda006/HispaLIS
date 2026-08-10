@@ -64,6 +64,26 @@ término LOINC por el nombre en vez de por sus seis ejes es el error de mapeo m�
 * ^property[5].description = "La frase que explica la refleja al que lee el informe, en español y ya redactada. Va tal cual a `Observation.triggeredBy.reason`, y de ahí a la pantalla: quien redacta la regla redacta también cómo se cuenta."
 * ^property[5].type = #string
 
+// Las dos de abajo son la REGLA DE DECLARACIÓN OBLIGATORIA, y también van juntas: una prueba que
+// declara sin decir con qué resultado declararía todos —incluidos los negativos—, y un criterio de
+// positividad sin enfermedad no dice a Salud Pública de qué se le está avisando.
+//
+// ⚠️ R5 tiene un sitio hecho a medida para esto y NO se usa: `ConceptMap.additionalAttribute` más
+// `element.target.dependsOn`, que dice literalmente «este mapeo solo vale si tal atributo tiene tal
+// valor» —en R4 era `dependsOn.property`, una `uri`, y no existía `additionalAttribute`—. Se
+// descartó por una razón medida, no por desconocerlo: HAPI 8.10 no lo implementa ni a la entrada ni
+// a la salida (`TranslationQuery` no tiene `dependency`, y el `match` de `$translate` no devuelve
+// `dependsOn`), así que publicarlo dejaría el criterio en un elemento que el servidor no sirve y el
+// backend tendría que leerlo de otro sitio — es decir, dos fuentes de verdad para la misma regla.
+// Como propiedades del concepto, un solo `$lookup` trae la enfermedad y el criterio a la vez, que es
+// el mismo patrón que ya usan el umbral crítico y la prueba refleja.
+* ^property[6].code = #enfermedad-edo
+* ^property[6].description = "Enfermedad de declaración obligatoria que esta prueba confirma. Ausente en las pruebas que no obligan a declarar, que son casi todas."
+* ^property[6].type = #Coding
+* ^property[7].code = #resultado-que-declara
+* ^property[7].description = "Valor cualitativo que, en esta prueba, dispara la declaración. Obligatorio en todo concepto que declare una `enfermedad-edo`: sin él se declararía también un negativo."
+* ^property[7].type = #Coding
+
 
 // ─── Bioquímica ──────────────────────────────────────────────────────────────
 
@@ -185,11 +205,41 @@ término LOINC por el nombre en vez de por sus seis ejes es el error de mapeo m�
 
 // ─── Microbiología y serología ───────────────────────────────────────────────
 //
-// Cualitativas: sin unidad. Son las que pueden disparar una declaración obligatoria a Salud Pública
-// (ValueSet `catalogo-edo`).
+// Cualitativas: sin unidad, y su valor viene de `CodeSystem/resultados-cualitativos`. Son las que
+// disparan una declaración obligatoria a Salud Pública, y aquí es donde está escrito CUÁL y CON QUÉ
+// RESULTADO. El `ValueSet/catalogo-edo` publica la lista para poder leerla de un vistazo; la regla
+// que ejecuta el laboratorio son estas dos propiedades.
+//
+// Fíjate en que el criterio es `#POS` y no «cualquier cosa que no sea negativo»: un `#IND` no
+// declara. Una serología en zona gris no es un caso, y declararla llenaría el sistema de vigilancia
+// de casos que luego hay que retirar.
 
 * #LEGIOAG "Antígeno de Legionella en orina" "Detección del antígeno de Legionella pneumophila en orina."
+* #LEGIOAG ^property[0].code = #enfermedad-edo
+* #LEGIOAG ^property[0].valueCoding = EnfermedadesEdo#LEGIONELOSIS
+* #LEGIOAG ^property[1].code = #resultado-que-declara
+* #LEGIOAG ^property[1].valueCoding = ResultadosCualitativos#POS
+
 * #COPROSALM "Coprocultivo: Salmonella" "Identificación de Salmonella sp en heces por cultivo."
+* #COPROSALM ^property[0].code = #enfermedad-edo
+* #COPROSALM ^property[0].valueCoding = EnfermedadesEdo#SALMONELOSIS
+* #COPROSALM ^property[1].code = #resultado-que-declara
+* #COPROSALM ^property[1].valueCoding = ResultadosCualitativos#POS
+
 * #MTBPCR "Mycobacterium tuberculosis por PCR" "Detección de ADN del complejo Mycobacterium tuberculosis por amplificación de ácidos nucleicos."
+* #MTBPCR ^property[0].code = #enfermedad-edo
+* #MTBPCR ^property[0].valueCoding = EnfermedadesEdo#TUBERCULOSIS
+* #MTBPCR ^property[1].code = #resultado-que-declara
+* #MTBPCR ^property[1].valueCoding = ResultadosCualitativos#POS
+
 * #VHAIGM "Anticuerpos IgM frente al virus de la hepatitis A" "Detección de anticuerpos IgM frente al virus de la hepatitis A en suero."
+* #VHAIGM ^property[0].code = #enfermedad-edo
+* #VHAIGM ^property[0].valueCoding = EnfermedadesEdo#HEPATITIS-A
+* #VHAIGM ^property[1].code = #resultado-que-declara
+* #VHAIGM ^property[1].valueCoding = ResultadosCualitativos#POS
+
 * #SARIGM "Anticuerpos IgM frente al virus del sarampión" "Detección de anticuerpos IgM frente al virus del sarampión en suero."
+* #SARIGM ^property[0].code = #enfermedad-edo
+* #SARIGM ^property[0].valueCoding = EnfermedadesEdo#SARAMPION
+* #SARIGM ^property[1].code = #resultado-que-declara
+* #SARIGM ^property[1].valueCoding = ResultadosCualitativos#POS

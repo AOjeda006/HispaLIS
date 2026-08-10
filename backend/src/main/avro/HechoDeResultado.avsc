@@ -14,8 +14,8 @@
       "type": {
         "type": "enum",
         "name": "TipoDeHechoDeResultado",
-        "doc": "`RESULTADO_INFORMADO` es una cifra que todavía no responde nadie; `RESULTADO_VALIDADO` es la que un facultativo ha firmado. Solo la segunda es publicable.",
-        "symbols": ["RESULTADO_INFORMADO", "RESULTADO_VALIDADO"]
+        "doc": "`RESULTADO_INFORMADO` es una cifra que todavía no responde nadie; `RESULTADO_VALIDADO` es la que un facultativo ha firmado —y en un valor crítico eso son DOS firmas de personas distintas—. Solo la segunda es publicable. `RESULTADO_DECLARABLE` acompaña a la validación cuando la prueba y su valor caen en el catálogo EDO: dice que hay una obligación legal de declarar, NO qué enfermedad es. Eso se lee de la API, donde se aplica el consentimiento.",
+        "symbols": ["RESULTADO_INFORMADO", "RESULTADO_VALIDADO", "RESULTADO_DECLARABLE"]
       },
       "doc": "Un hecho ocurrido, no una orden."
     },

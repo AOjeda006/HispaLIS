@@ -31,9 +31,9 @@ import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
-import org.springframework.test.context.TestPropertySource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.test.context.TestPropertySource;
 
 /**
  * La prueba refleja: el laboratorio añade una determinación que nadie pidió, y dice por qué.
@@ -292,6 +292,20 @@ class PruebasReflejasTest extends TestDeIntegracion {
                             .addCoding(new Coding()
                                     .setSystem(CatalogoDePruebas.SYSTEM)
                                     .setCode(codigoLocal));
+                }
+
+                @Override
+                public CodeableConcept valorCualitativo(String codigoLocal) {
+                    return new CodeableConcept()
+                            .addCoding(new Coding()
+                                    .setSystem(es.hispalis.backend.fhir.ResultadosCualitativos.SYSTEM)
+                                    .setCode(codigoLocal));
+                }
+
+                @Override
+                public Optional<es.hispalis.backend.dominio.edo.ReglaDeDeclaracion> declaracionDe(
+                        String codigoDePrueba) {
+                    return Optional.empty();
                 }
 
                 @Override

@@ -43,6 +43,13 @@ re-ejecución por fallo técnico. En R4 esto había que inventarlo.
 // tipos de `value[x]` no corresponden a este dominio.
 * value[x] only Quantity or CodeableConcept or string
 * value[x] MS
+
+// El cualitativo va CODIFICADO y no en texto, y no es una preferencia de estilo: de este valor
+// depende que se declare o no una enfermedad a Salud Pública. Con «Positivo» en texto libre, la
+// regla sería una comparación de cadenas. El enlace es extensible porque un grupo sanguíneo o un
+// serotipo también son resultados codificados y no caben en el conjunto.
+* valueCodeableConcept from ResultadoCualitativo (extensible)
+* valueCodeableConcept ^short = "Resultado de una prueba cualitativa: positivo, negativo o indeterminado"
 * valueQuantity MS
 * valueQuantity.value 1..1
 * valueQuantity.unit 1..1 MS

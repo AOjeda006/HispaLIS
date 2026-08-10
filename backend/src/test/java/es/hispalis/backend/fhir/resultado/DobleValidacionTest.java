@@ -38,13 +38,13 @@ import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
-import org.springframework.test.context.TestPropertySource;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.test.context.TestPropertySource;
 
 /**
  * La doble validación del resultado crítico: la otra mitad del invariante de §10.
@@ -87,7 +87,8 @@ class DobleValidacionTest extends TestDeIntegracion {
         ResponseEntity<String> primera = validar(resultado, FacultativaDePrueba.REFERENCIA);
 
         assertThat(primera.getStatusCode())
-                .as("firmar el primero no es un error: lo que pasa es que todavía no basta. Cuerpo: %s",
+                .as(
+                        "firmar el primero no es un error: lo que pasa es que todavía no basta. Cuerpo: %s",
                         primera.getBody())
                 .isEqualTo(HttpStatus.OK);
         assertThat(leerResultado(resultado).getStatus())
@@ -137,15 +138,13 @@ class DobleValidacionTest extends TestDeIntegracion {
         validar(resultado, FacultativaDePrueba.REFERENCIA);
         ResponseEntity<String> segunda = validar(resultado, FacultativaDePrueba.SEGUNDA_REFERENCIA);
 
-        assertThat(segunda.getStatusCode())
-                .as("cuerpo: %s", segunda.getBody())
-                .isEqualTo(HttpStatus.OK);
+        assertThat(segunda.getStatusCode()).as("cuerpo: %s", segunda.getBody()).isEqualTo(HttpStatus.OK);
         assertThat(leerResultado(resultado).getStatus()).isEqualTo(Enumerations.ObservationStatus.FINAL);
         assertThat(procedenciasDe(resultado))
                 .as("cada firma da fe de un acto distinto, así que cada una tiene su propia procedencia")
                 .hasSize(2)
-                .extracting(procedencia ->
-                        procedencia.getAgentFirstRep().getWho().getReference())
+                .extracting(
+                        procedencia -> procedencia.getAgentFirstRep().getWho().getReference())
                 .containsExactlyInAnyOrder(FacultativaDePrueba.REFERENCIA, FacultativaDePrueba.SEGUNDA_REFERENCIA);
     }
 
@@ -301,11 +300,8 @@ class DobleValidacionTest extends TestDeIntegracion {
                 .addCoding(new Coding().setSystem(CatalogoDePruebas.SYSTEM).setCode(prueba)));
         resultado.setSubject(new Reference(paciente));
         resultado.setSpecimen(new Reference(muestra));
-        resultado.setValue(new Quantity()
-                .setValue(valor)
-                .setUnit(unidad)
-                .setSystem(UCUM)
-                .setCode(unidad));
+        resultado.setValue(
+                new Quantity().setValue(valor).setUnit(unidad).setSystem(UCUM).setCode(unidad));
         return resultado;
     }
 
@@ -344,6 +340,20 @@ class DobleValidacionTest extends TestDeIntegracion {
                             .addCoding(new Coding()
                                     .setSystem(CatalogoDePruebas.SYSTEM)
                                     .setCode(codigoLocal));
+                }
+
+                @Override
+                public CodeableConcept valorCualitativo(String codigoLocal) {
+                    return new CodeableConcept()
+                            .addCoding(new Coding()
+                                    .setSystem(es.hispalis.backend.fhir.ResultadosCualitativos.SYSTEM)
+                                    .setCode(codigoLocal));
+                }
+
+                @Override
+                public Optional<es.hispalis.backend.dominio.edo.ReglaDeDeclaracion> declaracionDe(
+                        String codigoDePrueba) {
+                    return Optional.empty();
                 }
 
                 @Override

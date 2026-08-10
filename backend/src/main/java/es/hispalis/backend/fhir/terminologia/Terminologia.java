@@ -1,5 +1,6 @@
 package es.hispalis.backend.fhir.terminologia;
 
+import es.hispalis.backend.dominio.edo.CatalogoEdo;
 import es.hispalis.backend.dominio.resultado.ReglasReflejas;
 import es.hispalis.backend.dominio.resultado.ValoresCriticos;
 import org.hl7.fhir.r5.model.CodeableConcept;
@@ -24,7 +25,21 @@ import org.hl7.fhir.r5.model.CodeableConcept;
  * solo la pregunta estrecha: lo que la regla de la doble validación necesita saber es si una cifra
  * obliga a avisar, no qué es un {@code CodeableConcept}.
  */
-public interface Terminologia extends ValoresCriticos, ReglasReflejas {
+public interface Terminologia extends ValoresCriticos, ReglasReflejas, CatalogoEdo {
+
+    /**
+     * El concepto codificado con el que se publica el valor de una prueba cualitativa.
+     *
+     * <p>Es el mismo {@code $lookup} que {@link #pruebaDelCatalogo}, contra otro {@code CodeSystem}.
+     * Existe porque un resultado publicado como {@code POS} a secas no lo entiende nadie: la web y
+     * la app leen {@code text} o {@code display}, y sin ellos enseñarían el hueco. El código es el
+     * dato y el nombre es su presentación, pero un informe sin presentación no es un informe.
+     *
+     * <p>Nunca falla, como aquel: sin servidor devuelve el código a secas.
+     *
+     * @param codigoLocal {@code POS}, {@code NEG}, {@code IND}…
+     */
+    CodeableConcept valorCualitativo(String codigoLocal);
 
     /**
      * El concepto codificado con el que se publica una prueba del catálogo.

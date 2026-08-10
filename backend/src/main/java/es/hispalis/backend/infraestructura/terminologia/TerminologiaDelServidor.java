@@ -3,10 +3,12 @@ package es.hispalis.backend.infraestructura.terminologia;
 import ca.uhn.fhir.rest.client.api.IGenericClient;
 import es.hispalis.backend.dominio.DatoInvalido;
 import es.hispalis.backend.dominio.ReglaDeNegocioIncumplida;
+import es.hispalis.backend.dominio.edo.ReglaDeDeclaracion;
 import es.hispalis.backend.dominio.resultado.NoSeSabeSiEsCritico;
 import es.hispalis.backend.dominio.resultado.ReglaRefleja;
 import es.hispalis.backend.dominio.resultado.UmbralCritico;
 import es.hispalis.backend.fhir.CatalogoDePruebas;
+import es.hispalis.backend.fhir.ResultadosCualitativos;
 import es.hispalis.backend.fhir.terminologia.Terminologia;
 import java.math.BigDecimal;
 import java.util.Map;
@@ -79,6 +81,9 @@ public class TerminologiaDelServidor implements Terminologia {
     /** Las reglas reflejas ya resueltas, incluido «esta prueba no dispara ninguna». */
     private final Map<String, Optional<ReglaRefleja>> reflejas = new ConcurrentHashMap<>();
 
+    /** Las reglas de declaración obligatoria ya resueltas, incluido «esta prueba no declara nada». */
+    private final Map<String, Optional<ReglaDeDeclaracion>> declaraciones = new ConcurrentHashMap<>();
+
     private final AtomicBoolean avisadoDeQueNoEsta = new AtomicBoolean();
 
     public TerminologiaDelServidor(IGenericClient cliente) {
@@ -87,8 +92,100 @@ public class TerminologiaDelServidor implements Terminologia {
 
     @Override
     public CodeableConcept pruebaDelCatalogo(String codigoLocal) {
-        CodeableConcept resuelto = resueltos.get(codigoLocal);
+        CodeableConcept resuelto = resueltos.get(CatalogoDePruebas.SYSTEM + "|" + codigoLocal);
         return resuelto != null ? resuelto.copy() : resolver(codigoLocal).copy();
+    }
+
+    /**
+     * El valor de una cualitativa, con su nombre en español.
+     *
+     * <p>No se le busca LOINC, al revés que a la prueba: el {@code ConceptMap} del proyecto traduce
+     * el catálogo de pruebas y no este vocabulario. Cuando la edición española de SNOMED esté
+     * disponible (ítem 42) y haya un mapa a {@code 10828004 |Positive|}, aquí solo cambia esta línea.
+     */
+    @Override
+    public CodeableConcept valorCualitativo(String codigoLocal) {
+        String clave = ResultadosCualitativos.SYSTEM + "|" + codigoLocal;
+        CodeableConcept resuelto = resueltos.get(clave);
+        if (resuelto != null) {
+            return resuelto.copy();
+        }
+
+        Coding local = new Coding().setSystem(ResultadosCualitativos.SYSTEM).setCode(codigoLocal);
+        CodeableConcept concepto = new CodeableConcept().addCoding(local);
+        nombreEnEspanol(ResultadosCualitativos.SYSTEM, codigoLocal).ifPresent(nombre -> {
+            local.setDisplay(nombre);
+            concepto.setText(nombre);
+            resueltos.put(clave, concepto);
+        });
+        return concepto.copy();
+    }
+
+    /**
+     * Qué enfermedad declara una prueba y con qué resultado, leído del mismo concepto del catálogo.
+     *
+     * <p>Un solo {@code $lookup} trae las dos propiedades, que es el motivo de que estén en el
+     * concepto y no en un {@code ConceptMap} aparte (ver el comentario de {@code CatalogoPruebas.fsh}).
+     *
+     * <p>Sin respuesta del servidor se contesta vacío en vez de lanzar, al revés que en
+     * {@link #umbralDe}, y aquí conviene decir por qué no es una incoherencia: este método solo se
+     * llama <strong>después</strong> de validar, y validar ya se ha negado a seguir si la
+     * terminología no contestaba. No existe el camino «se validó sin poder preguntar», así que
+     * ninguna declaración obligatoria se pierde en silencio por esta puerta.
+     */
+    @Override
+    public Optional<ReglaDeDeclaracion> declaracionDe(String codigoDePrueba) {
+        Optional<ReglaDeDeclaracion> sabido = declaraciones.get(codigoDePrueba);
+        if (sabido != null) {
+            return sabido;
+        }
+        Parameters entrada = new Parameters();
+        entrada.addParameter("system", new UriType(CatalogoDePruebas.SYSTEM));
+        entrada.addParameter("code", new CodeType(codigoDePrueba));
+
+        Optional<Parameters> salida = invocar(CodeSystem.class, "$lookup", entrada);
+        if (salida.isEmpty()) {
+            return Optional.empty();
+        }
+        Optional<ReglaDeDeclaracion> regla = declaracionEn(salida.get(), codigoDePrueba);
+        declaraciones.put(codigoDePrueba, regla);
+        return regla;
+    }
+
+    /**
+     * Arma la regla con lo que el concepto declara, o dice que esa prueba no es de declaración
+     * obligatoria.
+     *
+     * <p>Una regla a medias —enfermedad sin criterio— <strong>no se aplica</strong>, y se avisa
+     * nombrando el concepto. Aquí sí se calla en vez de lanzar, a diferencia del umbral crítico, y la
+     * diferencia está en qué se rompe: tumbar la validación de un resultado por un defecto del
+     * catálogo dejaría al paciente sin informe además de a Salud Pública sin declaración. El aviso es
+     * para quien mantiene la guía.
+     */
+    private static Optional<ReglaDeDeclaracion> declaracionEn(Parameters salida, String codigoDePrueba) {
+        Optional<Coding> enfermedad = propiedad(salida, "enfermedad-edo")
+                .filter(Coding.class::isInstance)
+                .map(Coding.class::cast);
+        if (enfermedad.isEmpty()) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(new ReglaDeDeclaracion(
+                    codigoDePrueba,
+                    enfermedad.get().getCode(),
+                    enfermedad.get().getDisplay(),
+                    propiedad(salida, "resultado-que-declara")
+                            .filter(Coding.class::isInstance)
+                            .map(valor -> ((Coding) valor).getCode())
+                            .orElse(null)));
+        } catch (DatoInvalido malDeclarada) {
+            LOG.warn(
+                    "El catálogo declara «{}» como prueba de declaración obligatoria pero la regla no se puede "
+                            + "aplicar, así que NO se declarará nada: {}",
+                    codigoDePrueba,
+                    malDeclarada.getMessage());
+            return Optional.empty();
+        }
     }
 
     /**
@@ -200,7 +297,7 @@ public class TerminologiaDelServidor implements Terminologia {
     /** Construye el concepto y lo cachea solo si el servidor llegó a contestar algo. */
     private CodeableConcept resolver(String codigoLocal) {
         Coding local = new Coding().setSystem(CatalogoDePruebas.SYSTEM).setCode(codigoLocal);
-        Optional<String> nombre = nombreEnEspanol(codigoLocal);
+        Optional<String> nombre = nombreEnEspanol(CatalogoDePruebas.SYSTEM, codigoLocal);
         nombre.ifPresent(local::setDisplay);
 
         CodeableConcept concepto = new CodeableConcept().addCoding(local);
@@ -212,15 +309,15 @@ public class TerminologiaDelServidor implements Terminologia {
         nombre.ifPresent(concepto::setText);
 
         if (nombre.isPresent()) {
-            resueltos.put(codigoLocal, concepto);
+            resueltos.put(CatalogoDePruebas.SYSTEM + "|" + codigoLocal, concepto);
         }
         return concepto;
     }
 
-    /** {@code $lookup}: el nombre de la prueba tal y como lo publica la guía, en español. */
-    private Optional<String> nombreEnEspanol(String codigoLocal) {
+    /** {@code $lookup}: el nombre de un concepto tal y como lo publica la guía, en español. */
+    private Optional<String> nombreEnEspanol(String system, String codigoLocal) {
         Parameters entrada = new Parameters();
-        entrada.addParameter("system", new UriType(CatalogoDePruebas.SYSTEM));
+        entrada.addParameter("system", new UriType(system));
         entrada.addParameter("code", new CodeType(codigoLocal));
 
         return invocar(CodeSystem.class, "$lookup", entrada).flatMap(salida -> texto(salida, "display"));

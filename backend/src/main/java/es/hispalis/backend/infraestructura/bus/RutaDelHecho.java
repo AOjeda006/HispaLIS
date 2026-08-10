@@ -23,7 +23,7 @@ final class RutaDelHecho {
         return switch (tipo) {
             case PETICION_REGISTRADA, LINEA_ANULADA -> Optional.of(Topico.PETICIONES);
             case ESPECIMEN_REGISTRADO -> Optional.of(Topico.ESPECIMENES);
-            case RESULTADO_INFORMADO, RESULTADO_VALIDADO -> Optional.of(Topico.RESULTADOS);
+            case RESULTADO_INFORMADO, RESULTADO_VALIDADO, RESULTADO_DECLARABLE -> Optional.of(Topico.RESULTADOS);
             case INFORME_EMITIDO -> Optional.of(Topico.INFORMES);
 
             // Los tópicos de §11 son los cuatro del laboratorio, y la filiación no es uno de ellos:
