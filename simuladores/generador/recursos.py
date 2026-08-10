@@ -35,6 +35,8 @@ PERFIL_INFORME = f"{CANONICA}/StructureDefinition/informe-lab"
 PERFIL_LABORATORIO = f"{CANONICA}/StructureDefinition/laboratorio-org"
 PERFIL_FACULTATIVO = f"{CANONICA}/StructureDefinition/facultativo-lab"
 
+RESULTADOS_CUALITATIVOS = f"{CANONICA}/CodeSystem/resultados-cualitativos"
+
 EXTENSION_CODIGO_INE = f"{CANONICA}/StructureDefinition/codigo-ine"
 EXTENSION_APELLIDO_PADRE = "http://hl7.org/fhir/StructureDefinition/humanname-fathers-family"
 EXTENSION_APELLIDO_MADRE = "http://hl7.org/fhir/StructureDefinition/humanname-mothers-family"
@@ -263,7 +265,7 @@ def resultado_a_fhir(
     medido: str,
     emitido: str,
     valor: float | None = None,
-    cualitativo: tuple[str, str] | None = None,
+    cualitativo: tuple[str, str, str] | None = None,
     interpretacion: str | None = None,
     rango: RangoDeReferencia | None = None,
     disparado_por: str | None = None,
@@ -274,7 +276,8 @@ def resultado_a_fhir(
         peticion: Línea de petición que lo pidió, o `None` en una prueba refleja: la refleja la
             añade el laboratorio por protocolo, así que no hay volante que la pida.
         valor: Cifra del resultado cuantitativo.
-        cualitativo: Par `(código SNOMED, término)` del resultado cualitativo.
+        cualitativo: Terna `(código local, término en español, código SNOMED)` del resultado
+            cualitativo.
         interpretacion: Código `H`, `L`, `N`, `POS` o `NEG`.
         rango: Rango de referencia aplicable al paciente, si la prueba tiene.
         disparado_por: Id del resultado que obligó a hacer este, si es una prueba refleja.
@@ -296,8 +299,18 @@ def resultado_a_fhir(
         resultado["basedOn"] = [{"reference": f"ServiceRequest/{peticion}"}]
 
     if cualitativo is not None:
-        codigo, termino = cualitativo
-        resultado["valueCodeableConcept"] = _concepto(SNOMED, codigo, termino)
+        local, termino, snomed = cualitativo
+        # Las dos codificaciones y el `text` en español, igual que en el código de la prueba: la
+        # local es la que el laboratorio compara contra su catálogo —de ahí sale la declaración
+        # obligatoria— y la de SNOMED es la que entiende quien recibe el recurso sin conocer este
+        # dialecto. Publicar solo una de las dos rompe a uno de los dos lados.
+        resultado["valueCodeableConcept"] = {
+            "coding": [
+                {"system": RESULTADOS_CUALITATIVOS, "code": local, "display": termino},
+                {"system": SNOMED, "code": snomed},
+            ],
+            "text": termino,
+        }
     elif valor is not None:
         resultado["valueQuantity"] = _cantidad(valor, prueba)
 

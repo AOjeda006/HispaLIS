@@ -250,7 +250,7 @@ def _informar_resultados(
                     emitidos,
                 )
         else:
-            snomed, termino, interpretacion = clinica.resultado_cualitativo(azar)
+            local, termino, snomed, interpretacion = clinica.resultado_cualitativo(azar)
             corpus.recursos.append(
                 recursos.resultado_a_fhir(
                     identificador=identificador,
@@ -261,7 +261,7 @@ def _informar_resultados(
                     peticion=peticion,
                     medido=recursos.instante(dia, HORA_EXTRACCION),
                     emitido=recursos.instante(dia, HORA_VALIDACION),
-                    cualitativo=(snomed, termino),
+                    cualitativo=(local, termino, snomed),
                     interpretacion=interpretacion,
                 )
             )

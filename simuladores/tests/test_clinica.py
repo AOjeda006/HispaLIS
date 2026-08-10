@@ -13,7 +13,9 @@ import random
 import pytest
 
 from generador.clinica import (
+    NEGATIVO,
     PANELES,
+    POSITIVO,
     RANGOS,
     cuadrar_hemograma,
     dispara_refleja,
@@ -122,9 +124,25 @@ def test_los_cualitativos_salen_casi_todos_negativos() -> None:
     azar = random.Random(42)
 
     resultados = [resultado_cualitativo(azar) for _ in range(1000)]
-    positivos = sum(1 for _, _, interpretacion in resultados if interpretacion == "POS")
+    positivos = sum(1 for *_, interpretacion in resultados if interpretacion == "POS")
 
     assert 0 < positivos < len(resultados) * 0.2, "en microbiología casi todo sale negativo"
+
+
+def test_el_cualitativo_trae_el_codigo_local_y_el_de_snomed() -> None:
+    """Los dos, y el local primero.
+
+    El laboratorio compara contra SU catálogo para decidir si hay que declarar a Salud Pública, así
+    que un resultado que solo trajera SNOMED no dispararía la regla. Y uno que solo trajera el
+    código local no lo entendería quien lo recibe sin conocer este dialecto.
+    """
+    azar = random.Random(1)
+
+    locales = {resultado_cualitativo(azar)[0] for _ in range(200)}
+    snomeds = {resultado_cualitativo(azar)[2] for _ in range(200)}
+
+    assert locales <= {"POS", "NEG"}
+    assert snomeds <= {POSITIVO, NEGATIVO}
 
 
 def test_elegir_panel_respeta_los_pesos() -> None:

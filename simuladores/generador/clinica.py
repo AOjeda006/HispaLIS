@@ -43,6 +43,13 @@ HECES = "119339001"
 POSITIVO = "10828004"
 NEGATIVO = "260385009"
 
+#: Y en el dialecto del laboratorio (`CodeSystem/resultados-cualitativos`). Los dos, no uno: el
+#: local es el que dispara la regla de declaración obligatoria —el laboratorio compara contra su
+#: propio catálogo, no contra SNOMED— y el de SNOMED es el que entiende quien recibe el recurso.
+#: Es la misma pareja que el código de prueba con su LOINC.
+POSITIVO_LOCAL = "POS"
+NEGATIVO_LOCAL = "NEG"
+
 #: Sexo al que aplica un rango de referencia, en SNOMED.
 SEXO_SNOMED = {"male": "248153007", "female": "248152002"}
 
@@ -198,12 +205,13 @@ def dispara_refleja(codigo: str, valor: float, sexo: str) -> bool:
     return codigo == PRUEBA_DISPARADORA and interpretacion_de(codigo, valor, sexo) == "H"
 
 
-def resultado_cualitativo(azar: random.Random) -> tuple[str, str, str]:
+def resultado_cualitativo(azar: random.Random) -> tuple[str, str, str, str]:
     """Sortea un resultado cualitativo.
 
     Returns:
-        El código SNOMED del resultado, su término y el código de interpretación.
+        El código del catálogo local, su término en español, el código SNOMED equivalente y el
+        código de interpretación.
     """
     if azar.random() < PROPORCION_POSITIVOS:
-        return (POSITIVO, "Positive", "POS")
-    return (NEGATIVO, "Negative", "NEG")
+        return (POSITIVO_LOCAL, "Positivo", POSITIVO, "POS")
+    return (NEGATIVO_LOCAL, "Negativo", NEGATIVO, "NEG")
