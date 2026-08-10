@@ -10,7 +10,11 @@ clínico privado en Sevilla.**
 > nunca hay ni debe haber datos reales de pacientes, en ningún entorno.
 >
 > El catálogo de enfermedades de declaración obligatoria (EDO) y el formato de notificación a Salud
-> Pública se modelan de forma **verosímil, no fiel**. Las URIs canónicas de la guía de implementación
+> Pública se modelan de forma **verosímil, no fiel**: el contrato de Redalerta no es público, así que
+> lo que se manda es el `Task` que publica esta misma guía. Y una diferencia que conviene decir en
+> voz alta — **una declaración EDO real lleva filiación** para que Salud Pública pueda localizar al
+> caso; **esta no lleva ninguna**, porque el destinatario es simulado y aquí no salen datos de
+> persona hacia ningún sistema externo. Las URIs canónicas de la guía de implementación
 > son **propias, no oficiales**. **ISO 15189 está fuera de alcance** como requisito: se cita solo como
 > justificación de las decisiones de trazabilidad.
 
@@ -112,6 +116,16 @@ notificación se reintenta y la suscripción se corta sola.
 
 ```bash
 docker compose -f infra/compose/docker-compose.yml --profile notificaciones up -d receptor
+```
+
+Y **Salud Pública** —el servicio de declaraciones del SVEA— es el tercero de todos, con su propio
+perfil. Que esté apagado en la pila normal no es comodidad: es la demostración diaria de que el
+laboratorio **no depende de él**. Con el SVEA parado, un resultado declarable se valida igual y su
+declaración se queda pendiente hasta que haya alguien al otro lado.
+
+```bash
+docker compose -f infra/compose/docker-compose.yml --profile edo up -d svea
+curl http://localhost:8091/declaraciones   # el libro de registro: cuentas y números, ningún caso
 ```
 
 ⚠️ **Dos cosas viven fuera del repositorio y hay que tenerlas antes de levantar:**

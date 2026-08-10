@@ -279,6 +279,88 @@ aceptable bajo ninguna de las tres opciones. Si algún día se implementa (a), e
   Va en `TraduccionDeErroresDeDominio` con una rama propia, porque `NoSeSabeSiEsCritico` sigue sin
   ser un `ErrorDeDominio` y el buscador de causas se generalizó para poder pescar los dos.
 
+### Decisiones tomadas al declarar a Salud Pública (ítem 48)
+
+- **2026-08-10 — El notificador consume el `outbox` con su PROPIO desplazamiento, no marcando
+  `publicado_en`.** Esa columna es del relay de Kafka; si el notificador la tocara, un hecho
+  declarado dejaría de publicarse en el bus, o al revés. Se añade `edo.hecho_consumido`, que es una
+  tabla de una columna y evita acoplar dos consumidores que no tienen nada que ver. Es la forma
+  correcta de tener varios lectores del mismo `outbox` sin cola de por medio.
+
+- **2026-08-10 — Se dispara desde el hecho, no desde un `if` en el caso de uso.** Es el patrón del
+  `ORU` saliente (ítem 28) y aquí compra lo que el ítem pide literalmente: con el destinatario caído
+  **el resultado se valida igual**, porque validar solo apunta el hecho y quien sale a declarar es
+  otro proceso, en otra transacción. Un `if` dentro de `ValidarResultado` habría metido una llamada
+  HTTP a un tercero dentro de la transacción del dominio.
+
+- **2026-08-10 — El notificador tiene dos fases y la primera no puede fallar por culpa del tercero.**
+  *Abrir* la declaración (hecho → `Task` con su plazo) ocurre aunque Salud Pública no exista;
+  *enviarla* es lo que se reintenta. Si abrir y enviar fuesen lo mismo, un destinatario caído dejaría
+  la obligación sin registrar — que es precisamente lo que hay que evitar.
+
+- **2026-08-10 — El plazo cuelga de la ENFERMEDAD, no de la prueba.** `modalidad-declaracion` y
+  `plazo-horas` son propiedades de `CodeSystem/enfermedades-edo`; `enfermedad-edo` y
+  `resultado-que-declara` siguen en `catalogo-pruebas`. Una legionelosis es urgente la detecte la
+  técnica que la detecte: colgar el plazo de la prueba obligaría a repetirlo en cada técnica que
+  confirme lo mismo, y el día que dos discrepasen no habría forma de saber cuál manda.
+  *Coste asumido:* un segundo `$lookup`, cacheado junto al primero.
+
+- **2026-08-10 — Una modalidad que el catálogo publique y el código no conozca NO se traduce a
+  «ordinaria».** Se avisa y la declaración no se abre. Suponer daría siete días a algo que la norma
+  puede querer en veinticuatro horas, y ese error no lo detecta nadie hasta la inspección. Lo mismo
+  con una enfermedad sin `plazo-horas`: una obligación sin plazo no se puede vigilar.
+
+- **2026-08-10 — El vencimiento se congela al abrir y se cuenta desde el instante del HECHO.** Se
+  guarda en la tabla en vez de derivarse del catálogo en cada lectura, para que un cambio del plazo
+  publicado no mueva la fecha límite de una declaración ya abierta. Y se cuenta desde cuándo se
+  validó el resultado, no desde `Instant.now()`: si el notificador estuvo parado seis horas, el plazo
+  legal lleva seis horas corriendo.
+
+- **2026-08-10 — Sin acuse no hay declaración, y está escrito en tres sitios.** `ACUSADA` solo se
+  alcanza por `acusar(Acuse)`; `Acuse` rechaza un número de registro en blanco; y la V15 lleva un
+  `CHECK acusada_exige_acuse`. Un `200` sin número de registro **no** es «declarado»: es el caso que
+  más fácil se cuela por bueno, porque a nivel de transporte todo ha ido bien.
+
+- **2026-08-10 — Las respuestas del destinatario son cuatro y son un tipo sellado.**
+  `Acusada`/`RecibidaSinRegistro`/`Rechazada`/`NoLlego`, con un `switch` exhaustivo sin `default`, así
+  que una quinta respuesta rompe la compilación en vez de caer en una rama genérica. La distinción
+  que decide es `4xx` frente a `5xx`: lo primero no se reintenta —reenviar veinte veces algo que
+  rechazan por el contenido no lo arregla— y lo segundo sí.
+
+- **2026-08-10 — «Lo vencido» se contesta con un `SearchParameter` propio de la guía** sobre
+  `Task.restriction.period.end`. R5 trae dieciocho parámetros para `Task` y ninguno cae ahí. No es
+  una extensión del modelo: no se añade dato, se declara cómo se indexa uno que ya está.
+  **Y va en `status = #active` aunque la guía esté en `draft`** (`adr-0029`): medido sobre HAPI
+  8.10.1, el registro se queda solo con los `ACTIVE` y un `draft` se guarda, se publica, se lee —y no
+  se indexa, así que la búsqueda contesta `HAPI-0524`. Sin error y sin aviso.
+
+- **2026-08-10 — La declaración va SIN FILIACIÓN, y eso es una divergencia consciente del sistema
+  real.** Una declaración EDO de verdad la lleva: Salud Pública tiene que poder localizar al caso
+  para la encuesta epidemiológica. Aquí van el código de la enfermedad, el plazo y referencias
+  seudónimas, porque el destinatario es simulado y este proyecto no manda datos de persona a ningún
+  sistema externo (invariante 6). Queda escrito en el perfil `NotificacionEDO`, en el javadoc de
+  `SaludPublicaHttp`, en el simulador y aquí — no es algo que haya que descubrir leyendo el código.
+
+- **2026-08-10 — El SVEA simulado EXIGE que no llegue filiación, y por eso está fuera del backend.**
+  Rechaza con `400` un `contained`, las claves que solo cuelgan de una persona (`name`, `birthDate`,
+  `address`…) y un `display` sobre una referencia a `Patient` —que es el nombre con otro nombre—. Un
+  contrato tiene dos lados: la promesa del emisor solo es una garantía si el receptor la exige. Y
+  **deduplica por el id del `Task`**, porque el laboratorio reintenta hasta que hay acuse y un
+  destinatario que no deduplica convierte cada reintento en un caso nuevo en la estadística.
+
+- **2026-08-10 — Lo que llega tarde se registra igual y se apunta.** El plazo no extingue la
+  obligación: la convierte en tardía. Rechazar una declaración vencida dejaría el caso sin declarar.
+
+- **2026-08-10 — El destinatario es dato maestro, no un agregado.** `Organization/salud-publica` se
+  da de alta al arrancar, como el resto del directorio (§10). `Task.requester` sale del centro que
+  emitió el resultado y **se omite cuando no se sabe**, en vez de apuntar a un valor de relleno: un
+  `requester` inventado diría que declaró alguien que no fue.
+
+- **2026-08-10 — Todo el EDO va detrás de `hispalis.edo.habilitado`, y `destino` está VACÍO por
+  defecto.** Apagar el envío no cambia lo que el laboratorio considera declarable —los hechos se
+  apuntan igual—, que es la misma separación que en las notificaciones. Y sin destino configurado la
+  declaración se registra y no sale: mejor eso que salir hacia una dirección adivinada.
+
 ### Decisiones tomadas al cerrar lo clínico y lo legal (ítems 46 y 47)
 
 - **2026-08-10 — El agregado recibe el puerto `ValoresCriticos`, no un `boolean esCritico`.** Es la
@@ -1292,6 +1374,70 @@ Lo que la construcción de la guía cazó y las pruebas no: un `Observation` pre
 `performer`** que venía del ítem 17 —una cifra sin nadie detrás no se puede reclamar— y una rebanada
 `valueCodeableConcept` **sin `Must Support`** cuando el elemento que la define sí lo es. Los dos
 avisos se ven al construir y no antes.
+
+### La declaración a Salud Pública (ítem 48, 2026-08-10)
+
+**La segunda mitad de la obligación legal, cerrada.** El laboratorio ya no solo detecta que un
+resultado hay que declararlo: lo declara, guarda el acuse y sabe cuál se le ha pasado de plazo.
+
+Lo que hace que el diseño esté bien montado es **de dónde sale el disparo**. No hay un `if` en
+`ValidarResultado`: hay un consumidor del `outbox` con su propio desplazamiento, igual que el `ORU`
+saliente del ítem 28. De ahí salen las tres propiedades que el ítem pedía a la vez.
+
+| | |
+|---|---|
+| El rojo | `8054c3d` — siete fallos de aserción, ninguno de compilación, y un control negativo ya en verde |
+| Quién dispara | `NotificadorEdo`, sobre `outbox.hecho` con desplazamiento propio en `edo.hecho_consumido` (V15). **Nunca** toca `publicado_en`, que es del relay de Kafka |
+| Las dos fases | *Abrir* (hecho → `Task` con su plazo) ocurre aunque el destinatario no exista; *enviar* es lo que se reintenta |
+| El circuito completo | `LEGIOAG` + `POS` validado → hecho → `Task` `ACUSADA` con `output[0].valueIdentifier = SVEA-2026-000123`. **Nadie llama al notificador en el test** |
+| Con el destinatario caído | El `Observation` queda `final` igual y el `Task` se queda `PENDIENTE`, sin `output`. Comprobado **después** de que el intento llegue de verdad al otro lado |
+| Sin acuse no hay declaración | Un `200` sin número de registro deja la declaración en `ENVIADA`, nunca en `ACUSADA`. Cerrado en el agregado (`acusar(Acuse)`), en el tipo (`Acuse` rechaza el número en blanco) y en la V15 (`CHECK acusada_exige_acuse`) |
+| Lo vencido | `GET /fhir/Task?vencimiento=lt{ahora}&business-status=PENDIENTE`, por el `SearchParameter` que publica la guía sobre `Task.restriction.period.end` |
+| Sin PHI | El cuerpo que sale no contiene apellidos, nombre, DNI, NUHSA ni NHC — y el SVEA simulado lo **exige** desde el otro lado |
+
+**El plazo cuelga de la enfermedad.** `modalidad-declaracion` y `plazo-horas` son propiedades nuevas
+de `CodeSystem/enfermedades-edo`, no de la prueba: una legionelosis es urgente la detecte la técnica
+que la detecte. Cuesta un segundo `$lookup`, cacheado junto al primero. Se congela al abrir y se
+cuenta **desde el instante del hecho**, no desde `Instant.now()`: si el notificador estuvo parado
+seis horas, el plazo legal lleva seis horas corriendo.
+
+**⚠️ Y una trampa medida que costó un test en rojo con el recurso correctamente publicado:** HAPI
+8.10.1 **solo indexa los `SearchParameter` en `active`**. El de la guía estaba en `draft` por
+coherencia con la guía entera; se guardaba, se publicaba, se leía por la API — y la búsqueda
+contestaba `HAPI-0524: Unknown search parameter`. Sin error y sin aviso. `adr-0029`.
+
+**El destinatario es verosímil, no fiel, y queda escrito.** `simuladores/svea/` acepta el `Task` que
+la propia guía publica —el contrato de Redalerta no es público—, deduplica por su id y **rechaza con
+`400` cualquier rastro de filiación**: un `contained`, una clave de persona (`name`, `birthDate`,
+`address`…) o un `display` sobre una referencia a `Patient`, que es el nombre con otro nombre. Va
+detrás del perfil `edo` del `compose`, y estar apagado es lo normal: con Salud Pública parada, el
+laboratorio valida igual.
+
+⚠️ **La divergencia consciente:** una declaración EDO real **lleva filiación**; esta no. Está escrito
+en el perfil `NotificacionEDO`, en el javadoc de `SaludPublicaHttp`, en el simulador y aquí.
+
+| Verificación | Resultado |
+|---|---|
+| Backend | **263 tests**, `BUILD SUCCESS` (eran 254) |
+| `NotificadorEdoTest` | **8/8**, circuito completo contra un `HttpServer` en proceso que hace de SVEA |
+| Simuladores | **141 tests** (12 nuevos del SVEA), `ruff check` y `ruff format --check` limpios |
+| SUSHI | 0 errores, 0 avisos |
+| Puertas de `ci-ig` en local | 10 de 10 perfiles con ejemplo · las **2** copias de conformidad idénticas |
+| Validador oficial de HL7 | **0 errores** sobre los 58 recursos de la guía |
+| SVEA simulado, con `curl` de verdad | Acuse `SVEA-2026-000001`; el reintento devuelve **el mismo número**; las dos vencidas listadas; `400` al `display` con nombre y al `contained` |
+
+**Lo que el ensayo con `curl` cazó y los tests no**, que es la razón de hacerlo: los ejemplos de la
+guía **no llevaban `reason`** —la enfermedad estaba solo en `code.text`, que no se indexa— mientras
+que el backend sí la ponía. El perfil no lo exigía, así que nada avisaba de que el ejemplo publicado
+y el recurso real dijeran cosas distintas. Ahora `reason 1..1 MS`, vinculado a
+`EnfermedadesDeclarables`. *Y una trampa de R5 por el camino:* la vinculación va sobre `reason`, **no
+sobre `reason.concept`** — SUSHI rechaza atar un `ValueSet` al `.concept` de un `CodeableReference`.
+En R4 el elemento era un `CodeableConcept` y el camino natural funcionaba.
+
+Lo segundo que cazó: el simulador **reventaba el hilo del manejador** ante un cuerpo que no fuese
+UTF-8, y el emisor recibía una conexión cortada —que parece una caída y no dice nada—. Ahora es un
+`400` con su motivo, que es la misma regla que ya seguía el receptor del ítem 44: contesta el código
+que corresponde, nunca en silencio.
 
 ### Los criterios del hito 2, uno a uno
 
@@ -2329,6 +2475,9 @@ contra la pila del `compose` levantada desde el clon limpio, no contra un doble.
   primer perfil de este `compose`. Además de por el número, por lo que es: no es un componente del
   laboratorio, es el sistema del hospital, y tenerlo siempre arriba daría a entender que el
   laboratorio depende de que esté. El simulador del SVEA (ítem 48) entra igual.
+  *✅ Y así entró (2026-08-10, ítem 48):* `profiles: ['edo']`, apagado por defecto. Aquí la razón
+  pesa todavía más: con Salud Pública parada el laboratorio **tiene** que seguir validando, y que el
+  servicio esté apagado en la pila normal es la demostración diaria de que no depende de él.
 
 ---
 
@@ -2451,13 +2600,25 @@ contra la pila del `compose` levantada desde el clon limpio, no contra un doble.
   decisión fuese posible: el resultado cualitativo ahora se guarda **codificado** (V14) — antes el
   `text` ganaba al código y la regla no habría visto nunca un positivo.
 
-- [ ] **48 — Notificador EDO al SVEA, con `Task`.**
+- [x] **48 — Notificador EDO al SVEA, con `Task`.** *(2026-08-10)*
   *Criterio:* la notificación se modela como `Task` con su estado, su destinatario y su acuse, y se
   dispara **desde el hecho del `outbox`**, igual que el `ORU` saliente (ítem 28) — no desde un `if`
   dentro del caso de uso. Con el destinatario caído, el resultado se valida igual y el `Task` queda
   pendiente. Y **el plazo importa**: la declaración urgente tiene ventana legal, así que el `Task`
   lleva su vencimiento y se ve cuál se ha pasado.
   *Trampa:* el destinatario es un tercero modelado de forma verosímil, no fiel (prerrequisitos).
+  *Hecho:* el rojo en el historial (`8054c3d`, siete fallos de aserción y un control negativo ya en
+  verde) y el verde detrás. `NotificadorEdo` lee el `outbox` con su **propio** desplazamiento
+  (`edo.hecho_consumido`, V15) y tiene dos fases: *abrir* —que ocurre aunque Salud Pública no
+  exista— y *enviar*, que es lo que se reintenta. El agregado `NotificacionEdo` no llega a `ACUSADA`
+  más que por `acusar(Acuse)`, y la V15 lo repite con un `CHECK`. Las cuatro respuestas del
+  destinatario son un tipo sellado con `switch` exhaustivo. El plazo sale de dos propiedades nuevas
+  de `CodeSystem/enfermedades-edo` —modalidad y horas, de la **enfermedad**, no de la prueba— y se
+  congela al abrir, contado desde el instante del hecho. Lo vencido se lista con un
+  `SearchParameter` propio sobre `Task.restriction.period.end`, en `active` y no en `draft`
+  (`adr-0029`). El SVEA simulado (`simuladores/svea/`, perfil `edo` del compose) **exige que no
+  llegue filiación** y deduplica por el id del `Task`. Ocho tests de circuito completo más doce del
+  simulador.
 
 ### Lo masivo
 
@@ -2487,6 +2648,32 @@ contra la pila del `compose` levantada desde el clon limpio, no contra un doble.
 
 ## Notas / riesgos
 
+- **⚠️ HAPI 8.10.1 solo indexa los `SearchParameter` en `active`.** Uno en `draft` se guarda, se
+  publica, se lee por la API — y el servidor no lo indexa: la búsqueda contesta `HAPI-0524: Unknown
+  search parameter`, sin error y sin aviso. Medido con `javap`: `SearchParameterCanonicalizer`
+  traduce el `status` y `SearchParamRegistryImpl` se queda solo con los `ACTIVE`. `adr-0029`. **Vale
+  para cualquier artefacto de conformidad que el servidor ejecute**, no solo para éste: es la
+  diferencia entre publicar algo para que alguien lo lea y publicarlo para que un servidor lo
+  obedezca. Es la tercera vez en este proyecto que algo se declara bien, no da error y no hace nada
+  (`adr-0020`, `adr-0028`), y la defensa vuelve a ser la misma: un test de punta a punta que
+  ejercite el comportamiento, no que compruebe que el recurso está publicado.
+- **El diseño (§13, componente 6) llama al notificador EDO «consumidor Kafka», y el implementado
+  consume el `outbox`.** La otra mitad de esa fila —«puede vivir dentro de 2»— sí se cumple: vive en
+  el backend. La razón del cambio es de invariantes, no de comodidad: el `Task` es un recurso FHIR
+  **del laboratorio**, así que se escribe por el único camino de escritura (invariante 3) y con
+  *read-your-writes* (invariante 2); colgarlo de Kafka haría que la proyección dependiera del bus, y
+  con el broker caído la obligación legal se quedaría sin registrar. Queda anotado en vez de
+  reabrirse: es una precisión de §13, no una decisión D1–D22.
+- **Una declaración `RECHAZADA` no se reintenta sola, y nadie la recoge todavía.** Es lo correcto
+  —reenviar veinte veces algo que rechazan por el contenido no lo arregla— pero deja una obligación
+  legal incumplida esperando a que una persona la mire. Hoy solo sale por el log y por
+  `GET /fhir/Task?business-status=RECHAZADA`; no hay bandeja en la web profesional. Lo mismo con las
+  que agotan los tres intentos y con las que se pasan de plazo.
+- **El notificador EDO es de instancia única, como el relay del `outbox`.** Dos backends contra la
+  misma base abrirían la misma declaración dos veces: lo impide el `UNIQUE (resultado_id)` de
+  `dominio.notificacion_edo`, así que el peor caso es una transacción que revienta y se reintenta,
+  no una declaración duplicada. Pero el desplazamiento de `edo.hecho_consumido` **no está diseñado
+  para varios lectores**, y el día que el laboratorio se despliegue por duplicado hay que mirarlo.
 - **⚠️ HAPI 8.10 tampoco implementa `dependsOn` en `$translate`.** R5 modela «este mapeo solo vale si
   tal atributo tiene tal valor» con `ConceptMap.additionalAttribute` + `element.target.dependsOn`, y
   la operación lo lleva a la entrada (`dependency`) y a la salida (`match.dependsOn`). Comprobado

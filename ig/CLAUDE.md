@@ -81,7 +81,29 @@ respuesta de IA o snippet basado en R4 que se copie sin mirar va a fallar aquí:
 de tipos de muestra, motivos de rechazo y catálogo EDO.
 
 A eso se han ido sumando, con su ítem: `ProcedenciaValidacion`, el `SubscriptionTopic` del resultado
-validado (ítem 44) y los `CodeSystem` de **enfermedades EDO** y **resultados cualitativos** (ítem 47).
+validado (ítem 44), los `CodeSystem` de **enfermedades EDO** y **resultados cualitativos** (ítem 47) y,
+con el notificador (ítem 48), los de **estados de declaración** y **modalidades de declaración** más el
+`SearchParameter` propio `notificacion-edo-vencimiento`.
+
+### ⚠️ Un `ValueSet` se ata al `CodeableReference`, no a su `.concept`
+
+R5 fusionó pares como `reasonCode`/`reasonReference` en un solo `CodeableReference`, y el camino que
+parece natural —`* reason.concept from MiValueSet (required)`— **SUSHI lo rechaza**: *«Applying value
+set bindings to a CodeableReference element's underlying .concept path is not allowed»*. Va sobre el
+elemento entero (`* reason from MiValueSet (required)`), y las cardinalidades sí sobre el `.concept`.
+En R4 el elemento era un `CodeableConcept` y el camino natural funcionaba, así que cualquier ejemplo
+copiado de allí falla aquí.
+
+### ⚠️ Un `SearchParameter` que el servidor tiene que ejecutar va en `active`, no en `draft`
+
+Suena a incoherencia con el resto de la guía y no lo es. **Medido sobre HAPI 8.10.1:** el registro de
+parámetros se queda **solo con los `ACTIVE`**. Uno en `draft` se guarda, se publica, se renderiza en la
+guía y se lee por la API — y el servidor no lo indexa, así que la búsqueda contesta `HAPI-0524: Unknown
+search parameter`. Sin error, sin aviso: el parámetro está y no funciona.
+
+El `status` de un recurso de conformidad habla de la madurez de **la definición**, no del proyecto que
+la contiene; lo que dice que esto es una simulación es `experimental = true`, que sigue puesto. Vale
+igual para cualquier artefacto que el servidor **obedezca**, no solo para éste. `docs/adr/adr-0029-…`.
 
 ### Las reglas del laboratorio viven en propiedades de `catalogo-pruebas`
 

@@ -16,6 +16,7 @@
 | `his/` | Simulador del **HIS de la clínica**: emite `ADT^A01`/`A08` y `OML^O21` por MLLP | 2 |
 | `analizador/` | Simulador del **analizador**: emite `ORU^R01` por MLLP | 2 |
 | `receptor/` | Receptor de **notificaciones de `Subscription`**: comprueba la firma, exige `id-only` y detecta los eventos que faltan | 3 |
+| `svea/` | Servicio de declaraciones del **SVEA** (Salud Pública): exige que la declaración no lleve filiación, que traiga plazo, deduplica y acusa | 3 |
 
 ## Reglas del generador (las que lo hacen útil o inútil)
 
@@ -58,6 +59,30 @@
 - **Contesta el código que corresponde.** El laboratorio lo apunta como motivo del fallo y acaba
   saliendo por su `$status`; un receptor que traga en silencio deja al emisor creyendo que va bien.
 
+## Reglas del SVEA simulado (hito 3)
+
+- **Verosímil, no fiel, y escrito en el propio módulo.** El contrato de Redalerta no es público, así
+  que se acepta el `Task` que publica la guía; el número de registro se lo inventa este servicio. La
+  diferencia importante: una declaración EDO **real lleva filiación** —Salud Pública tiene que poder
+  localizar al caso para la encuesta epidemiológica— y **esta no**. No es un descuido, y por eso está
+  dicho en el docstring del módulo, en el perfil `NotificacionEDO` y en `docs/PLAN.md`.
+- **Exige que NO llegue filiación, y ese es el motivo de que esté aquí** y no como un doble dentro
+  del backend. El invariante 6 tiene dos lados: la promesa del emisor solo es una garantía si el
+  receptor la exige. Se rechaza con `400` un `contained`, las claves que en FHIR solo cuelgan de una
+  persona (`name`, `birthDate`, `address`, `telecom`, `photo`, `gender`) y un `display` sobre una
+  referencia a `Patient`/`Practitioner`/`RelatedPerson` — que es el nombre con otro nombre. Lo que
+  **no** se puede comprobar así es el texto libre: por eso el laboratorio pone en `Task.note` motivos
+  técnicos y nunca clínicos.
+- **Deduplica por el id del `Task`.** El laboratorio reintenta hasta que hay acuse —tiene que
+  hacerlo—, y un destinatario que no deduplica convierte cada reintento en un caso nuevo en la
+  estadística epidemiológica. El mismo `Task` dos veces devuelve **el mismo** número de registro.
+- **Sin plazo no se registra (`422`).** Una urgente sin priorizar es una ordinaria.
+- **Lo que llega tarde se registra igual y se apunta.** El plazo no extingue la obligación: la hace
+  tardía. Rechazar una declaración vencida dejaría el caso sin declarar, que es mucho peor.
+- **Los cuatro modos son los cuatro finales que el notificador distingue**, no adornos:
+  `acusa` · `rechaza` (`422`) · `sin-registro` (`200` sin número) · `silencio` (`503`). Sin poder
+  provocarlos solo se ejercita el bueno, y el que más fácil se cuela por bueno es `sin-registro`.
+
 ## Reglas de los simuladores v2 (hito 2)
 
 - **HL7 V2.5.1** (D12) y **charset declarado en `MSH-18`**. `MSH-10` único por mensaje: es la clave de
@@ -80,4 +105,12 @@ python -m generador --seed 42 --pacientes 100
 # El receptor de notificaciones va detrás de un perfil del compose: no es del laboratorio, es el
 # sistema del hospital.
 docker compose -f ../infra/compose/docker-compose.yml --profile notificaciones up -d receptor
+
+# Salud Pública, igual, y apagada por defecto a propósito: con el SVEA parado el laboratorio valida
+# los resultados igual y las declaraciones se quedan pendientes.
+docker compose -f ../infra/compose/docker-compose.yml --profile edo up -d svea
+curl http://localhost:8091/declaraciones   # el libro de registro, sin una sola referencia al caso
+
+# Los caminos malos, uno por modo:
+HISPALIS_SVEA_MODO=silencio docker compose -f ../infra/compose/docker-compose.yml --profile edo up -d svea
 ```

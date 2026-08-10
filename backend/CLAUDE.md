@@ -155,6 +155,35 @@ cambiar esa línea.
   cada hecho nuevo. `RESULTADO_DECLARABLE` no lleva la enfermedad: el tipo ya dice que hay algo que
   declarar, y eso es el mínimo con el que el notificador del ítem 48 puede existir.
 
+## La declaración a Salud Pública (ítem 48)
+
+- **Se dispara desde el hecho, no desde un `if`.** `NotificadorEdo` consume `outbox.hecho` con su
+  **propio** desplazamiento (`edo.hecho_consumido`) y nunca toca `publicado_en`, que es del relay de
+  Kafka. Es lo que hace que, con Salud Pública caída, **el resultado se valide igual**: validar solo
+  apunta el hecho, y salir a declarar pasa en otra transacción.
+- **Dos fases, y la primera no puede fallar por culpa del tercero.** *Abrir* (hecho → `Task` con su
+  plazo) ocurre aunque el destinatario no exista; *enviar* es lo que se reintenta. Fundirlas dejaría
+  la obligación sin registrar cuando más falta hace tenerla.
+- **Sin acuse no hay declaración, y está cerrado en tres sitios:** `ACUSADA` solo se alcanza por
+  `acusar(Acuse)`, `Acuse` rechaza un número de registro en blanco y la V15 lleva un `CHECK`. Un
+  `200` sin número **no** es declarado: es el caso que más fácil se cuela, porque a nivel de
+  transporte todo ha ido bien.
+- **Cuatro respuestas, tipo sellado, `switch` sin `default`.** `Acusada`/`RecibidaSinRegistro`/
+  `Rechazada`/`NoLlego`. Una quinta rompe la compilación en vez de caer en una rama genérica. `4xx`
+  no se reintenta —el contenido no mejora reenviándolo— y `5xx` sí.
+- **El plazo es de la ENFERMEDAD, no de la prueba**, y cuesta un segundo `$lookup` sobre
+  `CodeSystem/enfermedades-edo`. Se congela al abrir y se cuenta **desde el instante del hecho**: si
+  el notificador estuvo parado seis horas, el plazo legal lleva seis horas corriendo. Una modalidad
+  desconocida o una enfermedad sin `plazo-horas` **no se suponen**: se avisa y no se abre nada.
+- **⚠️ Un `SearchParameter` en `draft` NO se indexa.** Medido sobre HAPI 8.10.1: el registro se queda
+  solo con los `ACTIVE`. El recurso se guarda, se publica, se lee — y la búsqueda contesta
+  `HAPI-0524: Unknown search parameter`, sin error y sin aviso. Por eso el de la guía va en `active`
+  aunque la guía entera esté en `draft`; `experimental = true` es lo que dice que esto es una
+  simulación. Todo el detalle en `docs/adr/adr-0029-…`.
+- **La declaración va sin filiación, y es una divergencia consciente del sistema real.** Una EDO de
+  verdad la lleva. Aquí van códigos y referencias seudónimas, y el SVEA simulado lo **exige** desde
+  el otro lado. Escrito en el perfil, en `SaludPublicaHttp` y en `PLAN.md`.
+
 ## Invariantes de negocio que FHIR no puede expresar (§10)
 
 | Agregado | Invariante |
