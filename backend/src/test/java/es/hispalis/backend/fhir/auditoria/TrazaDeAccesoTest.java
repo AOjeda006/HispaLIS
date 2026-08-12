@@ -1,8 +1,11 @@
 package es.hispalis.backend.fhir.auditoria;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
 import ca.uhn.fhir.context.FhirContext;
+import ca.uhn.fhir.jpa.api.dao.DaoRegistry;
+import ca.uhn.fhir.rest.api.server.SystemRequestDetails;
 import es.hispalis.backend.TestDeIntegracion;
 import es.hispalis.backend.fhir.CircuitoDePrueba;
 import java.time.Duration;
@@ -12,6 +15,8 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 import org.hl7.fhir.r5.model.AuditEvent;
 import org.hl7.fhir.r5.model.Bundle;
+import org.hl7.fhir.r5.model.DiagnosticReport;
+import org.hl7.fhir.r5.model.IdType;
 import org.hl7.fhir.r5.model.Observation;
 import org.hl7.fhir.r5.model.Patient;
 import org.junit.jupiter.api.BeforeEach;
@@ -57,6 +62,10 @@ class TrazaDeAccesoTest extends TestDeIntegracion {
 
     @Autowired
     private FhirContext contexto;
+
+    /** Para borrar como lo hace el reconciliador: por la DAO y como el sistema, no por la API. */
+    @Autowired
+    private DaoRegistry daos;
 
     private CircuitoDePrueba circuito;
 
@@ -222,6 +231,41 @@ class TrazaDeAccesoTest extends TestDeIntegracion {
         assertThat(respuesta.getStatusCode())
                 .as("si el cliente escribe el registro, el registro deja de dar fe de nada: %s", respuesta.getBody())
                 .isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+    }
+
+    /**
+     * Una traza <strong>no mantiene vivo lo que se limitó a observar</strong>.
+     *
+     * <p>Es la segunda mitad de {@code adr-0030} y la que no tenía test: el `AuditEvent` referencia
+     * todo lo que alguien ha mirado, así que con la integridad referencial de HAPI puesta al borrar,
+     * el primer acceso a un recurso lo convertiría en indestructible. El reconciliador dejaría de
+     * poder retirar un huérfano —que es su trabajo— y el derecho de supresión sería imposible de
+     * ejercer por culpa del registro que existe para respetarlo.
+     *
+     * <p>Lo que lo destapó fue un fallo <strong>intermitente</strong> de
+     * {@code ReconciliadorTest}: la traza se escribe después de contestar, así que a veces llegaba
+     * antes del borrado y a veces después. Un test que depende de esa carrera no prueba nada, y por
+     * eso este espera <strong>a que la traza exista</strong> antes de borrar.
+     */
+    @Test
+    @DisplayName("una traza no impide borrar lo que observó")
+    void laTrazaNoImpideBorrarLoQueObservo() {
+        String paciente = circuito.crear(CircuitoDePrueba.paciente(CircuitoDePrueba.siguienteNhc()));
+        String laboratorio = circuito.crear(CircuitoDePrueba.laboratorio());
+        String linea = circuito.crear(CircuitoDePrueba.linea(paciente, laboratorio));
+        String muestra = circuito.crear(CircuitoDePrueba.muestra(paciente));
+        String resultado = circuito.crear(CircuitoDePrueba.resultado(paciente, muestra, linea, laboratorio));
+        circuito.validar(resultado);
+        String informe = circuito.crear(CircuitoDePrueba.informe(paciente, laboratorio, resultado));
+
+        // Hasta que la traza no está escrita, borrar no demuestra nada: el enlace que estorba todavía
+        // no existe.
+        esperarLaTrazaDe(informe, AuditEvent.AuditEventAction.C);
+
+        assertThatCode(() -> daos.getResourceDao(DiagnosticReport.class)
+                        .delete(new IdType(informe), new SystemRequestDetails()))
+                .as("si la traza lo mantiene vivo, ni el reconciliador puede retirar un huérfano")
+                .doesNotThrowAnyException();
     }
 
     // ─── Andamiaje ──────────────────────────────────────────────────────────
