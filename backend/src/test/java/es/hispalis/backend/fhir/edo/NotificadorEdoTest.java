@@ -100,7 +100,8 @@ class NotificadorEdoTest extends TestDeIntegracion {
     /** IgM de sarampión, que en este test declara con un plazo ya cumplido. Ver la terminología de abajo. */
     private static final String SARAMPION = "SARAMPIGM";
 
-    private static final String ESTADOS = "https://aojeda006.github.io/HispaLIS/fhir/CodeSystem/estados-declaracion-edo";
+    private static final String ESTADOS =
+            "https://aojeda006.github.io/HispaLIS/fhir/CodeSystem/estados-declaracion-edo";
 
     private static final Duration PACIENCIA = Duration.ofSeconds(20);
 
@@ -379,8 +380,7 @@ class NotificadorEdoTest extends TestDeIntegracion {
     private Task esperarLaDeclaracionEn(String resultado, String estado) {
         return esperarA(
                         () -> declaracionesDe(resultado),
-                        declaraciones ->
-                                declaraciones.size() == 1 && estado.equals(estadoDe(declaraciones.get(0))))
+                        declaraciones -> declaraciones.size() == 1 && estado.equals(estadoDe(declaraciones.get(0))))
                 .get(0);
     }
 
@@ -524,7 +524,9 @@ class NotificadorEdoTest extends TestDeIntegracion {
                 @Override
                 public CodeableConcept pruebaDelCatalogo(String codigoLocal) {
                     return new CodeableConcept()
-                            .addCoding(new Coding().setSystem(CatalogoDePruebas.SYSTEM).setCode(codigoLocal));
+                            .addCoding(new Coding()
+                                    .setSystem(CatalogoDePruebas.SYSTEM)
+                                    .setCode(codigoLocal));
                 }
 
                 @Override
@@ -555,24 +557,26 @@ class NotificadorEdoTest extends TestDeIntegracion {
                 @Override
                 public Optional<ReglaDeDeclaracion> declaracionDe(String codigoDePrueba) {
                     return switch (codigoDePrueba) {
-                        case LEGIONELLA -> Optional.of(new ReglaDeDeclaracion(
-                                LEGIONELLA,
-                                "LEGIONELOSIS",
-                                "Legionelosis",
-                                "POS",
-                                ModalidadDeDeclaracion.URGENTE,
-                                Duration.ofHours(24)));
-                            // Un milisegundo de plazo: el vencimiento queda en el pasado en cuanto se
-                            // abre la declaración. El plazo real del sarampión son horas y esperarlas
-                            // en un test no es una opción; lo que se prueba aquí no es cuántas dice el
-                            // catálogo, sino que un vencimiento pasado se pueda encontrar.
-                        case SARAMPION -> Optional.of(new ReglaDeDeclaracion(
-                                SARAMPION,
-                                "SARAMPION",
-                                "Sarampión",
-                                "POS",
-                                ModalidadDeDeclaracion.URGENTE,
-                                Duration.ofMillis(1)));
+                        case LEGIONELLA ->
+                            Optional.of(new ReglaDeDeclaracion(
+                                    LEGIONELLA,
+                                    "LEGIONELOSIS",
+                                    "Legionelosis",
+                                    "POS",
+                                    ModalidadDeDeclaracion.URGENTE,
+                                    Duration.ofHours(24)));
+                        // Un milisegundo de plazo: el vencimiento queda en el pasado en cuanto se
+                        // abre la declaración. El plazo real del sarampión son horas y esperarlas
+                        // en un test no es una opción; lo que se prueba aquí no es cuántas dice el
+                        // catálogo, sino que un vencimiento pasado se pueda encontrar.
+                        case SARAMPION ->
+                            Optional.of(new ReglaDeDeclaracion(
+                                    SARAMPION,
+                                    "SARAMPION",
+                                    "Sarampión",
+                                    "POS",
+                                    ModalidadDeDeclaracion.URGENTE,
+                                    Duration.ofMillis(1)));
                         default -> Optional.empty();
                     };
                 }

@@ -115,9 +115,8 @@ public class NotificadorEdo {
     void enviarLasAbiertas() {
         if (propiedades.destino() == null || propiedades.destino().isBlank()) {
             if (!avisadoDeQueNoHayDestino) {
-                LOG.warn(
-                        "No hay destinatario de declaraciones EDO configurado (`hispalis.edo.destino`), así que las "
-                                + "obligaciones quedan registradas y NO salen. Se avisa una vez.");
+                LOG.warn("No hay destinatario de declaraciones EDO configurado (`hispalis.edo.destino`), así que las "
+                        + "obligaciones quedan registradas y NO salen. Se avisa una vez.");
                 avisadoDeQueNoHayDestino = true;
             }
             return;

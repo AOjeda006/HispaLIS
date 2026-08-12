@@ -168,7 +168,8 @@ public class RepositorioDeNotificacionesEdoSql implements RepositorioDeNotificac
                 fila.getString("ultimo_error"),
                 numeroDeAcuse == null
                         ? null
-                        : new Acuse(fila.getString("acuse_sistema"), numeroDeAcuse, instante(fila, "acuse_recibido_en")));
+                        : new Acuse(
+                                fila.getString("acuse_sistema"), numeroDeAcuse, instante(fila, "acuse_recibido_en")));
     }
 
     private static Instant instante(ResultSet fila, String columna) throws SQLException {

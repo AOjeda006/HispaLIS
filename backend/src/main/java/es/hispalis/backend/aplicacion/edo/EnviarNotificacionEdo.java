@@ -101,26 +101,30 @@ public class EnviarNotificacionEdo {
     /** Se traza la enfermedad y el estado; el caso, nunca. Ver {@code DetectarDeclaracionObligatoria}. */
     private static void avisar(NotificacionEdo antes, NotificacionEdo despues, Respuesta respuesta) {
         switch (respuesta) {
-            case Respuesta.Acusada acusada -> LOG.info(
-                    "Declaración de {} acusada por Salud Pública con el registro {}.",
-                    despues.codigoDeEnfermedad(),
-                    acusada.acuse().numero());
-            case Respuesta.RecibidaSinRegistro sinRegistro -> LOG.warn(
-                    "Salud Pública ha recibido la declaración de {} y no ha devuelto número de registro, así que "
-                            + "NO consta declarada. Vence {}. Detalle: {}",
-                    despues.codigoDeEnfermedad(),
-                    despues.vencimiento(),
-                    sinRegistro.detalle());
-            case Respuesta.Rechazada rechazada -> LOG.error(
-                    "Salud Pública ha RECHAZADO la declaración de {}: {}. No se reintenta sola.",
-                    despues.codigoDeEnfermedad(),
-                    rechazada.motivo());
-            case Respuesta.NoLlego noLlego -> LOG.warn(
-                    "No se ha podido entregar la declaración de {} (intento {}). Vence {}. Causa: {}",
-                    despues.codigoDeEnfermedad(),
-                    despues.intentos(),
-                    despues.vencimiento(),
-                    noLlego.motivo());
+            case Respuesta.Acusada acusada ->
+                LOG.info(
+                        "Declaración de {} acusada por Salud Pública con el registro {}.",
+                        despues.codigoDeEnfermedad(),
+                        acusada.acuse().numero());
+            case Respuesta.RecibidaSinRegistro sinRegistro ->
+                LOG.warn(
+                        "Salud Pública ha recibido la declaración de {} y no ha devuelto número de registro, así que "
+                                + "NO consta declarada. Vence {}. Detalle: {}",
+                        despues.codigoDeEnfermedad(),
+                        despues.vencimiento(),
+                        sinRegistro.detalle());
+            case Respuesta.Rechazada rechazada ->
+                LOG.error(
+                        "Salud Pública ha RECHAZADO la declaración de {}: {}. No se reintenta sola.",
+                        despues.codigoDeEnfermedad(),
+                        rechazada.motivo());
+            case Respuesta.NoLlego noLlego ->
+                LOG.warn(
+                        "No se ha podido entregar la declaración de {} (intento {}). Vence {}. Causa: {}",
+                        despues.codigoDeEnfermedad(),
+                        despues.intentos(),
+                        despues.vencimiento(),
+                        noLlego.motivo());
         }
         if (despues.estaFueraDePlazo(Instant.now()) && antes.sigueAbierta()) {
             LOG.error(

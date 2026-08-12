@@ -81,13 +81,9 @@ public class TraductorDeNotificacionEdo {
 
         // EL ACUSE, que es lo único que acredita que la declaración está hecha. `Identifier` y no
         // cadena: el número es de Salud Pública y el `system` dice de quién es.
-        declaracion
-                .acuse()
-                .ifPresent(recibo -> tarea.addOutput()
-                        .setType(new CodeableConcept().setText("Número de registro de la declaración en Salud Pública"))
-                        .setValue(new Identifier()
-                                .setSystem(recibo.sistema())
-                                .setValue(recibo.numero())));
+        declaracion.acuse().ifPresent(recibo -> tarea.addOutput()
+                .setType(new CodeableConcept().setText("Número de registro de la declaración en Salud Pública"))
+                .setValue(new Identifier().setSystem(recibo.sistema()).setValue(recibo.numero())));
 
         // El motivo del último intento fallido, en la nota. Es técnico —«Connection refused», «422 del
         // destinatario»—, nunca clínico: de la persona no hay nada que contar aquí.

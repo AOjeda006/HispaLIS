@@ -72,8 +72,8 @@ public class SaludPublicaHttp implements SaludPublica {
 
     @Override
     public Respuesta declarar(NotificacionEdo declaracion) {
-        String cuerpo = contexto.newJsonParser()
-                .encodeResourceToString(traductor.aFhir(declaracion, destinatario.organismo()));
+        String cuerpo =
+                contexto.newJsonParser().encodeResourceToString(traductor.aFhir(declaracion, destinatario.organismo()));
 
         HttpResponse<String> respuesta;
         try {

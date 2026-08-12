@@ -26,10 +26,7 @@ public final class EstadosDeDeclaracion {
     /** El estado de negocio, codificado. Los códigos son los de {@code estados-declaracion-edo}. */
     public static CodeableConcept aBusinessStatus(EstadoDeDeclaracion estado) {
         return new CodeableConcept()
-                .addCoding(new Coding()
-                        .setSystem(SYSTEM)
-                        .setCode(estado.name())
-                        .setDisplay(nombreDe(estado)));
+                .addCoding(new Coding().setSystem(SYSTEM).setCode(estado.name()).setDisplay(nombreDe(estado)));
     }
 
     /**

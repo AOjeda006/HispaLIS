@@ -83,10 +83,10 @@ public class ParametrosDeBusquedaPropios {
                 SearchParameter parametro = leer(fichero);
                 daos.getResourceDao(SearchParameter.class).update(parametro, new SystemRequestDetails());
                 alguno = true;
-                LOG.info("Parámetro de búsqueda propio publicado: {} sobre {}.", parametro.getCode(), parametro
-                        .getBase()
-                        .getFirst()
-                        .getCode());
+                LOG.info(
+                        "Parámetro de búsqueda propio publicado: {} sobre {}.",
+                        parametro.getCode(),
+                        parametro.getBase().getFirst().getCode());
             } catch (RuntimeException e) {
                 LOG.error(
                         "No se ha podido publicar el parámetro de «{}», así que las búsquedas que dependan de él no "
