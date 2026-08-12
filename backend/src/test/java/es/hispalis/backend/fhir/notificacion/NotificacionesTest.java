@@ -32,6 +32,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
@@ -225,6 +226,59 @@ class NotificacionesTest extends TestDeIntegracion {
                 .isEqualTo(estado.getEventsSinceSubscriptionStart());
     }
 
+    /**
+     * Un parámetro <strong>sin valor</strong> no puede parar el relay entero.
+     *
+     * <p>Pasó contra el {@code compose}, y la forma de llegar hasta aquí es de las que se repiten:
+     * el cliente mandó {@code {"name":"identificador-de-clave","valueString":"his-2026"}} copiando
+     * la forma de {@code Parameters}. Pero {@code Subscription.parameter.value} <strong>no es un
+     * tipo de elección</strong> —es un {@code string} que se llama {@code value}—, así que
+     * {@code valueString} no existe en el esquema, el parser lo tira sin decir nada y el recurso se
+     * guarda con un parámetro con nombre y sin valor.
+     *
+     * <p>Y entonces {@code map(getValue).findFirst()} sobre ese parámetro reventaba con un
+     * {@code NullPointerException} —{@code Optional.of(null)}— que se comía el {@code catch} de la
+     * vuelta: <strong>ninguna suscripción volvía a recibir nada</strong>, ni las bien formadas, y el
+     * log repetía cada dos segundos un NPE sin mensaje. Está en {@code adr-0036}.
+     *
+     * <p>Lo correcto es lo que hace ahora: el parámetro sin valor equivale a no haberlo puesto, se
+     * intenta entregar sin clave, {@code EntregaFirmada} se niega a mandar sin firmar y la
+     * suscripción se corta con un motivo que se lee por {@code $status}. El fallo se queda en la
+     * suscripción que lo provocó.
+     */
+    @Test
+    @DisplayName("una suscripción con el parámetro de clave sin valor se corta ella sola, sin llevarse el relay")
+    void unParametroSinValorNoTumbaElRelay() {
+        Subscription malFormada = suscripcionAlTopico();
+        malFormada.getParameter().clear();
+        malFormada.addParameter().setName("identificador-de-clave");
+        String rota = circuito.crear(malFormada);
+        String sana = circuito.crear(suscripcionAlTopico());
+
+        unResultadoValidado();
+
+        // La rota se corta con su motivo…
+        Subscription cortada = esperarA(
+                () -> circuito.leer(rota, Subscription.class),
+                leida -> leida.getStatus() == SubscriptionStatusCodes.ERROR);
+        SubscriptionStatus estado = (SubscriptionStatus)
+                leerBundle("/fhir/" + rota + "/$status").getEntryFirstRep().getResource();
+
+        assertThat(cortada.getStatus()).isEqualTo(SubscriptionStatusCodes.ERROR);
+        assertThat(estado.getErrorFirstRep().getText())
+                .as("y el motivo tiene que decir que falta con qué firmar, no «NullPointerException»")
+                .contains("clave compartida");
+
+        // …y la sana recibe igual, que es lo que el fallo impedía.
+        assertThat(esperarUnaEntrega()).contains("SubscriptionStatus");
+        assertThat(circuito.leer(sana, Subscription.class).getStatus()).isEqualTo(SubscriptionStatusCodes.ACTIVE);
+
+        // Y se apaga al salir. Una suscripción activa sobrevive al test que la creó —la base es una
+        // sola para toda la clase—, así que dejarla encendida hace que el resultado del siguiente
+        // test se notifique también por aquí y que su «primera entrega» sea la de otro.
+        apagar(sana);
+    }
+
     @Test
     @DisplayName("`full-resource` se rechaza al escribir: la historia clínica no sale por el canal")
     void elFullResourceNoSeAcepta() {
@@ -259,6 +313,16 @@ class NotificacionesTest extends TestDeIntegracion {
                         .map(entrada -> (org.hl7.fhir.r5.model.SubscriptionTopic) entrada.getResource())
                         .map(org.hl7.fhir.r5.model.SubscriptionTopic::getUrl))
                 .contains(TOPICO);
+    }
+
+    /** Deja de escuchar: un {@code PUT} con la suscripción en {@code off}, como haría su dueño. */
+    private void apagar(String referencia) {
+        Subscription suscripcion = circuito.leer(referencia, Subscription.class);
+        suscripcion.setStatus(SubscriptionStatusCodes.OFF);
+
+        ResponseEntity<String> respuesta =
+                rest.exchange("/fhir/" + referencia, HttpMethod.PUT, circuito.peticionCon(suscripcion), String.class);
+        assertThat(respuesta.getStatusCode()).isEqualTo(HttpStatus.OK);
     }
 
     /** Una suscripción como la que pediría el HIS: al tópico del laboratorio, `id-only`, a nuestro receptor. */
