@@ -93,6 +93,36 @@ La regla que hay detrás, y que es lo que conviene recordar: **una traza no mant
 limitó a observar.** Lo que queda tras el borrado es la constancia de que alguien lo miró, apuntando
 a un id que ya no resuelve — que es exactamente lo que hay que conservar.
 
+**2 bis. Y ese ajuste no hacía nada.** *(añadido el 2026-08-12, tras verlo por tercera vez.)*
+
+La regla de arriba es correcta y la línea que la implementaba, no.
+`setEnforceReferentialIntegrityOnDeleteDisableForPaths(…)` **no gobierna un `DELETE` normal**.
+Medido sobre HAPI 8.10.1 buscando el nombre del ajuste en el bytecode de todos sus JAR: lo consulta
+**una sola clase**, `ca.uhn.fhir.jpa.delete.batch2.DeleteExpungeSqlBuilder`, que es la del trabajo
+por lotes `$delete-expunge`. El borrado normal pasa por `DeleteConflictService`, que ni lo mira.
+
+Así que el ajuste se puso, no dio ningún error, y el sistema siguió sin poder borrar nada que
+alguien hubiera mirado. Lo destapó un fallo **intermitente** del reconciliador: la traza se escribe
+después de contestar, así que a veces llegaba antes del borrado y a veces después. Un test que
+depende de esa carrera no prueba nada — y el que faltaba, el que espera a que la traza exista y
+entonces borra, no existía.
+
+Lo que sí gobierna un borrado normal es el punto de enganche
+**`STORAGE_PRESTORAGE_DELETE_CONFLICTS`**: HAPI entrega la lista de conflictos antes de decidir, y
+quien la recibe puede quitar de ella lo que no deba estorbar.
+
+```java
+@Hook(Pointcut.STORAGE_PRESTORAGE_DELETE_CONFLICTS)
+public DeleteConflictOutcome noEstorbaLoQueSoloSeMiro(DeleteConflictList conflictos) {
+    conflictos.removeIf(c -> LO_QUE_LA_TRAZA_SOLO_OBSERVA.contains(c.getSourcePath())
+            && "AuditEvent".equals(c.getSourceId().getResourceType()));
+    return null;
+}
+```
+
+Se quitan **solo** esos caminos y solo si el que estorba es un `AuditEvent`: borrar un paciente al
+que apunta un resultado sigue siendo imposible.
+
 ## Consecuencias
 
 - El registro de auditoría **incluye los intentos fallidos**, que es la mitad para la que existe.
@@ -135,3 +165,14 @@ general para cualquier registro que referencie lo que observa:
    ejerce su derecho de supresión y el sistema contesta que no puede.
 3. Y la comprobación que lo caza: **probar el camino que falla**. Los seis tests del acceso correcto
    pasaban. El defecto solo lo vio el séptimo, que pedía un recurso inexistente.
+4. **Un ajuste con el nombre exacto de lo que quieres no siempre hace lo que dice.** *(añadido el
+   2026-08-12.)* Antes de dar por resuelto algo con una línea de configuración, hay que **ejercitar
+   el comportamiento**. Y si hace falta saber si el ajuste se lee siquiera, se puede: buscar su
+   nombre en el bytecode de las dependencias dice **quién** lo consulta, y a veces la respuesta es
+   «una clase que no está en tu camino». Es la cuarta vez en este proyecto que algo se declara bien,
+   no avisa y no funciona (`adr-0020`, `adr-0028`, `adr-0029`).
+5. **Un test intermitente es un defecto contando la verdad a medias.** El síntoma fue un fallo del
+   reconciliador que aparecía una vez de cada tres, porque la traza se escribe después de contestar
+   y competía con el borrado. La tentación es reintentar o reordenar; lo correcto fue **esperar a que
+   la condición exista** —a que la traza esté escrita— y entonces comprobar. El test dejó de ser
+   intermitente y pasó a ser el que faltaba.

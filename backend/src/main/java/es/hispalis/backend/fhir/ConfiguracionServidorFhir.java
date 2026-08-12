@@ -24,6 +24,7 @@ import ca.uhn.fhir.rest.server.IResourceProvider;
 import ca.uhn.fhir.rest.server.RestfulServer;
 import ca.uhn.fhir.rest.server.provider.ResourceProviderFactory;
 import ca.uhn.fhir.rest.server.util.ISearchParamRegistry;
+import es.hispalis.backend.fhir.auditoria.LaTrazaNoMantieneVivoLoQueObserva;
 import es.hispalis.backend.fhir.notificacion.AnotarLasNotificaciones;
 import es.hispalis.backend.fhir.notificacion.ProveedorDeSuscripcion;
 import es.hispalis.backend.fhir.notificacion.SuscripcionesQueElLaboratorioAcepta;
@@ -89,36 +90,24 @@ public class ConfiguracionServidorFhir {
      * sistema (§9 del diseño), y no dice «el {@code GET} al {@code Location} funciona», dice que
      * ninguna lectura puede ir por detrás de una escritura ya confirmada. Una búsqueda es una
      * lectura. El detalle y cómo se detectó, en {@code docs/adr/adr-0019-…}.
-     */
-    /**
-     * Los caminos por los que una traza de acceso apunta a un recurso.
      *
-     * <p>⚠️ <strong>Sin esto, desde el ítem 50 no se podría borrar nada.</strong> HAPI comprueba la
-     * integridad referencial también al borrar: un recurso al que apunta otro no se va. Y como la
-     * traza referencia <em>todo lo que alguien ha mirado</em>, el primer {@code AuditEvent} sobre un
-     * paciente lo convertiría en indestructible — el reconciliador dejaría de poder retirar un recurso
-     * huérfano, y el derecho de supresión del RGPD sería imposible de ejercer por culpa del registro
-     * que existe justamente para respetarlo.
+     * <p>⚠️ Y aquí vivía también {@code setEnforceReferentialIntegrityOnDeleteDisableForPaths(…)} con
+     * los caminos de la traza, que <strong>no hacía nada</strong>.
      *
-     * <p>La regla que hay detrás es la que da nombre a esto: <strong>una traza no mantiene vivo lo que
-     * se limitó a observar.</strong> Es la misma que rige a {@code Provenance.target} en cualquier
-     * servidor FHIR serio, aplicada al recurso que más referencias acumula de todo el sistema. Lo que
-     * queda tras el borrado es la constancia de que alguien lo miró, apuntando a un id que ya no
-     * resuelve — que es exactamente lo que hay que conservar.
+     * <p>El ajuste tiene ese nombre exacto y solo lo consulta una clase en todo HAPI 8.10.1:
+     * {@code ca.uhn.fhir.jpa.delete.batch2.DeleteExpungeSqlBuilder}, la del trabajo por lotes
+     * {@code $delete-expunge}. Un {@code DELETE} normal pasa por {@code DeleteConflictService}, que
+     * ni lo mira. Medido buscando el ajuste en el bytecode de todos sus JAR.
+     *
+     * <p>Lo que sí gobierna un borrado normal es el punto de enganche
+     * {@code STORAGE_PRESTORAGE_DELETE_CONFLICTS}, y de eso se ocupa
+     * {@link es.hispalis.backend.fhir.auditoria.LaTrazaNoMantieneVivoLoQueObserva}, con la lista de
+     * caminos y el porqué. Lo destapó un fallo intermitente del reconciliador; hay test.
      */
-    private static final Set<String> LO_QUE_LA_TRAZA_SOLO_OBSERVA = Set.of(
-            "AuditEvent.entity.what",
-            "AuditEvent.patient",
-            "AuditEvent.agent.who",
-            "AuditEvent.source.observer",
-            "AuditEvent.basedOn",
-            "AuditEvent.encounter");
-
     @Bean
     public JpaStorageSettings ajustesDeAlmacenamiento() {
         JpaStorageSettings ajustes = new JpaStorageSettings();
         ajustes.setReuseCachedSearchResultsForMillis(null);
-        ajustes.setEnforceReferentialIntegrityOnDeleteDisableForPaths(LO_QUE_LA_TRAZA_SOLO_OBSERVA);
         return ajustes;
     }
 
@@ -224,6 +213,7 @@ public class ConfiguracionServidorFhir {
             SoloLosVerbosQueElNucleoGobierna soloLosVerbosQueElNucleoGobierna,
             AnotarLasNotificaciones anotarLasNotificaciones,
             SuscripcionesQueElLaboratorioAcepta suscripcionesAceptadas,
+            LaTrazaNoMantieneVivoLoQueObserva laTrazaNoRetiene,
             DondeSeAutoriza dondeSeAutoriza) {
         RestfulServer servidor = new RestfulServer(contexto);
 
@@ -265,6 +255,10 @@ public class ConfiguracionServidorFhir {
         // que haya una petición REST detrás.
         interceptoresDeAlmacenamiento.registerInterceptor(suscripcionesAceptadas);
         interceptoresDeAlmacenamiento.registerInterceptor(anotarLasNotificaciones);
+
+        // Y el que deja borrar lo que una traza se limitó a mirar. También `STORAGE_*`, y también
+        // aquí: el reconciliador borra llamando a las DAO, sin petición REST detrás.
+        interceptoresDeAlmacenamiento.registerInterceptor(laTrazaNoRetiene);
         servidor.setServerConformanceProvider(new ConformidadHispaLis(
                 servidor, systemDao, ajustes, parametrosDeBusqueda, soporteDeValidacion, dondeSeAutoriza));
 
