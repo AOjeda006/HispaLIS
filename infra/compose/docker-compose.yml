@@ -262,6 +262,17 @@ services:
       keycloak:
         condition: service_healthy
 
+  # El mismo remedio que `terminologia-datos`, y por el mismo motivo exacto: un volumen recién creado
+  # es de `root`, y el backend corre como `hispalis` (UID 10001, GID 999). Montarlo no da permiso de
+  # escribir en él — la primera exportación se llevaba un `AccessDeniedException` al crear la carpeta
+  # del trabajo, y como el `$export` es asíncrono el fallo no salía en la respuesta al `POST` sino
+  # doscientos milisegundos después, en el sondeo. Ver `docs/adr/adr-0035-…`.
+  exportaciones-datos:
+    image: busybox:1.37
+    command: ['sh', '-c', 'mkdir -p /datos && chown -R 10001:999 /datos && chmod 750 /datos']
+    volumes:
+      - exportaciones:/datos
+
   backend:
     build:
       # El contexto es la raíz del repositorio, compartido con la web.
@@ -301,6 +312,8 @@ services:
       # valor por defecto, porque abajo hay un volumen montado justo ahí y las dos líneas tienen que
       # decir lo mismo: el proceso corre como `hispalis` (UID 10001) y no puede crear directorios
       # bajo `/var/lib`, así que sin el volumen la primera exportación fallaría al escribir.
+      # ⚠️ Y con el volumen también fallaba: montar uno no basta, porque nace de `root`. Lo arregla
+      # `exportaciones-datos`, abajo. Ver `docs/adr/adr-0035-…`.
       HISPALIS_EXPORT_DIR: /var/lib/hispalis/exportaciones
     volumes:
       # Un volumen y no un `tmpfs`: un fichero a medio descargar no debe desaparecer porque el
@@ -330,6 +343,10 @@ services:
       # Keycloak caído y descubre sus claves en la primera petición que traiga testigo. Sin él la API
       # contesta 401 a todo, que es lo correcto — pero no se queda sin arrancar.
       keycloak-usuarios:
+        condition: service_completed_successfully
+      # Y el directorio de las exportaciones, con dueño. No condiciona nada más que `$export`, pero
+      # esperar a un `chown` que tarda un segundo es más barato que descubrirlo en el primer sondeo.
+      exportaciones-datos:
         condition: service_completed_successfully
     healthcheck:
       # `metadata` es la prueba honesta de que está listo: contesta cuando el servidor FHIR está
