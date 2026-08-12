@@ -115,7 +115,10 @@ class TrazaDeAccesoTest extends TestDeIntegracion {
         assertThat(quien.getNetwork())
                 .as("⚠️ R5: `agent.network[x]`, no el `agent.network` con `address`/`type` de R4")
                 .isNotNull();
-        assertThat(traza.getSource().getObserver().hasReference())
+        // Por identificador y no por referencia: el servidor no se publica a sí mismo como recurso en
+        // su propia proyección, y apuntar a uno que no existe rompería la integridad referencial de la
+        // traza entera. Lo que se exige es que el observador esté identificado, no cómo.
+        assertThat(traza.getSource().getObserver().hasIdentifier())
                 .as("quién levanta acta: este servidor")
                 .isTrue();
     }
@@ -186,12 +189,10 @@ class TrazaDeAccesoTest extends TestDeIntegracion {
         String nhc = CircuitoDePrueba.siguienteNhc();
         circuito.crear(CircuitoDePrueba.paciente(nhc));
 
-        rest.getForEntity(
-                "/fhir/Patient?identifier=https://aojeda006.github.io/HispaLIS/sid/nhc|" + nhc, String.class);
+        rest.getForEntity("/fhir/Patient?identifier=https://aojeda006.github.io/HispaLIS/sid/nhc|" + nhc, String.class);
 
         List<AuditEvent> trazas = esperarA(
-                () -> buscar("/fhir/AuditEvent?date=gt" + desde + "&_count=200"),
-                encontradas -> encontradas.stream()
+                () -> buscar("/fhir/AuditEvent?date=gt" + desde + "&_count=200"), encontradas -> encontradas.stream()
                         .anyMatch(traza -> traza.getAction() == AuditEvent.AuditEventAction.E));
 
         assertThat(trazas.stream().flatMap(traza -> traza.getEntity().stream()))

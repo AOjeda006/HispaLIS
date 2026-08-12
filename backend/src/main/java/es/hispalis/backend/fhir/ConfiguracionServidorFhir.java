@@ -90,10 +90,35 @@ public class ConfiguracionServidorFhir {
      * ninguna lectura puede ir por detrás de una escritura ya confirmada. Una búsqueda es una
      * lectura. El detalle y cómo se detectó, en {@code docs/adr/adr-0019-…}.
      */
+    /**
+     * Los caminos por los que una traza de acceso apunta a un recurso.
+     *
+     * <p>⚠️ <strong>Sin esto, desde el ítem 50 no se podría borrar nada.</strong> HAPI comprueba la
+     * integridad referencial también al borrar: un recurso al que apunta otro no se va. Y como la
+     * traza referencia <em>todo lo que alguien ha mirado</em>, el primer {@code AuditEvent} sobre un
+     * paciente lo convertiría en indestructible — el reconciliador dejaría de poder retirar un recurso
+     * huérfano, y el derecho de supresión del RGPD sería imposible de ejercer por culpa del registro
+     * que existe justamente para respetarlo.
+     *
+     * <p>La regla que hay detrás es la que da nombre a esto: <strong>una traza no mantiene vivo lo que
+     * se limitó a observar.</strong> Es la misma que rige a {@code Provenance.target} en cualquier
+     * servidor FHIR serio, aplicada al recurso que más referencias acumula de todo el sistema. Lo que
+     * queda tras el borrado es la constancia de que alguien lo miró, apuntando a un id que ya no
+     * resuelve — que es exactamente lo que hay que conservar.
+     */
+    private static final Set<String> LO_QUE_LA_TRAZA_SOLO_OBSERVA = Set.of(
+            "AuditEvent.entity.what",
+            "AuditEvent.patient",
+            "AuditEvent.agent.who",
+            "AuditEvent.source.observer",
+            "AuditEvent.basedOn",
+            "AuditEvent.encounter");
+
     @Bean
     public JpaStorageSettings ajustesDeAlmacenamiento() {
         JpaStorageSettings ajustes = new JpaStorageSettings();
         ajustes.setReuseCachedSearchResultsForMillis(null);
+        ajustes.setEnforceReferentialIntegrityOnDeleteDisableForPaths(LO_QUE_LA_TRAZA_SOLO_OBSERVA);
         return ajustes;
     }
 
