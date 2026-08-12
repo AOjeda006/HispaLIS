@@ -285,6 +285,37 @@ class SeguridadSmartTest extends TestDeIntegracion {
         assertThat(respuesta.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
     }
 
+    /**
+     * Un suscriptor que puede leer su {@code Subscription} puede preguntar por ella.
+     *
+     * <p>{@code $status} y {@code $events} son lecturas: en qué estado quedó la suscripción, por qué
+     * falló la última entrega y qué números de evento se perdió mientras estuvo caído. Sin regla
+     * propia, un cliente con {@code system/Subscription.crs} <strong>creaba la suscripción y se
+     * llevaba un {@code 403} al preguntar por ella</strong> — y es justo el que más lo necesita.
+     *
+     * <p>Se prueba sobre una suscripción que no existe, y a propósito: lo que se comprueba es la
+     * <strong>autorización</strong>, que corre antes que el proveedor. Sin permiso, {@code 403};
+     * con permiso, la operación se ejecuta y contesta lo que le corresponde — {@code 404}, porque no
+     * hay tal suscripción. Montar una de verdad probaría lo mismo y además el tópico, la entrega y
+     * el receptor, que ya tienen sus tests.
+     */
+    @Test
+    void el_estado_de_una_suscripcion_se_pregunta_con_el_permiso_de_leerla() {
+        String sinSuscripciones = IDENTIDAD.testigo("hispalis-motor", "system/Patient.crus", null, null);
+        String delSuscriptor = IDENTIDAD.testigo("his-suscriptor", "system/Subscription.crs", null, null);
+
+        assertThat(leer("/fhir/Subscription/no-existe/$status", sinSuscripciones)
+                        .getStatusCode())
+                .as("sin permiso sobre Subscription, ni el estado")
+                .isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(leer("/fhir/Subscription/no-existe/$status", delSuscriptor).getStatusCode())
+                .as("con permiso, la autorización deja pasar y contesta el proveedor: no hay tal suscripción")
+                .isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(leer("/fhir/Subscription/no-existe/$events", delSuscriptor).getStatusCode())
+                .as("y lo mismo con `$events`, que es la otra mitad: qué me he perdido")
+                .isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
     // ---------------------------------------------------------------- utilidades
 
     /**
