@@ -50,16 +50,28 @@ degenerar en una historia clínica electrónica en miniatura.
 > **La API FHIR exige testigo**: lo que antes se recorría con `curl` a pelo ahora necesita uno, y el
 > laboratorio decide **recurso a recurso** de quién son los datos.
 >
-> **Hito 3 en marcha.** Los valores críticos publicados con su fuente citada, las notificaciones de
-> `SubscriptionTopic` entregando `id-only`, las pruebas reflejas con `Observation.triggeredBy`, la
-> **doble validación del resultado crítico** —dos firmas de facultativos distintos— y la **detección
-> de enfermedades de declaración obligatoria**, que decide sobre códigos y sin mirar quién es el
-> paciente.
+> **Hito 3 cerrado — y con él, el proyecto.** Los valores críticos publicados con su fuente citada,
+> las notificaciones de `SubscriptionTopic` entregando `id-only`, las pruebas reflejas con
+> `Observation.triggeredBy`, la **doble validación del resultado crítico** —dos firmas de facultativos
+> distintos— y la **detección de enfermedades de declaración obligatoria**, que decide sobre códigos y
+> sin mirar quién es el paciente.
 >
 > **Y lo masivo:** `$export` de Bulk Data sobre la **cohorte de vigilancia** que el laboratorio abre
 > solo al declarar, con NDJSON **seudonimizado** y un fichero que **caduca y se borra**; más un
 > **`AuditEvent` de toda lectura y escritura** que registra quién, qué, cuándo y desde dónde — y ni
 > una palabra más.
+>
+> El circuito entero está recorrido **de extremo a extremo contra la pila levantada y con la
+> seguridad puesta** —de la petición del HIS por MLLP a la cohorte exportada y borrada—, y la
+> transcripción, paso a paso, está en [`docs/PLAN.md`](docs/PLAN.md) → *Estado actual*. Ese recorrido
+> destapó **siete fallos que 290 tests no veían**: están arreglados, en rojo→verde, y contados en
+> `adr-0033`–`adr-0036` y en la tercera parte de `adr-0030`.
+>
+> **Lo que queda abierto** —SNOMED sin cargar por licencia, `Observation.device`, la app sin ejecutar
+> en un dispositivo y ocho cosas más— es una lista **cerrada y explícita** en
+> [`docs/PLAN.md`](docs/PLAN.md) → *Lo que queda abierto al cerrar el proyecto*. Y lo que el proyecto
+> aporta a la biblioteca de convenciones está inventariado ADR por ADR en
+> [`docs/destilacion.md`](docs/destilacion.md).
 
 ## Arquitectura en tres frases
 
@@ -299,6 +311,20 @@ Cuatro cosas que conviene saber antes de usarlo, todas deliberadas:
   Vive en `HISPALIS_EXPORT_DIR` —en el `compose`, el volumen `exportaciones`— y se lo lleva un
   `docker compose down -v`.
 
+**El `$TESTIGO` de arriba no lo tiene nadie**, y esa es la gracia: el realm **define** los dos ámbitos
+y **no se los asigna a ningún cliente**, igual que hace con `system/*.cruds`. Para recorrerlo entero
+hay un guion que hace **el acto administrativo completo** —concede, usa y retira—:
+
+```bash
+infra/fhir/exportar-cohorte.sh            # o … exportar-cohorte.sh Group/cohorte-legionelosis
+```
+
+Crea un cliente `almacen-analitico` con una clave RSA recién generada, le da los dos ámbitos, canjea
+una aserción `private_key_jwt` (SMART Backend Services de verdad, sin secreto compartido), exporta,
+comprueba **sobre el NDJSON descargado** que no se ha llevado filiación, borra el trabajo y **borra el
+cliente en un `trap`**, pase lo que pase. Al terminar, el realm vuelve a estar como estaba: nadie
+capaz de exportar.
+
 **Y todo acceso deja traza.** Cada lectura y cada escritura de la API escriben un `AuditEvent`: quién,
 qué, cuándo y desde dónde. **Referencias, nunca volcados**, y **nunca el criterio de búsqueda** — el
 perfil `TrazaDeAcceso` cierra `entity.query` y `entity.detail` a `0..0`, que es justo donde acabaría
@@ -362,13 +388,22 @@ Notas de las cadenas de construcción, por si sorprenden:
   `localhost:8080`**: la web y la API se sirven del mismo origen, así que hay que tener el backend
   arrancado en otra terminal.
 - **`simuladores/`** — antes de nada, `python -m pip install -e ".[dev]"` dentro de `simuladores/`.
+- **Spotless y el JDK.** `palantir-java-format` **no funciona con JDK 25**: si el JDK del equipo es
+  más nuevo que el 21 de la CI, los tests corren y `spotless:check` revienta con un
+  `NoSuchMethodError` del compilador. Se comprueba en un contenedor con la versión de la CI:
+
+  ```bash
+  docker run --rm -v "$PWD":/repo -v "$HOME/.m2":/root/.m2 -w /repo/backend \
+    eclipse-temurin:21-jdk ./mvnw -o spotless:check
+  ```
 
 ## Integración continua
 
-Un workflow por componente en `.github/workflows/`, **todos filtrados por `paths:`** — obligatorio en
-un monorepo de cuatro *toolchains*, o cada cambio en Flutter recompilaría el backend. La IG se valida
-con el **validador oficial de HL7 contra `hl7.fhir.r5.core@5.0.0`** y se publica a GitHub Pages desde
-`ig/output/`.
+**Siete workflows** en `.github/workflows/` —uno por componente: `ig`, `backend`, `integracion`,
+`web-profesional`, `app-ciudadano`, `simuladores` y `terminologia`—, **todos filtrados por `paths:`**
+— obligatorio en un monorepo de cuatro *toolchains*, o cada cambio en Flutter recompilaría el backend.
+La IG se valida con el **validador oficial de HL7 contra `hl7.fhir.r5.core@5.0.0`** y se publica a
+GitHub Pages desde `ig/output/`.
 
 ## Desarrollo con agentes
 

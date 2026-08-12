@@ -1581,6 +1581,204 @@ caducidad (PT20S + PT5S)   -> a los ~24 s no queda ni la carpeta; el sondeo cont
 there SHALL be a processingMode»*—. SUSHI compilaba sin una queja. Arreglado con
 `processingMode = #normal` y recopiada la conformidad del backend.
 
+### El cierre: el circuito entero contra el `compose` (ítem 51, 2026-08-12)
+
+**Esta vez sí hay Docker.** Vive dentro de WSL2, no en Windows, y eso cambia lo que se puede afirmar:
+el circuito del ítem 51 se recorre contra **la pila entera levantada** —PostgreSQL, Kafka, registro de
+esquemas, terminología cargada, Keycloak con su realm importado, backend, motor, web, receptor y
+SVEA— y **con la seguridad encendida**, que es como no se había recorrido nunca.
+
+**Lo que se llevó la tanda no fue la transcripción: fue lo que la transcripción destapó.** Siete
+fallos reales, y cada uno por el mismo motivo — *un test elige su configuración y el sistema montado
+no*.
+
+| # | Lo que fallaba en vivo | Causa | Dónde queda |
+|---|---|---|---|
+| 1 | El realm no definía los ámbitos del hito 3 | `system/Subscription.crs`, `system/Group.rs` y `system/*.rs` nunca se añadieron a `hispalis-realm.json`: **suscribirse y exportar era imposible contra el `compose`** | `infra/keycloak/hispalis-realm.json`, definidos y **sin asignar**, como `system/*.cruds` |
+| 2 | La **segunda firma de un crítico** → `403` | La regla autorizaba `create` sobre `Provenance` y la segunda firma las **reescribe**: es un `UPDATE`. Un crítico no se podía terminar de validar con seguridad | `adr-0033` · `DobleValidacionConSeguridadTest` |
+| 3 | `$status` de la propia suscripción → `403` | No había regla para las operaciones de lectura sobre `Subscription`: el suscriptor creaba la suya y no podía preguntar por ella | `adr-0033`, apéndice · test en `SeguridadSmartTest` |
+| 4 | Una Legionella positiva **no se declaraba nunca** si entraba por el analizador | El motor colapsaba `CE`/`CWE` en `valueString`; sin código, la regla EDO —que compara **códigos**— no veía un positivo | `adr-0034` · dos tests en `CanalOruResultadoTest` |
+| 5 | **Ninguna** suscripción recibía nada | Un `valueString` que el parser tira sin decir nada dejó un parámetro sin valor; `map(getValue).findFirst()` → `NullPointerException` que reventaba la vuelta entera del relay | `adr-0036` · test en `NotificacionesTest` |
+| 6 | `$export` fallaba al escribir | El volumen de las exportaciones nace de `root` y el backend corre como UID 10001. **Montar no es poder escribir** | `adr-0035` · servicio `exportaciones-datos` en el `compose` |
+| 7 | **Nada se podía borrar** si alguien lo había mirado | El ajuste del ítem 50 —`…ReferentialIntegrityOnDeleteDisableForPaths`— **solo lo consulta `$delete-expunge`**. Un `DELETE` normal ni lo mira, así que el reconciliador no podía retirar un huérfano y el derecho de supresión era inejercitable. Salía como un test **intermitente** | `adr-0030`, tercera parte · `LaTrazaNoMantieneVivoLoQueObserva` |
+| 8 | La guía publicaba **2 errores** en su QA | Un `CodeSystem` y su `ValueSet` con el **mismo `Title`**: el publisher lo trata como error porque duplica la entrada del índice. Ni SUSHI ni el validador oficial lo ven — no es un problema del recurso, es de la guía que lo publica | `EstadosDeclaracionEdo.fsh`, con la nota al lado |
+
+Y una cosa que **no** era un fallo y lo parecía: sin reflejas y sin `basedOn`. El analizador no
+mandaba `ORC-4`, y sin número de volante el resultado se informa igual pero sin línea de la que
+colgar la refleja. Es una limitación deliberada y documentada (`CanalOruResultado`), no un defecto: el
+guion pasa `--volante` y la refleja aparece.
+
+**La transcripción, de extremo a extremo** (NHC sintético 51000006, pila levantada desde el clon):
+
+```
+1. Directorio      Practitioner/COL12345 200 · COL41902 200
+                   «Ángel Muñoz de la Torre» [apellidos sueltos: Muñoz de la Torre]
+2. HIS por MLLP/TLS MSA|AA|HIS51000006A01 · MSA|AA|HISVOL51000006
+                   Patient/508256bd… MUÑOZ DE LA TORRE, Begoña María · nhc, DNI, nuhsa
+                   ServiceRequest TSH / K / LEGIOAG   intent=order
+3. Subscription    POST → 201  Subscription/1474   (testigo system/Subscription.crs)
+4. Analizador      MSA|AA|ANACC51000006
+                   TSH 8.5 u[IU]/mL · K 7.5 mmol/L · LEGIOAG POS (Positivo)   preliminary
+5. Refleja         ServiceRequest/833cce60…  T4L  intent=reflex-order
+6. Refleja medida  T4L 0.6 ng/dL ← triggeredBy=reflex: «Derivada de un TSH alterado…»
+7. Doble firma     1ª (COL12345) → 200, preliminary
+                   la misma otra vez → 422 «…la misma persona mirando dos veces no es
+                                            una segunda revisión…»
+                   2ª (COL41902) → 200, FINAL · Provenance sobre el resultado: 2
+8. Los demás       TSH → final · T4L → final · LEGIOAG → final
+9. Notificación    receptor: «Notificación 8 aceptada: …/Observation/3f59f070, /fa3f726a,
+                              /b39a9db4, /73e274fe»
+                   $status → tipo=query-status · entregados=4 · estado=active
+10. EDO            Task/ee68b09c…  status=completed  negocio=ACUSADA  vence=2026-08-13T05:22
+                   SVEA: 3 declaraciones registradas · {"LEGIONELOSIS": 3} · 0 fuera de plazo
+11. Informe        POST /DiagnosticReport → 201  DiagnosticReport/0c1daeb7…
+12. Traza          50 AuditEvent · PHI: ninguna (ni nombre, ni DNI, ni NUHSA, ni NHC)
+                   trazas con entity.query relleno: 0   (el perfil lo prohíbe: 0..0)
+13. Búsqueda x NHC ¿aparece el NHC en las últimas trazas? False
+14. $export        202 + Content-Location → sondeo 200 · Expires: …05:37:45 GMT
+                   output: Observation/Patient/Specimen por billete opaco
+                   Observation.ndjson 12 · Patient.ndjson 3 · Specimen.ndjson 3
+                   {"resourceType":"Patient","id":"76e76bfa…","active":true,
+                    "gender":"female","birthDate":"1981"}
+                   sin filiación en el NDJSON · DELETE → 202 · el sondeo pasa a 404
+                   y el permiso se retira: el cliente temporal se borra del realm
+```
+
+**El permiso de exportar se concede, se usa y se retira.** `infra/fhir/exportar-cohorte.sh` crea un
+cliente `almacen-analitico` con clave recién generada, le da los dos ámbitos, exporta con
+`private_key_jwt` y lo borra en un `trap`. Así el realm versionado conserva la propiedad que D23
+exige: **nadie tiene los ámbitos de exportación de fábrica**.
+
+**Las puertas de los siete workflows, reproducidas en local** (en GitHub corren al empujar; aquí se
+ha ejecutado cada una con la misma orden que ejecuta la CI):
+
+| Workflow | Puerta | Resultado |
+|---|---|---|
+| `ci-backend` | `mvnw test` · `spotless:check` | **291 tests**, 0 fallos · formato limpio |
+| `ci-integracion` | `mvnw verify` | **86 tests**, 0 fallos · formato limpio |
+| `ci-ig` | SUSHI · IG Publisher · perfil-con-ejemplo · copias de conformidad | **0 errores / 0 avisos** de SUSHI · **1 error** en `qa.html` · 12 de 12 perfiles con ejemplo · 2 de 2 copias idénticas |
+| `ci-web-profesional` | `npm run lint` · `npm test` · `npm run build` | limpio · **94 tests** · empaquetado |
+| `ci-app-ciudadano` | `flutter analyze` · `flutter test` | *No issues found* · **69 tests** |
+| `ci-simuladores` | `ruff check` · `ruff format --check` · `pytest` | limpio · 38 ficheros formateados · **143 tests** |
+| `ci-terminologia` | `ruff check` · `ruff format --check` · `pytest` | limpio · 14 ficheros formateados · **41 tests** |
+
+**Sobre el error que queda en la guía.** `qa.html` cierra con **1 error, 91 avisos y 822 enlaces
+rotos**, y esa es la línea base documentada en `ig/CLAUDE.md`: el error es
+`Supressed messages file not found` —un parámetro por defecto de la plantilla que apunta a un fichero
+que esta guía no tiene— y los enlaces rotos son los `artifacts.html#terminology` y `#example` de la
+barra de navegación, cuya ancla genera la plantilla en inglés sobre una guía en español. Cada
+artefacto nuevo suma una docena; de 488 en el hito 2 a 822 con los del hito 3.
+
+**Y un error que sí era nuevo, y ya no está:** el `CodeSystem` de estados de declaración y su
+`ValueSet` compartían `Title`, y el publisher lo trata como error porque duplica la entrada del
+índice. **Ni SUSHI ni el validador oficial lo ven** —no es un problema del recurso, es de la guía que
+lo publica—, así que solo aparece construyendo la guía entera. Con eso, la guía vuelve a su línea
+base.
+
+**Dos trampas de entorno, medidas y anotadas** (no son del producto, son de recorrerlo):
+
+- **Keycloak no arranca si una descripción de ámbito pasa de 255 caracteres.** `CLIENT_SCOPE.DESCRIPTION`
+  es `varchar(255)`; `--import-realm` falla y **el servidor no levanta**. El realm queda a medias y hay
+  que `down -v`.
+- **`private_key_jwt` contra Keycloak exige `iat`.** Sin él contesta `invalid_client` con «*Token
+  expiration is too far in the future and iat claim not present in token*»: mide la vida de la
+  aserción desde `iat` y, a falta de `iat`, desde un margen suyo mucho más corto que los cinco minutos
+  que permite la norma.
+
+### Los criterios del hito 3, uno a uno
+
+Cada fila es un ítem del checklist con **la prueba concreta**. «En vivo» significa contra el
+`compose` levantado, con la seguridad encendida.
+
+| # | Criterio | Prueba concreta |
+|---|---|---|
+| 42 | Los tres códigos SNOMED del SNS | **No cumplido, y por qué**: la Edición Española no se redistribuye y no está en este equipo. El hueco está modelado y el cargador avisa; sin fichero no se carga. Ver *lo que queda abierto* |
+| 43 | Umbrales críticos y reflejas en el catálogo, no en el código | `CatalogoPruebas.fsh`: `#TSH ^property[prueba-refleja] = #T4L`. **En vivo:** paso 5 del circuito — la refleja aparece sin una sola condición escrita en Java |
+| 44 | `SubscriptionTopic` + `Subscription` entregando | **En vivo:** pasos 3 y 9. `201` con testigo `system/Subscription.crs`, receptor real acusando y `$status → entregados=4`. `CriterioDelTopicoTest` prueba que el criterio sale del tópico publicado |
+| 45 | `Observation.triggeredBy` en la refleja | **En vivo:** paso 6 — `triggeredBy=reflex` con el motivo redactado que viene del catálogo, no del código |
+| 46 | Crítico ⇒ doble validación de **otro** facultativo | **En vivo:** paso 7 — `200` / `422` «otro facultativo» / `200 FINAL`, con **dos** `Provenance`. Siete tests en `DobleValidacionTest` y uno con seguridad (`adr-0033`) |
+| 47 | EDO validado ⇒ notificación obligatoria | **En vivo:** paso 10 — el `Task` se abre solo al validar el positivo. La regla vive en el catálogo (`enfermedad-edo` + `resultado-que-declara`), no en un `if` |
+| 48 | La declaración sale y se acusa | **En vivo:** paso 10 — `ACUSADA` con número de registro del SVEA, y el libro de Salud Pública con 3 declaraciones y 0 fuera de plazo. Sin acuse no hay declaración: cerrado en tres sitios |
+| 49 | `$export` por Bulk Data, autorizado y caducable | **En vivo:** paso 14 — `202` → manifiesto → tres NDJSON → `DELETE` → `404`. Los dos ámbitos concedidos y **retirados** al terminar |
+| 50 | `AuditEvent` completo y sin PHI | **En vivo:** pasos 12 y 13 — 50 trazas, cero PHI, cero `entity.query`. Una búsqueda **por NHC** no deja el criterio |
+| 51 | Hito cerrado | Este bloque, `docs/destilacion.md`, y la lista honesta de lo que queda abierto |
+
+### Lo que queda abierto al cerrar el proyecto
+
+Lista **cerrada**: esto es todo lo que se sabe que falta. Un proyecto que se cierra diciendo lo que
+le falta está terminado; uno que lo esconde, no.
+
+**Bloqueado por datos que no se pueden redistribuir**
+
+1. **SNOMED CT no está cargado** (ítem 42). La Edición Española del SNS no se redistribuye y no está
+   en este equipo. Consecuencia concreta: los tres códigos SNOMED del catálogo —tipos de muestra y
+   valores cualitativos en SNOMED— se publican en la guía y **no se pueden validar contra el
+   servidor**; `$validate-code` sobre `http://snomed.info/sct` no contesta. El hueco está modelado, el
+   cargador lo avisa en voz alta al arrancar y el sistema funciona sin él porque nada obligatorio
+   depende de SNOMED. **No es trabajo pendiente: es una licencia que falta.**
+
+**Modelado que se dejó fuera a propósito**
+
+2. **`Observation.device` sigue vacío.** El identificador del analizador llega en `OBX-18` y no se
+   proyecta: para apuntar ahí haría falta un inventario de analizadores como recursos `Device`, y
+   crearlo desde el canal convertiría al motor en autoridad de un inventario que solo conoce de
+   oídas. La identidad del aparato **no se pierde** —está en el mensaje original archivado—, pero el
+   recurso no la lleva.
+3. **El `Patient` exportado no lleva municipio**, aunque D23 lo prevea. No es del exportador: el
+   agregado del dominio no modela la dirección, así que la proyección la descarta al escribir.
+   Consecuencia práctica: con la cohorte de hoy **no se puede dibujar un mapa de casos**, que es la
+   mitad de para qué sirve una cohorte de vigilancia. Arreglarlo es trabajo de dominio.
+4. **Un facultativo duplicado en el directorio burla la doble validación.** La segunda firma se
+   compara por la referencia literal, así que la misma persona dada de alta dos veces podría poner
+   las dos. Es un problema del directorio —dato maestro sin agregado—, no de la regla.
+
+**Infraestructura montada para demostrar, no para producción**
+
+5. **El registro de esquemas se probó en memoria**, no contra el servidor. La decisión de
+   compatibilidad la toma el mismo comprobador que usa el servidor, pero **el camino HTTP no se ha
+   ejercitado**: un fallo de serialización o de configuración del registro no lo vería ningún test.
+6. **El broker corre sobre ZooKeeper**, no en modo KRaft. Funciona y está congelado en una versión
+   que lo soporta; para cualquier despliegue nuevo, ZooKeeper está retirado en Kafka 4.
+7. **Los NDJSON viven en un disco local, no en MinIO.** El `compose` tiene MinIO y esto no lo usa.
+   Con una sola instancia no se nota —el que sondea es el mismo proceso que escribió—, pero es la
+   misma limitación de instancia única que el relay del `outbox`, el notificador EDO y el barrendero.
+8. **La consola del motor (8082) no tiene autenticación**, y por eso no se publica fuera de la red
+   del `compose`. Decisión consciente, no olvido.
+9. **El contador `MSH-10` de los acuses del motor es efímero:** el contenedor no tiene volumen para
+   el `id_file` de HAPI.
+
+**Cliente y pantallas**
+
+10. **La app del ciudadano no se ha ejecutado en un dispositivo.** `flutter analyze` y `flutter test`
+    pasan y el flujo SMART se recorrió con las mismas peticiones que hace la app, pero **nadie ha
+    visto la pantalla** en un emulador ni en un móvil, y `flutter build apk`/`build web` no se han
+    ejecutado: un fallo del manifiesto o del `network_security_config` no lo vería ninguna de las dos
+    puertas de la CI. La trampa del `10.0.2.2` está resuelta en el código y sin comprobar en vivo.
+11. **Ningún cliente llama a `$validar`, ni emite informes, ni gestiona la bandeja de EDO.** Las tres
+    operaciones funcionan —ahora también con la seguridad puesta— pero **la web no tiene pantalla**
+    para ninguna: el circuito completo solo lo recorre un guion. Es trabajo de pantalla, no de
+    contrato; los scopes existen en el realm y son opcionales.
+12. **Una declaración `RECHAZADA` no se reintenta sola y nadie la recoge.** Es lo correcto —reenviar
+    veinte veces algo rechazado por el contenido no lo arregla— pero deja una obligación legal
+    incumplida esperando a que una persona la mire, y hoy solo sale por el log y por
+    `GET /fhir/Task?business-status=RECHAZADA`. Igual con las que agotan los intentos y las vencidas.
+
+**Cobertura que se sabe incompleta**
+
+13. **El reconciliador no se ha ejecutado sobre el laboratorio entero**, solo acotado a un paciente.
+14. **`spotless` no corre en este equipo con el JDK instalado.** `palantir-java-format` no funciona
+    con JDK 25 y aquí no hay un 21; el formato se comprueba **dentro de un contenedor temurin:21**,
+    que es lo que hace la CI. Anotado porque quien retome esto se lo va a encontrar.
+15. **Hay esperas fijas en los tests que dependen de la máquina.** `ExportacionMasivaTest` espera
+    hasta 20 s a que el notificador EDO llene la cohorte, y con la máquina cargada —construyendo la
+    guía en paralelo— ese test falló una vez por tiempo agotado. Aislado y con la máquina libre, la
+    suite pasa entera. Es deuda conocida: una espera por reloj es una apuesta sobre el hardware, y lo
+    correcto sería esperar por una señal del propio sistema.
+16. **Los siete workflows están reproducidos en local, no vistos en verde en GitHub.** Cada puerta se
+    ha ejecutado aquí con la misma orden que ejecuta la CI (tabla en *Estado actual*), pero **la
+    ejecución en GitHub necesita el `push`**, que a esta fecha no se ha hecho. `gh` no está instalado
+    en este equipo, así que tampoco se ha podido consultar el estado remoto.
+
 ### Los criterios del hito 2, uno a uno
 
 Cada fila es un ítem del checklist con **la prueba concreta** de que se cumple. «En vivo» significa
@@ -2811,11 +3009,19 @@ contra la pila del `compose` levantada desde el clon limpio, no contra un doble.
 
 ### Cierre del hito
 
-- [ ] **51 — Hito 3 cerrado.**
+- [x] **51 — Hito 3 cerrado.** *(2026-08-12)*
   *Criterio:* el circuito completo con reflejas, doble validación de un crítico y notificación EDO,
   recorrido de extremo a extremo contra el `compose`; una `Subscription` entregando; un `$export`
-  descargado y caducado; los seis workflows en verde; `PLAN.md`, `README.md` y `docs/diseno.md`
+  descargado y caducado; los siete workflows en verde; `PLAN.md`, `README.md` y `docs/diseno.md`
   coherentes; y los aprendizajes transversales como ADR nuevos.
+  *Hecho:* el circuito recorrido contra la pila entera y **con la seguridad puesta**, catorce pasos,
+  de la petición del HIS por MLLP a la cohorte exportada y borrada. La transcripción está abajo, en
+  *Estado actual*. Lo que se llevó la tanda no fue la transcripción, sino **lo que la transcripción
+  destapó**: siete fallos que los 290 tests no veían, cinco de ellos con ADR (`0033`–`0036` y la
+  tercera parte de `0030`) y todos arreglados en rojo→verde. Las puertas de los siete workflows,
+  reproducidas en local, y la guía reconstruida y de vuelta en su línea base (**1 error**, el de la
+  plantilla). El dossier de destilación, en `docs/destilacion.md`: 36 ADR, 22 ficheros de la
+  biblioteca, y las dos aportaciones que venían arrastradas desde el hito 1 y el 2.
 
 ---
 
@@ -3231,3 +3437,24 @@ contra la pila del `compose` levantada desde el clon limpio, no contra un doble.
   desde mayo de 2025 sin sustituto**— van a `interoperabilidad/hl7-v2/`. Con ellas, el refinamiento
   de `MFR_M05` en el recuento de la tabla 0354 y el aviso de que `ca.uhn.hl7v2.llp.HL7Charsets` es
   **de paquete** y no se puede reutilizar desde fuera de HAPI.
+  **Cerrado como dossier el 2026-08-12:** todo lo destilable —estas aportaciones incluidas— está
+  inventariado en `docs/destilacion.md`, ADR por ADR y con el fichero de destino. La biblioteca
+  **sigue sin tocarse**: su curación es otro encargo.
+- **⚠️ Siete fallos que 290 tests no vieron y un recorrido contra el `compose` sí** (ítem 51). Están
+  en la tabla de *Estado actual*, en `adr-0033`–`adr-0036` y en la tercera parte de `adr-0030`. El
+  patrón común merece quedar escrito aparte, porque es la lección más cara del proyecto: **viven en
+  un cruce de configuraciones que ninguna clase de test tenía a la vez** —crítico × seguridad
+  encendida, cualitativo × canal v2, suscripción mal formada × relay compartido, volumen nuevo ×
+  usuario sin privilegios, borrado × traza ya escrita—. Un test elige su configuración; el sistema
+  montado no. Antes de dar por cerrado cualquier módulo con suite verde, conviene **listar las
+  dimensiones de configuración de la suite y mirar qué casillas están vacías**.
+- **⚠️ Y uno de los siete no lo destapó el circuito: lo destapó un test intermitente.** El
+  reconciliador fallaba una vez de cada tres al borrar, porque la traza se escribe después de
+  contestar y competía con el borrado. La tentación es reordenar o reintentar; lo correcto fue
+  preguntar **por qué** estorbaba la traza, y detrás estaba un ajuste de HAPI que llevaba desde el
+  ítem 50 sin hacer nada — `…ReferentialIntegrityOnDeleteDisableForPaths` solo lo consulta
+  `$delete-expunge`. **Un test intermitente es un defecto contando la verdad a medias.**
+- **La comprobación de formato no corre en este equipo.** `palantir-java-format` (dentro de Spotless)
+  no funciona con JDK 25, y aquí no hay un JDK 21 instalado. Se ejecuta dentro de un contenedor
+  `eclipse-temurin:21-jdk` montando el repositorio y la caché de Maven, que es exactamente lo que
+  hace `ci-backend`. Quien retome esto se lo va a encontrar: los tests sí corren con 25.

@@ -8,9 +8,9 @@
 > un sistema técnicamente realista y acotado que atraviese los ejes importantes de interoperabilidad
 > sanitaria sin degenerar en una HCE en miniatura.
 >
-> **Estado:** v1.1 — decisiones cerradas. **Las D1–D20 no se han tocado.** Lo único que cambia
-> respecto de v1.0 son dos correcciones factuales aprendidas construyendo el hito 1.
-> **Última revisión:** 2026-08-06
+> **Estado:** v1.2 — decisiones cerradas. **Las D1–D22 no se han tocado.** Lo único que cambia
+> respecto de v1.0 son correcciones factuales aprendidas construyendo.
+> **Última revisión:** 2026-08-12
 
 ### Cambios sobre v1.0 (2026-08-03)
 
@@ -18,9 +18,12 @@
 |---|---|---|
 | 2026-08-06 | **§2.1 gana la fila `Organization.telecom` / `.address`** ➕ | R5 los elimina y los sustituye por `contact` (`ExtendedContactDetail`). Apareció **al compilar `LaboratorioOrg`**, no leyendo la especificación: un `Organization` copiado de R4 no valida. Verificado contra `hl7.fhir.r5.core@5.0.0` |
 | 2026-08-06 | **§2.1 gana la fila `ConceptMap.source[x]` / `.target[x]` / `element.target.equivalence`** ➕ | R5 los renombra a `sourceScope[x]` / `targetScope[x]` y `relationship`, y cambia los códigos. Apareció **al escribir `catalogo-a-loinc`**. Verificado contra el mismo paquete |
+| **2026-08-12** | **§17 — dos «pendientes» dejan de estarlo** ➕ | La **tabla 0354** se cruzó entre V2.5 y V2.5.1 el 2026-08-06 (`adr-0018`), y la **IG de ÚNICAS** se consultó antes de fijar los `system` (D21: dos adoptados, seis propios). El documento los seguía listando como riesgo abierto |
+| **2026-08-12** | **§17.2 — la aportación a la biblioteca deja de ser una lista suelta** ➕ | Existe `docs/destilacion.md`, el dossier completo de los 36 ADR con su fichero de destino. §17.2 apunta ahí en vez de enumerar dos hallazgos de los muchos que hubo |
 
-Ninguna de las dos reabre una decisión: son del mismo tipo que las filas que ya estaban —diferencias
-de R5 que rompen un mapeo ingenuo desde R4— y solo faltaban por no haberse tropezado aún con ellas.
+Ninguna reabre una decisión: las dos primeras son del mismo tipo que las filas que ya estaban
+—diferencias de R5 que rompen un mapeo ingenuo desde R4— y las dos de 2026-08-12 son
+**actualizaciones de estado**: cosas que el documento daba por pendientes y que se hicieron.
 
 > **Lo que NO cambia, y conviene saber al leer §4.3:** «un *slice* por colegio emisor» en
 > `Practitioner.identifier` **no es realizable** —el discriminador por `system` exige un valor fijo
@@ -917,8 +920,8 @@ disponible.
 |---|---|---|
 | **Estructura interna del CIP-SNS** | Anexo I del RD 183/2004, no contrastado | **Ninguno.** D16 decide no fijar `pattern` |
 | **Especificación MLLP** | Ver §7.1. No archivada | **Ninguno en código** (HAPI lo implementa). Falta fuente citable |
-| **Tabla 0354 de V2.5.1** | Difiere de la de V2.5 | Cruzarla antes de generar código. **Ambas versiones están archivadas**: se hace en local |
-| **IG española ÚNICAS** | No consultada | **Único riesgo de retrabajo.** Mirar **antes** de fijar los `system` (§4.8) |
+| ~~**Tabla 0354 de V2.5.1**~~ | ✅ **Cruzada el 2026-08-06** ➕ | Se contradice **dentro del mismo estándar** (capítulo 2 frente a apéndice A), no solo entre versiones. Manda el capítulo 2 y el canal rechaza lo que no cuadre. `adr-0018` |
+| ~~**IG española ÚNICAS**~~ | ✅ **Consultada el 2026-08-04** ➕ | **D21**: dos `system` adoptados de allí (DNI/NIE y CIP-SNS, por OID del Ministerio) y seis propios, documentados como tales. El retrabajo que temía esta fila no llegó a existir |
 
 ### 17.1. Material a descargar y archivar en `_fuente/` de la biblioteca
 
@@ -955,6 +958,16 @@ Hallazgos de este análisis que **deben integrarse** en `interoperabilidad/hl7-v
 1. **MLLP: las capas 2 y 3 de la trampa documental** (§7.1) — que el documento normativo es un estándar
    de **V3**, y que está **retirado desde mayo de 2025 sin sustituto**.
 2. Al archivar MLLP, anotar en el `LEEME.md` que son **fuentes históricas retiradas**, no vigentes.
+
+> ➕ **2026-08-12 — esta lista se ha quedado corta, y hay dossier.** Construir el sistema produjo
+> **36 ADR**, y estas dos aportaciones son las primeras de una lista mucho más larga. El inventario
+> completo —qué tiene cada ADR de transversal una vez descartado lo específico de HispaLIS, a qué
+> `convenciones.md` o `referencia.md` iría y con qué autoridad— está en
+> [`docs/destilacion.md`](destilacion.md). Las dos de arriba siguen encabezándolo, junto con la tabla
+> 0354 del hito 2.
+>
+> **La biblioteca sigue sin tocarse**, y eso no ha cambiado: su curación es otro encargo y tiene sus
+> propias reglas (CLAUDE.md §5.3).
 
 ---
 
