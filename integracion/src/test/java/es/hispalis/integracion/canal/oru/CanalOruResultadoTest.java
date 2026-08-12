@@ -6,6 +6,7 @@ import es.hispalis.integracion.TestDelMotor;
 import es.hispalis.integracion.arnes.LaboratorioDePrueba;
 import es.hispalis.integracion.arnes.MensajesDePrueba;
 import es.hispalis.integracion.arnes.Volcado;
+import es.hispalis.integracion.fhir.ResultadosCualitativos;
 import es.hispalis.integracion.fhir.SistemasDeIdentificador;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -75,6 +76,66 @@ class CanalOruResultadoTest extends TestDelMotor {
                         resultado.hasPerformer())
                 .as("`Device` no cabe en `performer` en R5, y el aparato no es un facultativo")
                 .isFalse());
+    }
+
+    /**
+     * Un cualitativo <strong>codificado</strong> llega codificado, y de eso depende que se declare.
+     *
+     * <p>{@code CE}/{@code CWE} en {@code OBX-2} significa que el analizador mandó un
+     * <em>concepto</em>, no una frase. El motor lo pasaba a {@code valueString} igual que un
+     * {@code ST}, y ahí se perdía el código: el laboratorio guardaba «POS» como descripción, la regla
+     * de declaración obligatoria compara <strong>códigos</strong> y nunca veía un positivo. Resultado
+     * — <strong>una Legionella positiva que entra por el analizador no se declaraba jamás</strong>, y
+     * el circuito entero del ítem 48 solo funcionaba escribiendo por la API.
+     *
+     * <p>Apareció recorriendo el circuito del ítem 51 contra el {@code compose}. Los tests no lo
+     * veían porque el único cualitativo que probaban era texto libre —{@code ST|Negativo}—, que sí
+     * debe guardarse como texto: eso no es un código, es una descripción. Está en {@code adr-0034}.
+     */
+    @Test
+    void un_cualitativo_codificado_conserva_el_codigo_y_su_sistema() {
+        Escenario escenario = prepararMuestra();
+
+        String acuse = elHis().enviar(MensajesDePrueba.oru(
+                "ORU" + escenario.nhc(),
+                escenario.nhc(),
+                escenario.acceso(),
+                "99HISPALIS",
+                "LEGIOAG|CWE|POS^Positivo^99HISPCUAL|"));
+
+        assertThat(codigoDeAcuse(acuse)).as("acuse completo: %s", acuse).isEqualTo("AA");
+        assertThat(LABORATORIO.guardados(Observation.class)).singleElement().satisfies(resultado -> {
+            assertThat(resultado.getValueCodeableConcept().getCodingFirstRep().getCode())
+                    .as("el código es lo que dispara la declaración obligatoria: no puede perderse")
+                    .isEqualTo("POS");
+            assertThat(resultado.getValueCodeableConcept().getCodingFirstRep().getSystem())
+                    .as("un código sin `system` no es un código, es una cadena con suerte")
+                    .isEqualTo(ResultadosCualitativos.SYSTEM);
+        });
+    }
+
+    /**
+     * Y un vocabulario que el motor no conoce no se inventa: se guarda como lo que es, texto.
+     *
+     * <p>Control negativo del anterior. Un serotipo en el diccionario del aparato es un resultado
+     * legítimo que este laboratorio no ha codificado; ponerle un {@code system} nuestro afirmaría una
+     * equivalencia que nadie ha declarado, y descartarlo tiraría el dato.
+     */
+    @Test
+    void un_codigo_de_un_vocabulario_desconocido_se_guarda_como_texto() {
+        Escenario escenario = prepararMuestra();
+
+        elHis().enviar(MensajesDePrueba.oru(
+                "ORU" + escenario.nhc(),
+                escenario.nhc(),
+                escenario.acceso(),
+                "99HISPALIS",
+                "LEGIOAG|CWE|SG7^Serogrupo 7^99AU5800|"));
+
+        assertThat(LABORATORIO.guardados(Observation.class))
+                .singleElement()
+                .extracting(resultado -> resultado.getValueStringType().getValue())
+                .isEqualTo("SG7");
     }
 
     /** Un resultado cualitativo: la mitad de los mapeos ingenuos se rompen aquí. */
