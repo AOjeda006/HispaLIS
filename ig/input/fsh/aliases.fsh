@@ -45,6 +45,15 @@ Alias: $PARTICIPANTE_PROCEDENCIA = http://terminology.hl7.org/CodeSystem/provena
 // —aquí, la ley— exige a partir de un resultado ya emitido.
 Alias: $TIPOS_DE_TAREA = http://hl7.org/fhir/CodeSystem/task-code
 
+// La traza de acceso (`AuditEvent`) y sus cuatro vocabularios estándar. ⚠️ En R5 son otros elementos
+// que en R4: `category`/`code` sustituyen a `type`/`subtype`, y el desenlace pasó de ser un código
+// suelto a un elemento con su `Coding` dentro. Detalle en el perfil `TrazaDeAcceso`.
+Alias: $TIPOS_DE_TRAZA     = http://terminology.hl7.org/CodeSystem/audit-event-type
+Alias: $INTERACCION_REST   = http://hl7.org/fhir/restful-interaction
+Alias: $DESENLACE_DE_TRAZA = http://terminology.hl7.org/CodeSystem/audit-event-outcome
+Alias: $PAPEL_DE_AGENTE    = http://terminology.hl7.org/CodeSystem/extra-security-role-type
+Alias: $PAPEL_DE_OBJETO    = http://terminology.hl7.org/CodeSystem/object-role
+
 // Interpretación de un resultado (`Observation.interpretation`). En una prueba cualitativa dice si el
 // hallazgo es el buscado, que NO es lo mismo que el valor: `POS` interpreta, `ResultadosCualitativos#POS`
 // informa. El primero es del vocabulario común; el segundo, del dialecto del laboratorio.
