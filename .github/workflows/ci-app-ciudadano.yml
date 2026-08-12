@@ -23,7 +23,7 @@ concurrency:
 
 jobs:
   verificar:
-    name: Analyze + tests
+    name: Analyze + tests + empaquetado
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -49,3 +49,35 @@ jobs:
       - name: Tests
         working-directory: app-ciudadano
         run: flutter test
+
+      # `analyze` y `test` no compilan la aplicación: no tocan el `AndroidManifest.xml` ni el
+      # `network_security_config.xml`, que es donde vive el permiso de red en claro contra el
+      # `10.0.2.2` del emulador. Un fallo ahí pasaba las dos puertas y solo aparecía al empaquetar.
+      # Las dos plataformas, porque los dos manifiestos son distintos y fallan por su cuenta.
+      - name: Empaquetar para web
+        working-directory: app-ciudadano
+        run: flutter build web --release
+
+      # Java hace falta para el APK y no para lo anterior; el runner ya trae el SDK de Android.
+      # El 17 no es un número al azar: es el `sourceCompatibility` que declara `app/build.gradle.kts`.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # ⚠️ Y hay que instalar la plataforma a mano. `flutter_secure_storage` compila su módulo contra
+      # `android-37`, que no está en el SDK por defecto; sin ella Gradle muere con «Failed to find
+      # target with hash string 'android-37'». Es exactamente el fallo que este job viene a cazar:
+      # `analyze` y `test` no compilan para Android y lo daban por bueno.
+      - uses: android-actions/setup-android@v3
+
+      - name: La plataforma que exige el almacenamiento seguro
+        run: sdkmanager --install "platforms;android-37"
+
+      # En `release` y no en `debug`, aunque tarde más: es el `AndroidManifest.xml` que se mezcla al
+      # publicar el que importa, y el `build.gradle.kts` ya declara que la firma de release cae en la
+      # clave de depuración —una de verdad no puede vivir en el repositorio—, así que no hace falta
+      # ningún secreto para construirlo.
+      - name: Empaquetar para Android
+        working-directory: app-ciudadano
+        run: flutter build apk --release

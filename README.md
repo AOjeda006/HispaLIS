@@ -403,7 +403,14 @@ Notas de las cadenas de construcción, por si sorprenden:
 `web-profesional`, `app-ciudadano`, `simuladores` y `terminologia`—, **todos filtrados por `paths:`**
 — obligatorio en un monorepo de cuatro *toolchains*, o cada cambio en Flutter recompilaría el backend.
 La IG se valida con el **validador oficial de HL7 contra `hl7.fhir.r5.core@5.0.0`** y se publica a
-GitHub Pages desde `ig/output/`.
+GitHub Pages desde `ig/output/`. La app **se empaqueta** en su workflow (`flutter build web` y
+`flutter build apk`, los dos en `release`): analizar y pasar tests no compila la aplicación, así que
+un fallo del manifiesto o del `network_security_config` no lo veía nadie.
+
+> **El filtrado por rutas cambia cómo se lee el estado de la CI:** un commit solo dispara los
+> workflows de lo que tocó, así que «los siete en verde» no es una propiedad de un commit sino de
+> cada componente en el último commit que le afectó. Quien los quiera todos a la vez, los lanza con
+> `workflow_dispatch`.
 
 ## Desarrollo con agentes
 

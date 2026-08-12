@@ -1751,11 +1751,17 @@ le falta está terminado; uno que lo esconde, no.
 
 **Cliente y pantallas**
 
-10. **La app del ciudadano no se ha ejecutado en un dispositivo.** `flutter analyze` y `flutter test`
-    pasan y el flujo SMART se recorrió con las mismas peticiones que hace la app, pero **nadie ha
-    visto la pantalla** en un emulador ni en un móvil, y `flutter build apk`/`build web` no se han
-    ejecutado: un fallo del manifiesto o del `network_security_config` no lo vería ninguna de las dos
-    puertas de la CI. La trampa del `10.0.2.2` está resuelta en el código y sin comprobar en vivo.
+10. **La app del ciudadano no se ha ejecutado en un dispositivo.** El flujo SMART se recorrió con las
+    mismas peticiones que hace la app, pero **nadie ha visto la pantalla** en un emulador ni en un
+    móvil: no hay constancia de que se pinte bien, de que el navegador embebido del `authorize`
+    vuelva, ni de que la trampa del `10.0.2.2` —resuelta en el código— funcione contra un emulador de
+    verdad. Eso sigue fuera, y ninguna CI lo puede cubrir: hace falta una persona mirando.
+    *Lo que ya no está abierto es la otra mitad:* desde el 2026-08-12 `ci-app-ciudadano` **empaqueta**
+    —`flutter build web --release` y `flutter build apk --release`—, así que un fallo del manifiesto o
+    del `network_security_config` sí lo ve una puerta. La primera ejecución de esa puerta ya cazó uno:
+    `flutter_secure_storage` compila contra `android-37`, que no está en el SDK por defecto, y el
+    empaquetado moría con `Failed to find target with hash string 'android-37'` mientras `analyze` y
+    `test` seguían en verde.
 11. **Ningún cliente llama a `$validar`, ni emite informes, ni gestiona la bandeja de EDO.** Las tres
     operaciones funcionan —ahora también con la seguridad puesta— pero **la web no tiene pantalla**
     para ninguna: el circuito completo solo lo recorre un guion. Es trabajo de pantalla, no de
@@ -1771,11 +1777,20 @@ le falta está terminado; uno que lo esconde, no.
 14. **`spotless` no corre en este equipo con el JDK instalado.** `palantir-java-format` no funciona
     con JDK 25 y aquí no hay un 21; el formato se comprueba **dentro de un contenedor temurin:21**,
     que es lo que hace la CI. Anotado porque quien retome esto se lo va a encontrar.
-15. **Hay esperas fijas en los tests que dependen de la máquina.** `ExportacionMasivaTest` espera
-    hasta 20 s a que el notificador EDO llene la cohorte, y con la máquina cargada —construyendo la
-    guía en paralelo— ese test falló una vez por tiempo agotado. Aislado y con la máquina libre, la
-    suite pasa entera. Es deuda conocida: una espera por reloj es una apuesta sobre el hardware, y lo
-    correcto sería esperar por una señal del propio sistema.
+15. ~~**Hay esperas fijas en los tests que dependen de la máquina.**~~ **Cerrado el 2026-08-12.** No
+    queda ni un `Thread.sleep` en los tests del backend: `EsperaDelSistema` se engancha a
+    `STORAGE_PRECOMMIT_RESOURCE_*` y despierta al test **al confirmarse** la escritura que puede
+    volver cierta lo que espera, y lo que no es una escritura FHIR —el hilo de la exportación y el
+    barrendero— avisa por su cuenta. El plazo que queda es de seguridad: no se agota en verde, y
+    agotarlo significa que algo está colgado.
+    *Lo que destapó el arreglo, y era el defecto de verdad:* cinco clases declaraban su propio
+    `@SpringBootTest` sin repetir `hispalis.edo.habilitado=false`, así que arrancaban con el valor de
+    producción —encendido— y, como **Spring cachea los contextos**, seguían consumiendo el outbox
+    después de terminar. Dos notificadores sobre el mismo desplazamiento: el que llegaba antes se
+    llevaba el hecho y lo **descartaba** con su catálogo, que no declaraba nada. Es la trampa del
+    `@SpringBootTest` propio que `backend/CLAUDE.md` ya documentaba para la seguridad, repetida en dos
+    interruptores más. Con una espera por reloj eso era un rojo cada varias ejecuciones y sin causa
+    visible; con la espera por señal, un rojo con nombre.
 16. **Un monorepo filtrado por `paths:` no tiene «los siete verdes en un commit», y hay que decirlo
     así.** Sobre `5dda172` —el commit que cerró el hito— corrieron **seis** workflows y los seis
     terminaron en verde: `CI · backend` (#25), `CI · integracion` (#8), `CI · IG` (#10, con sus dos
