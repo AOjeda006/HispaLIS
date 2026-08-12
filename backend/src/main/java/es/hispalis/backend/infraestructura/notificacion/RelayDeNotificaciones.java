@@ -73,6 +73,11 @@ public class RelayDeNotificaciones {
     /**
      * La vuelta periódica. Se traga lo que reviente <strong>a propósito</strong>: dejarlo subir solo
      * conseguiría que el planificador registrara la excepción y volviera a llamar igual.
+     *
+     * <p><strong>Con la traza entera</strong>, y eso no es ruido. Lo que llega aquí es lo que nadie
+     * esperaba —un fallo de entrega tiene su propio camino y no pasa por este {@code catch}—, así que
+     * el mensaje solo no sirve: un {@code NullPointerException} sin más se repitió cada dos segundos
+     * durante el circuito del ítem 51 sin decir de dónde salía.
      */
     @Scheduled(
             fixedDelayString = "${hispalis.notificaciones.intervalo:PT2S}",
@@ -81,7 +86,7 @@ public class RelayDeNotificaciones {
         try {
             drenarUnaVez();
         } catch (RuntimeException e) {
-            LOG.warn("La vuelta del relay de notificaciones ha fallado entera; se reintenta. Causa: {}", e.toString());
+            LOG.warn("La vuelta del relay de notificaciones ha fallado entera; se reintenta.", e);
         }
     }
 
@@ -181,10 +186,27 @@ public class RelayDeNotificaciones {
         return eventos.size() <= tope ? eventos : eventos.subList(0, tope);
     }
 
+    /**
+     * Qué clave dice la suscripción que se use. Cadena vacía si no lo dice.
+     *
+     * <p>⚠️ El {@code filter} de los nulos <strong>no es defensa por si acaso</strong>: es el arreglo
+     * de un fallo medido. {@code Subscription.parameter.value} es un {@code string} llamado
+     * {@code value} y <strong>no</strong> un tipo de elección, así que un cliente que copie la forma
+     * de {@code Parameters} y mande {@code valueString} escribe una clave que el parser tira sin
+     * decir nada — y el recurso se guarda con el parámetro puesto y el valor a nulo. Con
+     * {@code map(getValue).findFirst()}, eso es un {@code Optional.of(null)}: un
+     * {@code NullPointerException} que subía hasta el {@code catch} de la vuelta y dejaba
+     * <strong>todas</strong> las suscripciones sin entregar, no solo la mal formada. Ver
+     * {@code adr-0036}.
+     *
+     * <p>Sin clave, {@code EntregaFirmada} se niega a mandar sin firmar y la suscripción se corta con
+     * un motivo legible. El fallo se queda donde nació.
+     */
     private static String identificadorDeClave(Subscription suscripcion) {
         return suscripcion.getParameter().stream()
                 .filter(parametro -> PARAMETRO_DE_CLAVE.equals(parametro.getName()))
                 .map(Subscription.SubscriptionParameterComponent::getValue)
+                .filter(java.util.Objects::nonNull)
                 .findFirst()
                 .orElse("");
     }
