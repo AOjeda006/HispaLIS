@@ -45,6 +45,17 @@ public record ReglaDeDeclaracion(
             throw new DatoInvalido(
                     "La regla de declaración de %s no dice qué enfermedad se declara.".formatted(codigoDePrueba));
         }
+        // Se comprueba aquí y no se deja para la base de datos, y esa diferencia costó un fallo: sin
+        // esta línea, un nombre ausente pasaba el dominio entero y reventaba contra el `NOT NULL` de
+        // la V15 dentro del bucle del notificador, que reintenta cada cinco segundos. El síntoma era
+        // un log repitiendo el nombre de una columna, ninguna declaración abierta, y nada que
+        // señalase al catálogo. Un aviso que nombra el concepto vale mucho más que ese.
+        if (nombreDeLaEnfermedad == null || nombreDeLaEnfermedad.isBlank()) {
+            throw new DatoInvalido(
+                    ("La regla de declaración de %s no dice cómo se llama la enfermedad %s. El nombre lo publica "
+                                    + "`CodeSystem/enfermedades-edo` en el `display` de su concepto.")
+                            .formatted(codigoDePrueba, codigoDeEnfermedad));
+        }
         if (resultadoQueDeclara == null || resultadoQueDeclara.isBlank()) {
             throw new DatoInvalido(
                     ("La regla de declaración de %s no dice con qué resultado se declara. Sin criterio se "

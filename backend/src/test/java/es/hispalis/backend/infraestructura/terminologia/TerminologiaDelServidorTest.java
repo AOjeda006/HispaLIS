@@ -201,6 +201,51 @@ class TerminologiaDelServidorTest {
                 .isFalse();
     }
 
+    /**
+     * El nombre de la enfermedad sale de la ENFERMEDAD, no de quien la señala.
+     *
+     * <p>Esto lo cazó un ensayo en vivo y ningún test: el {@code valueCoding} con el que
+     * {@code catalogo-pruebas} apunta a la enfermedad <strong>no lleva {@code display}</strong> —el FSH
+     * escribe {@code EnfermedadesEdo#LEGIONELOSIS}, que es sistema y código—, así que tomar el nombre de
+     * ahí daba {@code null}. Y un {@code null} ahí no fallaba en el dominio: llegaba hasta el
+     * {@code NOT NULL} de la V15, dentro del bucle del notificador, que reintentaba cada cinco segundos
+     * sin abrir ni una declaración. Por eso el {@code Coding} de este test va deliberadamente pelado.
+     */
+    @Test
+    @DisplayName("el nombre de la enfermedad se lee de su concepto, no del `display` de quien la apunta")
+    void elNombreSaleDeLaEnfermedadYNoDeLaPrueba() {
+        oido.contesta(
+                "$lookup",
+                conPropiedades(
+                        propiedad(
+                                "enfermedad-edo",
+                                new org.hl7.fhir.r5.model.Coding(
+                                        "https://aojeda006.github.io/HispaLIS/fhir/CodeSystem/enfermedades-edo",
+                                        "LEGIONELOSIS",
+                                        null)),
+                        propiedad(
+                                "resultado-que-declara",
+                                new org.hl7.fhir.r5.model.Coding(
+                                        "https://aojeda006.github.io/HispaLIS/fhir/CodeSystem/resultados-cualitativos",
+                                        "POS",
+                                        null)),
+                        propiedad(
+                                "modalidad-declaracion",
+                                new org.hl7.fhir.r5.model.Coding(
+                                        "https://aojeda006.github.io/HispaLIS/fhir/CodeSystem/modalidades-declaracion-edo",
+                                        "URGENTE",
+                                        null)),
+                        propiedad("plazo-horas", new org.hl7.fhir.r5.model.IntegerType(24)),
+                        nombre("Legionelosis")));
+
+        assertThat(terminologia.declaracionDe("LEGIOAG"))
+                .as("una regla sin nombre no se descarta en el dominio: revienta al guardarla")
+                .isPresent()
+                .get()
+                .extracting(regla -> regla.nombreDeLaEnfermedad())
+                .isEqualTo("Legionelosis");
+    }
+
     @Test
     @DisplayName("lo que no se resolvió no se cachea: la respuesta buena posterior tiene que llegar")
     void loNoResueltoNoSeCachea() {
@@ -247,6 +292,13 @@ class TerminologiaDelServidorTest {
             salida.addParameter(propiedad);
         }
         return salida;
+    }
+
+    /** El {@code display} del propio concepto, que es un parámetro suelto y no una propiedad. */
+    private static Parameters.ParametersParameterComponent nombre(String valor) {
+        return new Parameters.ParametersParameterComponent()
+                .setName("display")
+                .setValue(new org.hl7.fhir.r5.model.StringType(valor));
     }
 
     private static Parameters conResultado(boolean resultado) {

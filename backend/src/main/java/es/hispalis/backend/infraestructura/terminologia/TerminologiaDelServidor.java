@@ -191,7 +191,7 @@ public class TerminologiaDelServidor implements Terminologia {
             return Optional.of(new ReglaDeDeclaracion(
                     codigoDePrueba,
                     enfermedad.get().getCode(),
-                    enfermedad.get().getDisplay(),
+                    plazo.get().nombre(),
                     propiedad(salida, "resultado-que-declara")
                             .filter(Coding.class::isInstance)
                             .map(valor -> ((Coding) valor).getCode())
@@ -208,16 +208,30 @@ public class TerminologiaDelServidor implements Terminologia {
         }
     }
 
-    /** Modalidad y ventana, que van juntas o no van: ver {@code EnfermedadesEdo.fsh}. */
-    private record Plazo(ModalidadDeDeclaracion modalidad, Duration ventana) {}
+    /** Nombre, modalidad y ventana: lo que dice de sí misma la enfermedad. Ver {@code EnfermedadesEdo.fsh}. */
+    private record Plazo(String nombre, ModalidadDeDeclaracion modalidad, Duration ventana) {}
 
     /**
-     * El segundo {@code $lookup}: cuánto tiempo hay para declarar esta enfermedad.
+     * El segundo {@code $lookup}: cómo se llama esta enfermedad y cuánto tiempo hay para declararla.
      *
      * <p>Una modalidad que el catálogo publique y este código no conozca <strong>no se inventa</strong>:
      * se avisa y la declaración no se abre. Traducirla a «ordinaria por defecto» daría siete días a
      * algo que la norma quizá quiere en veinticuatro horas, y ese error no lo detecta nadie hasta que
      * llega la inspección.
+     *
+     * <p>⚠️ <strong>El nombre también sale de aquí, y costó un fallo que ningún test vio.</strong>
+     * Antes se tomaba del {@code display} del {@code valueCoding} con el que {@code catalogo-pruebas}
+     * apunta a la enfermedad — y ese {@code display} <strong>no existe</strong>: el FSH escribe
+     * {@code EnfermedadesEdo#LEGIONELOSIS}, que compila a un {@code Coding} con sistema y código y sin
+     * nombre. El resultado en vivo era una declaración con el nombre a {@code null} que reventaba
+     * contra el {@code NOT NULL} de la V15, dentro del bucle del notificador, que reintentaba cada
+     * cinco segundos y dejaba <strong>todas</strong> las declaraciones sin abrir. Es la misma regla que
+     * ya movió el plazo en el ítem 48: <strong>lo que es de la enfermedad se lee de la enfermedad</strong>,
+     * no de quien la señala. Y sale gratis, porque este {@code $lookup} ya se estaba haciendo.
+     *
+     * <p>Si ni la propia enfermedad publica nombre, se usa su código: un nombre es una comodidad para
+     * quien lee, y perder una declaración obligatoria por no tener etiqueta sería desproporcionado —al
+     * revés que con el plazo, que sí es un parámetro legal y por eso aborta.
      */
     private Optional<Plazo> plazoDe(Coding enfermedad) {
         Parameters entrada = new Parameters();
@@ -228,6 +242,8 @@ public class TerminologiaDelServidor implements Terminologia {
         if (salida.isEmpty()) {
             return Optional.empty();
         }
+        String nombre =
+                texto(salida.get(), "display").filter(valor -> !valor.isBlank()).orElseGet(enfermedad::getCode);
         Optional<String> modalidad = propiedad(salida.get(), "modalidad-declaracion")
                 .filter(Coding.class::isInstance)
                 .map(valor -> ((Coding) valor).getCode());
@@ -238,7 +254,8 @@ public class TerminologiaDelServidor implements Terminologia {
             return Optional.empty();
         }
         try {
-            return Optional.of(new Plazo(ModalidadDeDeclaracion.de(modalidad.get()), Duration.ofHours(horas.get())));
+            return Optional.of(
+                    new Plazo(nombre, ModalidadDeDeclaracion.de(modalidad.get()), Duration.ofHours(horas.get())));
         } catch (IllegalArgumentException desconocida) {
             LOG.warn(
                     "El catálogo declara la modalidad «{}» para «{}» y este laboratorio no la conoce: no se abrirá "
