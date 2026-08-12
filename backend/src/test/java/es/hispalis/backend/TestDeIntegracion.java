@@ -1,10 +1,13 @@
 package es.hispalis.backend;
 
+import ca.uhn.fhir.interceptor.api.IInterceptorService;
 import io.zonky.test.db.postgres.embedded.EmbeddedPostgres;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -55,6 +58,23 @@ import org.springframework.test.context.DynamicPropertySource;
 public abstract class TestDeIntegracion {
 
     private static final EmbeddedPostgres POSTGRES = arrancarPostgres();
+
+    @Autowired
+    private IInterceptorService interceptores;
+
+    /**
+     * Para los tests que comprueban algo que ocurre en otro hilo.
+     *
+     * <p>Vive aquí y no en cada clase porque lo que evita —esperar por reloj— es un defecto que
+     * reaparece cada vez que alguien prueba un efecto asíncrono, y tenerlo a mano es lo que hace que
+     * no se vuelva a escribir un {@code Thread.sleep}. Ver {@link EsperaDelSistema}.
+     */
+    protected EsperaDelSistema espera;
+
+    @BeforeEach
+    protected void engancharLaEspera() {
+        espera = EsperaDelSistema.enganchadaA(interceptores);
+    }
 
     private static final Path EXPORTACIONES = directorioTemporal();
 

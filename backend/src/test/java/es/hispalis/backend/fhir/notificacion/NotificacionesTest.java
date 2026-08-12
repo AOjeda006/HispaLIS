@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import ca.uhn.fhir.context.FhirContext;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import es.hispalis.backend.EsperaDelSistema;
 import es.hispalis.backend.TestDeIntegracion;
 import es.hispalis.backend.fhir.CircuitoDePrueba;
 import es.hispalis.backend.infraestructura.notificacion.EntregaFirmada;
@@ -12,10 +13,10 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
-import java.time.Instant;
 import java.util.List;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.hl7.fhir.r5.model.Bundle;
 import org.hl7.fhir.r5.model.Bundle.BundleType;
@@ -63,7 +64,12 @@ import org.springframework.http.ResponseEntity;
             "hispalis.notificaciones.intervalo=PT0.2S",
             "hispalis.notificaciones.intentos=3",
             "hispalis.notificaciones.espera-entre-intentos=PT0.05S",
-            "hispalis.notificaciones.secretos.his-2026=" + NotificacionesTest.SECRETO
+            "hispalis.notificaciones.secretos.his-2026=" + NotificacionesTest.SECRETO,
+            // Y el notificador EDO, apagado: esta clase declara su propio `@SpringBootTest`,
+            // que oculta el del padre entero. Sin esta línea arranca con el valor de
+            // producción —encendido— y se pone a consumir el outbox que `NotificadorEdoTest`
+            // necesita, con un catálogo que no declara nada: le quita el hecho y lo descarta.
+            "hispalis.edo.habilitado=false"
         })
 class NotificacionesTest extends TestDeIntegracion {
 
@@ -71,8 +77,6 @@ class NotificacionesTest extends TestDeIntegracion {
 
     private static final String TOPICO =
             "https://aojeda006.github.io/HispaLIS/fhir/SubscriptionTopic/resultado-validado";
-    private static final Duration PACIENCIA = Duration.ofSeconds(20);
-
     private static Receptor receptor;
 
     @Autowired
@@ -189,9 +193,13 @@ class NotificacionesTest extends TestDeIntegracion {
         String suscripcion = circuito.crear(suscripcionAlTopico());
         unResultadoValidado();
 
-        Subscription cortada = esperarA(
+        // Quien corta la suscripción es el relay, y para cortarla la escribe: esa escritura es el
+        // aviso. Antes de que exista no hay nada que mirar, y en cuanto existe ya está confirmada.
+        Subscription cortada = espera.aQue(
+                "Subscription",
                 () -> circuito.leer(suscripcion, Subscription.class),
-                leida -> leida.getStatus() == SubscriptionStatusCodes.ERROR);
+                leida -> leida.getStatus() == SubscriptionStatusCodes.ERROR,
+                "que el relay agotara los intentos y cortara la suscripción");
 
         assertThat(cortada.getStatus()).isEqualTo(SubscriptionStatusCodes.ERROR);
         assertThat(receptor.entregas()).hasSizeGreaterThanOrEqualTo(3);
@@ -258,9 +266,11 @@ class NotificacionesTest extends TestDeIntegracion {
         unResultadoValidado();
 
         // La rota se corta con su motivo…
-        Subscription cortada = esperarA(
+        Subscription cortada = espera.aQue(
+                "Subscription",
                 () -> circuito.leer(rota, Subscription.class),
-                leida -> leida.getStatus() == SubscriptionStatusCodes.ERROR);
+                leida -> leida.getStatus() == SubscriptionStatusCodes.ERROR,
+                "que la suscripción mal formada se cortara ella sola");
         SubscriptionStatus estado = (SubscriptionStatus)
                 leerBundle("/fhir/" + rota + "/$status").getEntryFirstRep().getResource();
 
@@ -360,8 +370,13 @@ class NotificacionesTest extends TestDeIntegracion {
         return resultado;
     }
 
+    /** El aviso lo pone el receptor al recibir: no hay nada más exacto que la entrega misma. */
     private String esperarUnaEntrega() {
-        return esperarA(() -> receptor.entregas(), entregas -> !entregas.isEmpty())
+        return EsperaDelSistema.aQueAvisen(
+                        receptor.avisos(),
+                        receptor::entregas,
+                        entregas -> !entregas.isEmpty(),
+                        "que el relay entregara la notificación al receptor")
                 .get(0)
                 .cuerpo();
     }
@@ -372,25 +387,6 @@ class NotificacionesTest extends TestDeIntegracion {
                 .as("%s contestó %s: %s", ruta, respuesta.getStatusCode(), respuesta.getBody())
                 .isEqualTo(HttpStatus.OK);
         return contexto.newJsonParser().parseResource(Bundle.class, respuesta.getBody());
-    }
-
-    /** Sondeo con plazo. El relay entrega desde otro hilo, así que aquí no hay nada a lo que unirse. */
-    private static <T> T esperarA(java.util.function.Supplier<T> mirar, java.util.function.Predicate<T> yaEsta) {
-        Instant limite = Instant.now().plus(PACIENCIA);
-        T ultimo = mirar.get();
-        while (!yaEsta.test(ultimo) && Instant.now().isBefore(limite)) {
-            try {
-                Thread.sleep(50);
-            } catch (InterruptedException interrumpido) {
-                Thread.currentThread().interrupt();
-                break;
-            }
-            ultimo = mirar.get();
-        }
-        assertThat(yaEsta.test(ultimo))
-                .as("se agotó la espera de %s", PACIENCIA)
-                .isTrue();
-        return ultimo;
     }
 
     /** Lo que llegó al otro lado: el cuerpo y las dos cabeceras de la firma. */
@@ -406,6 +402,7 @@ class NotificacionesTest extends TestDeIntegracion {
 
         private final HttpServer servidor;
         private final List<Entrega> recibidas = new CopyOnWriteArrayList<>();
+        private final BlockingQueue<String> avisos = new LinkedBlockingQueue<>();
         private final AtomicInteger respuesta = new AtomicInteger(200);
 
         private Receptor() {
@@ -427,6 +424,9 @@ class NotificacionesTest extends TestDeIntegracion {
 
             intercambio.sendResponseHeaders(respuesta.get(), -1);
             intercambio.close();
+            // El aviso, DESPUÉS de contestar: lo que el test comprueba es lo que el receptor ya tiene
+            // apuntado, y apuntarlo antes de responder no adelantaría nada.
+            avisos.add("una entrega");
         }
 
         String direccion() {
@@ -437,12 +437,17 @@ class NotificacionesTest extends TestDeIntegracion {
             return List.copyOf(recibidas);
         }
 
+        BlockingQueue<String> avisos() {
+            return avisos;
+        }
+
         void queFalle() {
             respuesta.set(500);
         }
 
         void reiniciar() {
             recibidas.clear();
+            avisos.clear();
             respuesta.set(200);
         }
 

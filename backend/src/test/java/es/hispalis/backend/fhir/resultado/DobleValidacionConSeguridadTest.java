@@ -68,7 +68,15 @@ import org.springframework.test.context.DynamicPropertySource;
             "hispalis.seguridad.habilitada=true",
             "hispalis.seguridad.audiencias=" + ServidorDeIdentidadDePruebas.AUDIENCIA,
             "hispalis.seguridad.tiempo-de-espera=PT2S",
-            "hispalis.test.terminologia=propia"
+            "hispalis.test.terminologia=propia",
+            // Y las dos vueltas de fondo, apagadas: esta clase declara su propio
+            // `@SpringBootTest` y ese oculta el del padre ENTERO, así que sin repetirlas se
+            // quedan con el valor de producción —encendidas— y este contexto se pone a
+            // consumir el mismo outbox que el contexto del test que sí las prueba. Spring
+            // cachea los contextos: el de esta clase sigue vivo cuando corre `NotificadorEdoTest`,
+            // le quita el hecho y lo descarta con SU catálogo, que no declara nada.
+            "hispalis.edo.habilitado=false",
+            "hispalis.notificaciones.habilitado=false"
         })
 @Import(DobleValidacionTest.ConLosUmbralesDelCatalogo.class)
 class DobleValidacionConSeguridadTest extends TestDeIntegracion {

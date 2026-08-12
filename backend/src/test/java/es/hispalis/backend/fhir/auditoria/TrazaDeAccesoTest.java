@@ -8,11 +8,8 @@ import ca.uhn.fhir.jpa.api.dao.DaoRegistry;
 import ca.uhn.fhir.rest.api.server.SystemRequestDetails;
 import es.hispalis.backend.TestDeIntegracion;
 import es.hispalis.backend.fhir.CircuitoDePrueba;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
-import java.util.function.Predicate;
-import java.util.function.Supplier;
 import org.hl7.fhir.r5.model.AuditEvent;
 import org.hl7.fhir.r5.model.Bundle;
 import org.hl7.fhir.r5.model.DiagnosticReport;
@@ -54,8 +51,6 @@ import org.springframework.http.ResponseEntity;
  * ítem 48. Por eso los asertos esperan.
  */
 class TrazaDeAccesoTest extends TestDeIntegracion {
-
-    private static final Duration PACIENCIA = Duration.ofSeconds(10);
 
     @Autowired
     private TestRestTemplate rest;
@@ -141,9 +136,11 @@ class TrazaDeAccesoTest extends TestDeIntegracion {
         ResponseEntity<String> fallida = rest.getForEntity("/fhir/Patient/no-existe-este-paciente", String.class);
         assertThat(fallida.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
 
-        List<AuditEvent> trazas = esperarA(
+        List<AuditEvent> trazas = espera.aQue(
+                "AuditEvent",
                 () -> buscar("/fhir/AuditEvent?date=gt" + desde + "&outcome:not=0"),
-                encontradas -> !encontradas.isEmpty());
+                encontradas -> !encontradas.isEmpty(),
+                "que quedara traza del acceso fallido");
         assertThat(trazas.stream().map(traza -> traza.getOutcome().getCode().getCode()))
                 .as("un intento fallido es justo lo que se busca al investigar un incidente")
                 .doesNotContain("0");
@@ -170,9 +167,11 @@ class TrazaDeAccesoTest extends TestDeIntegracion {
         circuito.leer(resultado, Observation.class);
         rest.getForEntity("/fhir/Observation?subject=" + paciente, String.class);
 
-        String todaLaTraza = esperarA(
+        String todaLaTraza = espera.aQue(
+                "AuditEvent",
                 () -> comoTexto(buscar("/fhir/AuditEvent?date=gt" + desde + "&_count=200")),
-                texto -> texto.contains(CircuitoDePrueba.identidadDe(resultado)));
+                texto -> texto.contains(CircuitoDePrueba.identidadDe(resultado)),
+                "que la traza del circuito entero llegara hasta el resultado");
 
         assertThat(todaLaTraza)
                 .doesNotContain(CircuitoDePrueba.APELLIDOS)
@@ -200,9 +199,12 @@ class TrazaDeAccesoTest extends TestDeIntegracion {
 
         rest.getForEntity("/fhir/Patient?identifier=https://aojeda006.github.io/HispaLIS/sid/nhc|" + nhc, String.class);
 
-        List<AuditEvent> trazas = esperarA(
-                () -> buscar("/fhir/AuditEvent?date=gt" + desde + "&_count=200"), encontradas -> encontradas.stream()
-                        .anyMatch(traza -> traza.getAction() == AuditEvent.AuditEventAction.E));
+        List<AuditEvent> trazas = espera.aQue(
+                "AuditEvent",
+                () -> buscar("/fhir/AuditEvent?date=gt" + desde + "&_count=200"),
+                encontradas ->
+                        encontradas.stream().anyMatch(traza -> traza.getAction() == AuditEvent.AuditEventAction.E),
+                "que quedara traza de la búsqueda por NHC");
 
         assertThat(trazas.stream().flatMap(traza -> traza.getEntity().stream()))
                 .as("el criterio es donde va el NHC, y por eso este elemento no se rellena nunca")
@@ -271,9 +273,11 @@ class TrazaDeAccesoTest extends TestDeIntegracion {
     // ─── Andamiaje ──────────────────────────────────────────────────────────
 
     private AuditEvent esperarLaTrazaDe(String recurso, AuditEvent.AuditEventAction accion) {
-        return esperarA(
+        return espera.aQue(
+                        "AuditEvent",
                         () -> buscar("/fhir/AuditEvent?entity=" + recurso + "&action=" + accion.toCode()),
-                        encontradas -> !encontradas.isEmpty())
+                        encontradas -> !encontradas.isEmpty(),
+                        "que quedara traza del acceso " + accion.toCode() + " a " + recurso)
                 .get(0);
     }
 
@@ -292,23 +296,5 @@ class TrazaDeAccesoTest extends TestDeIntegracion {
         return trazas.stream()
                 .map(traza -> contexto.newJsonParser().encodeResourceToString(traza))
                 .reduce("", String::concat);
-    }
-
-    private static <T> T esperarA(Supplier<T> mirar, Predicate<T> yaEsta) {
-        Instant limite = Instant.now().plus(PACIENCIA);
-        T ultimo = mirar.get();
-        while (!yaEsta.test(ultimo) && Instant.now().isBefore(limite)) {
-            try {
-                Thread.sleep(50);
-            } catch (InterruptedException interrumpido) {
-                Thread.currentThread().interrupt();
-                break;
-            }
-            ultimo = mirar.get();
-        }
-        assertThat(yaEsta.test(ultimo))
-                .as("se agotó la espera de %s sin que la traza apareciera", PACIENCIA)
-                .isTrue();
-        return ultimo;
     }
 }

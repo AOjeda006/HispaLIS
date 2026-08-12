@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import ca.uhn.fhir.context.FhirContext;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import es.hispalis.backend.EsperaDelSistema;
 import es.hispalis.backend.TestDeIntegracion;
 import es.hispalis.backend.dominio.edo.ModalidadDeDeclaracion;
 import es.hispalis.backend.dominio.edo.ReglaDeDeclaracion;
@@ -23,10 +24,10 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Predicate;
-import java.util.function.Supplier;
 import org.hl7.fhir.r5.model.Bundle;
 import org.hl7.fhir.r5.model.CodeableConcept;
 import org.hl7.fhir.r5.model.Coding;
@@ -102,8 +103,6 @@ class NotificadorEdoTest extends TestDeIntegracion {
 
     private static final String ESTADOS =
             "https://aojeda006.github.io/HispaLIS/fhir/CodeSystem/estados-declaracion-edo";
-
-    private static final Duration PACIENCIA = Duration.ofSeconds(20);
 
     private static SaludPublica saludPublica;
 
@@ -184,7 +183,11 @@ class NotificadorEdoTest extends TestDeIntegracion {
 
         // Primero se espera a que el intento llegue de verdad al otro lado: comprobar el estado antes
         // de eso miraría la tarea recién abierta y el test pasaría sin haber ejercitado nada.
-        esperarA(() -> loRecibidoSobre(resultado), intentos -> !intentos.isEmpty());
+        EsperaDelSistema.aQueAvisen(
+                saludPublica.avisos(),
+                () -> loRecibidoSobre(resultado),
+                intentos -> !intentos.isEmpty(),
+                "que el notificador llegara a intentar la declaración con el destinatario caído");
 
         Task declaracion = esperarLaDeclaracionEn(resultado, "PENDIENTE");
         assertThat(estadoDe(declaracion))
@@ -360,11 +363,6 @@ class NotificadorEdoTest extends TestDeIntegracion {
     }
 
     /**
-     * Espera a que exista la declaración de un resultado <strong>y</strong> haya llegado al estado que
-     * el test dice. Esperar solo a que exista devolvería la tarea recién abierta, antes de intentar
-     * nada, y todos los tests pasarían mirando el mismo instante.
-     */
-    /**
      * Lo que Salud Pública ha recibido <strong>de este resultado</strong>.
      *
      * <p>Filtrar hace falta: estos tests comparten base de datos y el notificador sigue reintentando
@@ -377,10 +375,20 @@ class NotificadorEdoTest extends TestDeIntegracion {
                 .toList();
     }
 
+    /**
+     * Espera a que exista la declaración de un resultado <strong>y</strong> haya llegado al estado que
+     * el test dice. Esperar solo a que exista devolvería la tarea recién abierta, antes de intentar
+     * nada, y todos los tests pasarían mirando el mismo instante.
+     *
+     * <p>El aviso es la escritura del propio {@code Task}: la declaración se abre y cambia de estado
+     * escribiéndolo, así que no hay estado nuevo que ver sin una escritura antes.
+     */
     private Task esperarLaDeclaracionEn(String resultado, String estado) {
-        return esperarA(
+        return espera.aQue(
+                        "Task",
                         () -> declaracionesDe(resultado),
-                        declaraciones -> declaraciones.size() == 1 && estado.equals(estadoDe(declaraciones.get(0))))
+                        declaraciones -> declaraciones.size() == 1 && estado.equals(estadoDe(declaraciones.get(0))),
+                        "que la declaración de " + resultado + " llegara a " + estado)
                 .get(0);
     }
 
@@ -399,25 +407,6 @@ class NotificadorEdoTest extends TestDeIntegracion {
         return contexto.newJsonParser().parseResource(Bundle.class, respuesta.getBody());
     }
 
-    /** Sondeo con plazo: el notificador trabaja en otro hilo, así que aquí no hay nada a lo que unirse. */
-    private static <T> T esperarA(Supplier<T> mirar, Predicate<T> yaEsta) {
-        Instant limite = Instant.now().plus(PACIENCIA);
-        T ultimo = mirar.get();
-        while (!yaEsta.test(ultimo) && Instant.now().isBefore(limite)) {
-            try {
-                Thread.sleep(50);
-            } catch (InterruptedException interrumpido) {
-                Thread.currentThread().interrupt();
-                break;
-            }
-            ultimo = mirar.get();
-        }
-        assertThat(yaEsta.test(ultimo))
-                .as("se agotó la espera de %s sin que la declaración llegara a su estado", PACIENCIA)
-                .isTrue();
-        return ultimo;
-    }
-
     /**
      * Salud Pública, simulada: un servidor HTTP que acusa, se calla, acusa mal o rechaza.
      *
@@ -428,6 +417,7 @@ class NotificadorEdoTest extends TestDeIntegracion {
 
         private final HttpServer servidor;
         private final List<String> recibidas = new CopyOnWriteArrayList<>();
+        private final BlockingQueue<String> avisos = new LinkedBlockingQueue<>();
         private final AtomicReference<Respuesta> respuesta = new AtomicReference<>(Respuesta.ACUSE);
 
         private enum Respuesta {
@@ -470,6 +460,7 @@ class NotificadorEdoTest extends TestDeIntegracion {
             intercambio.sendResponseHeaders(codigo, salida.length);
             intercambio.getResponseBody().write(salida);
             intercambio.close();
+            avisos.add("un intento de declaración");
         }
 
         String direccion() {
@@ -478,6 +469,10 @@ class NotificadorEdoTest extends TestDeIntegracion {
 
         List<String> recibidas() {
             return List.copyOf(recibidas);
+        }
+
+        BlockingQueue<String> avisos() {
+            return avisos;
         }
 
         void queNoConteste() {
@@ -494,6 +489,7 @@ class NotificadorEdoTest extends TestDeIntegracion {
 
         void reiniciar() {
             recibidas.clear();
+            avisos.clear();
             respuesta.set(Respuesta.ACUSE);
         }
 

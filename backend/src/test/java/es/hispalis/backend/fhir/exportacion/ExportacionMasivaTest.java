@@ -7,9 +7,14 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import es.hispalis.backend.EsperaDelSistema;
 import es.hispalis.backend.TestDeIntegracion;
+import es.hispalis.backend.aplicacion.exportacion.BarrerExportaciones;
+import es.hispalis.backend.aplicacion.exportacion.CerrarExportacion;
 import es.hispalis.backend.dominio.edo.ModalidadDeDeclaracion;
 import es.hispalis.backend.dominio.edo.ReglaDeDeclaracion;
+import es.hispalis.backend.dominio.exportacion.AlmacenDeFicheros;
+import es.hispalis.backend.dominio.exportacion.RepositorioDeExportaciones;
 import es.hispalis.backend.dominio.resultado.ReglaRefleja;
 import es.hispalis.backend.dominio.resultado.UmbralCritico;
 import es.hispalis.backend.fhir.CatalogoDePruebas;
@@ -23,12 +28,13 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.function.Predicate;
-import java.util.function.Supplier;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.stream.Stream;
 import org.hl7.fhir.r5.model.CodeableConcept;
 import org.hl7.fhir.r5.model.Coding;
@@ -102,7 +108,17 @@ class ExportacionMasivaTest extends TestDeIntegracion {
     /** La cohorte que abre el laboratorio al declarar una legionelosis. */
     private static final String COHORTE = "Group/cohorte-legionelosis";
 
-    private static final Duration PACIENCIA = Duration.ofSeconds(20);
+    /**
+     * Los dos avisos que esta clase no puede recibir por una escritura FHIR.
+     *
+     * <p>La exportación deja NDJSON en el disco y cierra su trabajo en el esquema del dominio, y el
+     * barrendero lo retira del mismo sitio: ni una cosa ni la otra pasan por las DAO de HAPI, así que
+     * {@link EsperaDelSistema#aQue} no las ve. El aviso lo ponen ellos mismos, envueltos abajo en
+     * {@link ConElCatalogoEdo}.
+     */
+    static final BlockingQueue<String> EXPORTACIONES_TERMINADAS = new LinkedBlockingQueue<>();
+
+    static final BlockingQueue<String> BARRIDOS = new LinkedBlockingQueue<>();
 
     private static SaludPublicaQueAcusa saludPublica;
     private static Path directorio;
@@ -317,10 +333,15 @@ class ExportacionMasivaTest extends TestDeIntegracion {
                 .as("recién terminada la exportación, el fichero está")
                 .isEqualTo(HttpStatus.OK);
 
-        esperarA(
+        // El plazo lo cuenta el sistema, no el test: se vuelve a mirar tras CADA pasada del
+        // barrendero, que es el único que puede retirar esto. Si el fichero sigue ahí después de una
+        // pasada, es que aún está en plazo; y si el barrendero se hubiera muerto, no habría pasadas.
+        EsperaDelSistema.aQueAvisen(
+                BARRIDOS,
                 () -> rest.exchange(sondeo, HttpMethod.GET, vacia(), String.class)
                         .getStatusCode(),
-                estado -> estado == HttpStatus.NOT_FOUND);
+                estado -> estado == HttpStatus.NOT_FOUND,
+                "que el barrendero retirara la exportación caducada");
 
         assertThat(rest.exchange(descarga, HttpMethod.GET, vacia(), String.class)
                         .getStatusCode())
@@ -399,14 +420,20 @@ class ExportacionMasivaTest extends TestDeIntegracion {
         return circuito.leer(resultado, Observation.class).getSubject().getReference();
     }
 
+    /**
+     * La cohorte la llena el notificador EDO desde otro hilo, y el aviso es <strong>el propio
+     * {@code Group} confirmado</strong>: cuando llega, el miembro está.
+     */
     private void esperarALaCohorteCon(String resultado) {
         String paciente = pacienteDe(resultado);
-        esperarA(
+        espera.aQue(
+                "Group",
                 this::leerLaCohorte,
                 cohorte -> cohorte.isPresent()
                         && cohorte.get().getMember().stream()
                                 .anyMatch(miembro ->
-                                        paciente.equals(miembro.getEntity().getReference())));
+                                        paciente.equals(miembro.getEntity().getReference())),
+                "que la declaración metiera a " + paciente + " en la cohorte de vigilancia");
     }
 
     private Optional<Group> leerLaCohorte() {
@@ -428,10 +455,18 @@ class ExportacionMasivaTest extends TestDeIntegracion {
         return lanzamiento.getHeaders().getFirst(HttpHeaders.CONTENT_LOCATION);
     }
 
+    /**
+     * La exportación no escribe ningún recurso —deja NDJSON en el disco y cierra su trabajo en el
+     * esquema del dominio—, así que el aviso lo pone el <strong>propio ejecutor</strong>, envuelto
+     * abajo: cuando la tarea de fondo termina, hay manifiesto o hay error, y las dos cosas se ven en
+     * el sondeo.
+     */
     private JsonNode esperarAlManifiesto(String sondeo) throws IOException {
-        ResponseEntity<String> terminado = esperarA(
+        ResponseEntity<String> terminado = EsperaDelSistema.aQueAvisen(
+                EXPORTACIONES_TERMINADAS,
                 () -> rest.exchange(sondeo, HttpMethod.GET, vacia(), String.class),
-                respuesta -> respuesta.getStatusCode() != HttpStatus.ACCEPTED);
+                respuesta -> respuesta.getStatusCode() != HttpStatus.ACCEPTED,
+                "que el hilo de exportación terminara el trabajo de " + sondeo);
 
         assertThat(terminado.getStatusCode())
                 .as("el sondeo tenía que acabar en el manifiesto: %s", terminado.getBody())
@@ -507,24 +542,6 @@ class ExportacionMasivaTest extends TestDeIntegracion {
         return new HttpEntity<>(cabeceras);
     }
 
-    private static <T> T esperarA(Supplier<T> mirar, Predicate<T> yaEsta) {
-        Instant limite = Instant.now().plus(PACIENCIA);
-        T ultimo = mirar.get();
-        while (!yaEsta.test(ultimo) && Instant.now().isBefore(limite)) {
-            try {
-                Thread.sleep(50);
-            } catch (InterruptedException interrumpido) {
-                Thread.currentThread().interrupt();
-                break;
-            }
-            ultimo = mirar.get();
-        }
-        assertThat(yaEsta.test(ultimo))
-                .as("se agotó la espera de %s sin que pasara lo que el test esperaba", PACIENCIA)
-                .isTrue();
-        return ultimo;
-    }
-
     /** Salud Pública, que aquí solo tiene que acusar: lo que se prueba es la cohorte, no la declaración. */
     private static final class SaludPublicaQueAcusa {
 
@@ -558,11 +575,56 @@ class ExportacionMasivaTest extends TestDeIntegracion {
         }
     }
 
-    /** El catálogo EDO mínimo: una enfermedad, para que haya cohorte que exportar. */
+    /** El catálogo EDO mínimo —una enfermedad, para que haya cohorte— y los dos avisos de arriba. */
     @TestConfiguration
     static class ConElCatalogoEdo {
 
         private static final Map<String, String> NOMBRES = Map.of("POS", "Positivo", "NEG", "Negativo");
+
+        /**
+         * El mismo hilo único de producción, pero avisando al terminar.
+         *
+         * <p>Envolver el ejecutor y no llamar al caso de uso a mano es lo que mantiene la prueba
+         * honesta: la exportación sigue ocurriendo <strong>de verdad en otro hilo</strong>, con su
+         * {@code 202} y su sondeo, que es la mitad de lo que este test comprueba. Lo único que cambia
+         * es que el test se entera de cuándo acabó en vez de adivinarlo.
+         *
+         * <p>El aviso va en un {@code finally}: una exportación que revienta también termina, y el
+         * sondeo lo cuenta con un error que el test tiene que poder ver.
+         */
+        @Bean
+        @Primary
+        Executor hiloDeExportacionQueAvisa() {
+            Executor unSoloHilo = Executors.newSingleThreadExecutor(tarea -> {
+                Thread hilo = new Thread(tarea, "exportacion-de-prueba");
+                hilo.setDaemon(true);
+                return hilo;
+            });
+            return tarea -> unSoloHilo.execute(() -> {
+                try {
+                    tarea.run();
+                } finally {
+                    EXPORTACIONES_TERMINADAS.add("una exportación ha terminado");
+                }
+            });
+        }
+
+        /** Y el barrendero, igual: cada pasada avisa, la borre o no. */
+        @Bean
+        @Primary
+        BarrerExportaciones barrerAvisandoDeCadaPasada(
+                RepositorioDeExportaciones trabajos, AlmacenDeFicheros almacen, CerrarExportacion cerrar) {
+            return new BarrerExportaciones(trabajos, almacen, cerrar) {
+                @Override
+                public void ejecutar() {
+                    try {
+                        super.ejecutar();
+                    } finally {
+                        BARRIDOS.add("una pasada del barrendero");
+                    }
+                }
+            };
+        }
 
         @Bean
         @Primary

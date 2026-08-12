@@ -5,11 +5,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import ca.uhn.fhir.context.FhirContext;
 import es.hispalis.backend.TestDeIntegracion;
 import es.hispalis.backend.fhir.seguridad.ServidorDeIdentidadDePruebas;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
-import java.util.function.Predicate;
-import java.util.function.Supplier;
 import org.hl7.fhir.r5.model.AuditEvent;
 import org.hl7.fhir.r5.model.Bundle;
 import org.junit.jupiter.api.DisplayName;
@@ -49,11 +46,17 @@ import org.springframework.test.context.DynamicPropertySource;
             "hispalis.bus.habilitado=false",
             "hispalis.seguridad.habilitada=true",
             "hispalis.seguridad.audiencias=" + ServidorDeIdentidadDePruebas.AUDIENCIA,
-            "hispalis.seguridad.tiempo-de-espera=PT2S"
+            "hispalis.seguridad.tiempo-de-espera=PT2S",
+            // Y las dos vueltas de fondo, apagadas: esta clase declara su propio
+            // `@SpringBootTest` y ese oculta el del padre ENTERO, así que sin repetirlas se
+            // quedan con el valor de producción —encendidas— y este contexto se pone a
+            // consumir el mismo outbox que el contexto del test que sí las prueba. Spring
+            // cachea los contextos: el de esta clase sigue vivo cuando corre `NotificadorEdoTest`,
+            // le quita el hecho y lo descarta con SU catálogo, que no declara nada.
+            "hispalis.edo.habilitado=false",
+            "hispalis.notificaciones.habilitado=false"
         })
 class TrazaConTestigoTest extends TestDeIntegracion {
-
-    private static final Duration PACIENCIA = Duration.ofSeconds(10);
 
     private static final ServidorDeIdentidadDePruebas IDENTIDAD = ServidorDeIdentidadDePruebas.elDeSiempre();
 
@@ -81,9 +84,11 @@ class TrazaConTestigoTest extends TestDeIntegracion {
                 IDENTIDAD.testigo("dra.fantasma", "user/Patient.rs", null, LA_QUE_NO_ESTA));
         assertThat(fallida.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
 
-        List<AuditEvent> trazas =
-                esperarA(() -> buscar("/fhir/AuditEvent?date=gt" + desde), encontradas -> encontradas.stream()
-                        .anyMatch(TrazaConTestigoTest::laFirmaLaQueNoEsta));
+        List<AuditEvent> trazas = espera.aQue(
+                "AuditEvent",
+                () -> buscar("/fhir/AuditEvent?date=gt" + desde),
+                encontradas -> encontradas.stream().anyMatch(TrazaConTestigoTest::laFirmaLaQueNoEsta),
+                "que quedara traza del acceso de quien no figura en el directorio");
 
         AuditEvent suya = trazas.stream()
                 .filter(TrazaConTestigoTest::laFirmaLaQueNoEsta)
@@ -123,23 +128,5 @@ class TrazaConTestigoTest extends TestDeIntegracion {
         return encontradas.getEntry().stream()
                 .map(entrada -> (AuditEvent) entrada.getResource())
                 .toList();
-    }
-
-    private static <T> T esperarA(Supplier<T> mirar, Predicate<T> yaEsta) {
-        Instant limite = Instant.now().plus(PACIENCIA);
-        T ultimo = mirar.get();
-        while (!yaEsta.test(ultimo) && Instant.now().isBefore(limite)) {
-            try {
-                Thread.sleep(50);
-            } catch (InterruptedException interrumpido) {
-                Thread.currentThread().interrupt();
-                break;
-            }
-            ultimo = mirar.get();
-        }
-        assertThat(yaEsta.test(ultimo))
-                .as("se agotó la espera de %s sin que la traza apareciera", PACIENCIA)
-                .isTrue();
-        return ultimo;
     }
 }
