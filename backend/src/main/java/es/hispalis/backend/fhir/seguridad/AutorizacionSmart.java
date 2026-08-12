@@ -15,6 +15,7 @@ import java.util.Optional;
 import org.hl7.fhir.r5.model.Group;
 import org.hl7.fhir.r5.model.Observation;
 import org.hl7.fhir.r5.model.Provenance;
+import org.hl7.fhir.r5.model.Subscription;
 
 /**
  * Lo que los <em>scopes</em> del testigo permiten hacer: verbos por tipo de recurso.
@@ -170,8 +171,8 @@ public class AutorizacionSmart extends AuthorizationInterceptor {
         // ⚠️ **Autorizar la operación no autoriza lo que la operación escribe.** `$validar` firma el
         // resultado y escribe **también un `Provenance`** —la constancia de quién firmó— en la misma
         // transacción, y el interceptor comprueba cada recurso que se almacena, en
-        // `STORAGE_PRESTORAGE_RESOURCE_CREATED`. Sin la segunda regla, un testigo con
-        // `user/Observation.u` pasaba la autorización de la operación y se llevaba un `403` al
+        // `STORAGE_PRESTORAGE_RESOURCE_CREATED` y en `…_UPDATED`. Sin la segunda regla, un testigo
+        // con `user/Observation.u` pasaba la autorización de la operación y se llevaba un `403` al
         // escribir la procedencia, con un mensaje que no dice qué recurso lo provocó.
         // `andAllowAllResponsesWithAllResourcesAccess()` **tampoco basta**: eso abre la respuesta,
         // no la escritura. Medido contra HAPI 8.10.1.
@@ -181,7 +182,16 @@ public class AutorizacionSmart extends AuthorizationInterceptor {
         // `$validar` —la web no tiene pantalla de validación—. Apareció al recorrer el circuito v2
         // contra el `compose`.
         //
-        // Conceder la creación de `Provenance` no abre ninguna puerta: lo que se escribe es efecto
+        // ⚠️ Y **`write()`, no `create()`**, por la misma trampa una segunda vez. La primera firma da
+        // de alta una procedencia; la segunda hace que `ValidarResultado` **reescriba las que ya
+        // había**, así que llega al interceptor como una modificación. Con la regla en `create()`,
+        // un crítico dejaba poner la primera firma y **no la segunda**: se quedaba en `preliminary`
+        // para siempre y fuera de todo informe. Lo destapó el circuito del ítem 51 contra el
+        // `compose`; los tests no, porque el que enciende la seguridad corría con un catálogo sin
+        // umbrales críticos y allí una firma basta. Está en `adr-0033` y lo prueba
+        // `DobleValidacionConSeguridadTest`.
+        //
+        // Conceder la escritura de `Provenance` no abre ninguna puerta: lo que se escribe es efecto
         // de un acto ya autorizado, y desde fuera no se puede escribir uno —`ProveedorDeProcedencia`
         // rechaza `POST` y `PUT`, el interceptor de transacciones lo protege y los verbos heredados
         // están cerrados—. Hay un test que lo comprueba con este mismo testigo.
@@ -192,9 +202,33 @@ public class AutorizacionSmart extends AuthorizationInterceptor {
                     .onInstancesOfType(Observation.class)
                     .andAllowAllResponses();
             reglas.allow(nombre + " procedencia de la validación")
-                    .create()
+                    .write()
                     .resourcesOfType(Provenance.class)
                     .withAnyId();
+        }
+
+        // `$status` y `$events` son la forma en que un suscriptor mira lo suyo: en qué estado está su
+        // suscripción, por qué falló una entrega y qué números de evento se ha perdido. Las dos son
+        // **lecturas** —`idempotent = true`— y por eso se autorizan con el permiso de leer
+        // `Subscription`, igual que `$validar` se autoriza con el de actualizar `Observation`.
+        //
+        // ⚠️ Sin esto, un cliente con `system/Subscription.crs` **creaba su suscripción y no podía
+        // preguntar por ella**: `403` en `$status`. Y es justo el cliente que más lo necesita, porque
+        // `eventsSinceSubscriptionStart` es lo único que le dice cuánto se perdió mientras estuvo
+        // caído. Otra vez lo mismo que en `adr-0033`: **autorizar el recurso no autoriza la
+        // operación**, aunque la operación no haga más que leerlo. Apareció en el circuito del
+        // ítem 51 contra el `compose`.
+        if (ambito.alcanza("Subscription", Permiso.LEER) || ambito.alcanza("Subscription", Permiso.BUSCAR)) {
+            reglas.allow(nombre + " estado de la suscripción")
+                    .operation()
+                    .named("$status")
+                    .onInstancesOfType(Subscription.class)
+                    .andAllowAllResponses();
+            reglas.allow(nombre + " eventos de la suscripción")
+                    .operation()
+                    .named("$events")
+                    .onInstancesOfType(Subscription.class)
+                    .andAllowAllResponses();
         }
 
         // `$reconciliar` BORRA recursos publicados de cualquier tipo, así que exige exactamente eso:
