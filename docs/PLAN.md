@@ -1650,9 +1650,8 @@ cliente `almacen-analitico` con clave recién generada, le da los dos ámbitos, 
 exige: **nadie tiene los ámbitos de exportación de fábrica**.
 
 **Las puertas de los siete workflows, reproducidas en local** con la misma orden que ejecuta cada
-CI. En GitHub, seis corrieron sobre `5dda172` y las seis en verde; la séptima —`app-ciudadano`— está
-filtrada por `paths:` y su verde vigente es el de `0094350`. El detalle, en la entrada 16 de *Lo que
-queda abierto*:
+CI. En GitHub están las siete en verde, cada una en el commit donde le tocaba correr: la tabla, en la
+entrada 16 de *Lo que queda abierto*.
 
 | Workflow | Puerta | Resultado |
 |---|---|---|
@@ -1795,18 +1794,27 @@ le falta está terminado; uno que lo esconde, no.
     interruptores más. Con una espera por reloj eso era un rojo cada varias ejecuciones y sin causa
     visible; con la espera por señal, un rojo con nombre.
 16. **Un monorepo filtrado por `paths:` no tiene «los siete verdes en un commit», y hay que decirlo
-    así.** Sobre `5dda172` —el commit que cerró el hito— corrieron **seis** workflows y los seis
-    terminaron en verde: `CI · backend` (#25), `CI · integracion` (#8), `CI · IG` (#10, con sus dos
-    jobs, incluido **«Publicar la IG en GitHub Pages»**, que desplegó), `CI · web-profesional` (#8),
-    `CI · simuladores` (#11) y `CI · terminologia` (#7). El séptimo, `CI · app-ciudadano`, **no corre
-    ahí, y que no corra es lo correcto**: está filtrado por `paths:` y en ese commit no cambió nada
-    suyo. Su verde vigente es el de `0094350` (run #3), que incluye `78cee96` — **el único cambio que
-    la app tuvo en todo el hito 3**, así que ese verde cubre el código que hay hoy en el repo.
-    La guía está publicada y navegable en `https://aojeda006.github.io/HispaLIS/`.
-    Lo que queda abierto de aquí no es un pendiente sino una **propiedad del montaje**: el filtrado
-    por rutas es obligatorio (§13.1 del diseño) y su precio es que el estado de la CI se lee por
-    componente y por commit, nunca de un vistazo sobre `HEAD`. Quien quiera los siete a la vez tiene
+    así.** No es un pendiente sino una **propiedad del montaje**: el filtrado por rutas es obligatorio
+    (§13.1 del diseño) y su precio es que el estado de la CI se lee **por componente y por el último
+    commit que le afectó**, nunca de un vistazo sobre `HEAD`. Quien los quiera todos a la vez tiene
     que lanzarlos a mano con `workflow_dispatch`.
+
+    Los siete, cada uno con el commit donde le tocaba correr, y los siete en verde:
+
+    | Workflow | Verde en | Run |
+    |---|---|---|
+    | `CI · backend` | `d37ec19` | #26 |
+    | `CI · app-ciudadano` | `75b93f3` | #5, ya **con el empaquetado dentro** |
+    | `CI · IG` | `5dda172` | #10, con sus dos jobs — incluido «Publicar la IG en GitHub Pages», que desplegó |
+    | `CI · integracion` | `5dda172` | #8 |
+    | `CI · web-profesional` | `5dda172` | #8 |
+    | `CI · simuladores` | `5dda172` | #11 |
+    | `CI · terminologia` | `5dda172` | #7 |
+
+    Las cinco últimas siguen cubriendo el código de hoy porque **desde `5dda172` no se ha tocado nada
+    suyo**: lo único que ha cambiado es `backend/src/test/`, `.github/workflows/ci-app-ciudadano.yml`,
+    `README.md` y `docs/`. La guía está publicada y navegable en
+    `https://aojeda006.github.io/HispaLIS/`.
 
 ### Los criterios del hito 2, uno a uno
 
