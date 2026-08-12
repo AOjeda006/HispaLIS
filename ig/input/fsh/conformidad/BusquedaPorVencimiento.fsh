@@ -61,6 +61,13 @@ podrá es contestar esa pregunta.
 * type = #date
 * expression = "Task.restriction.period.end"
 
+// ⚠️ OBLIGATORIO en cuanto hay `expression`, y es fácil no ponerlo: la invariante `spd-1` de R5 dice
+// «if an expression is present, there SHALL be a processingMode», y sin él el validador oficial da
+// ERROR aunque SUSHI compile sin una queja. Es el heredero de `xpathUsage` de R4, así que quien venga
+// de allí busca un elemento que ya no existe y no echa de menos éste. `normal` es lo que corresponde:
+// se indexa el valor tal cual, sin fonética ni tratamiento aparte.
+* processingMode = #normal
+
 // Los cuatro comparadores de fecha que tienen sentido aquí. `ap` («aproximadamente») se deja fuera a
 // propósito: sobre un plazo legal, «aproximadamente antes del jueves» no significa nada.
 * comparator[0] = #eq

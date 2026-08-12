@@ -27,6 +27,7 @@
   ],
   "type": "date",
   "expression": "Task.restriction.period.end",
+  "processingMode": "normal",
   "comparator": [
     "eq",
     "lt",
