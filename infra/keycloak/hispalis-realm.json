@@ -372,6 +372,24 @@
       "description": "Administración del laboratorio: es lo que exige $reconciliar, que BORRA recursos. Definido para que se pueda conceder, y a propósito sin cliente asignado: dárselo a alguien es un acto administrativo explícito, no una casilla que venía marcada.",
       "protocol": "openid-connect",
       "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "false" }
+    },
+    {
+      "name": "system/Subscription.crs",
+      "description": "Suscribirse a lo que publica el laboratorio: el HIS crea su Subscription y consulta $status y $events. Sin cliente asignado — el hito 3 llegó después que este realm y todavía no hay un cliente permanente del HIS.",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "false" }
+    },
+    {
+      "name": "system/Group.rs",
+      "description": "La mitad «autorización sobre el grupo» de $export (D23). Sin cliente asignado, igual que system/*.cruds. Se pide POR SU NOMBRE: un system/*.rs a secas incluye Group y aun así no basta.",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "false" }
+    },
+    {
+      "name": "system/*.rs",
+      "description": "La otra mitad de $export: leer y buscar todo lo que el NDJSON se lleva. Sin cliente asignado. `infra/fhir/exportar-cohorte.sh` hace el acto administrativo que concede las dos, y las retira al terminar.",
+      "protocol": "openid-connect",
+      "attributes": { "include.in.token.scope": "true", "display.on.consent.screen": "false" }
     }
   ],
 
