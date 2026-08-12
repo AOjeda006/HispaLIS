@@ -1761,7 +1761,10 @@ le falta está terminado; uno que lo esconde, no.
     del `network_security_config` sí lo ve una puerta. La primera ejecución de esa puerta ya cazó uno:
     `flutter_secure_storage` compila contra `android-37`, que no está en el SDK por defecto, y el
     empaquetado moría con `Failed to find target with hash string 'android-37'` mientras `analyze` y
-    `test` seguían en verde.
+    `test` seguían en verde. Y una segunda al instalarla: **el paquete no se llama como el destino de
+    compilación** —Gradle pide `android-37` y Google publica `platforms;android-37.0`, desde que las
+    versiones de Android llevan menor—, así que `sdkmanager --install "platforms;android-37"` termina
+    en error a secas, sin decir que ese paquete no existe.
 11. **Ningún cliente llama a `$validar`, ni emite informes, ni gestiona la bandeja de EDO.** Las tres
     operaciones funcionan —ahora también con la seguridad puesta— pero **la web no tiene pantalla**
     para ninguna: el circuito completo solo lo recorre un guion. Es trabajo de pantalla, no de
