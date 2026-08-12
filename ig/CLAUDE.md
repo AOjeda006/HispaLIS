@@ -24,6 +24,10 @@ respuesta de IA o snippet basado en R4 que se copie sin mirar va a fallar aquí:
 | `Observation.triggeredBy` | no existe | **`0..*`** | El gancho de las pruebas reflejas |
 | `Subscription.criteria` | cadena de búsqueda **dentro** de la suscripción | **no existe** → el criterio es un `SubscriptionTopic` aparte | Cambia el modelo entero, no un elemento |
 | `Subscription.error` | `string` dentro del recurso | **eliminado** → `SubscriptionStatus.error` (`CodeableConcept`), por `$status` | Buscarlo y no encontrarlo invita a inventarse una extensión |
+| `Group.actual` (`boolean 1..1`) | así se llama | **eliminado** → `Group.membership` (`definitional \| conceptual \| enumerated`) | Un `Group` de R4 **no valida**; `description` pasa de `string` a `markdown` |
+| `AuditEvent.type` + `.subtype` | dos `Coding` | **`category` (`CodeableConcept 0..*`) + `code` (`CodeableConcept 1..1`)** | Cambia el nombre y el tipo |
+| `AuditEvent.outcome` + `.outcomeDesc` | código suelto + texto | **`outcome` con `code` (`Coding`) y `detail`** | Un `AuditEvent` de R4 **no valida** en R5 |
+| `AuditEvent.agent.network` | elemento con `address`/`type` | **`agent.network[x]`** (`Reference \| uri \| string`) | Y `entity.type`/`.lifecycle`/`.name`/`.description` desaparecen |
 | `Observation.bodyStructure` | no existe | `0..1 Reference` | |
 | `DiagnosticReport.composition` | no existe | `0..1 Reference` | |
 | `Specimen.combined` / `.role` / `.feature` | no existen | nuevos | |
@@ -105,6 +109,17 @@ El `status` de un recurso de conformidad habla de la madurez de **la definición
 la contiene; lo que dice que esto es una simulación es `experimental = true`, que sigue puesto. Vale
 igual para cualquier artefacto que el servidor **obedezca**, no solo para éste. `docs/adr/adr-0029-…`.
 
+### Un perfil también sirve para PROHIBIR: `0..0` es una regla de verdad
+
+`TrazaDeAcceso` cierra `AuditEvent.entity.query` y `entity.detail` a `0..0`, y no es cosmética: el
+primero guarda la consulta ejecutada **en base64**, que es donde acabaría el número de historia de un
+`GET [base]/Patient?identifier=…` sin que se vea al leer el recurso (`adr-0016`). Escrito así, la
+regla vive en el contrato publicado y no solo en el código del servidor, y el validador oficial la
+comprueba en cada ejemplo.
+
+Es el patrón que conviene recordar: cuando la regla es «esto no puede viajar», el sitio es el perfil
+con `0..0`, no un comentario ni un `if`.
+
 ### Las reglas del laboratorio viven en propiedades de `catalogo-pruebas`
 
 Umbral crítico (43), prueba refleja (45) y declaración obligatoria (47) son **propiedades del
@@ -118,6 +133,30 @@ que no valen por separado** (una refleja sin motivo, un umbral sin unidad, una E
 criterio de positividad de una EDO. **HAPI 8.10 no lo sirve** (`TranslationQuery` no tiene
 `dependency`), así que publicarlo dejaría la regla en un sitio del que el backend no puede leerla.
 Detalle en el comentario de `CatalogoPruebas.fsh` y en `docs/PLAN.md`.
+
+### ⚠️ `Sistema#CODIGO` NO lleva `display`, y nada te lo dice
+
+Escribir `* #LEGIOAG ^property[0].valueCoding = EnfermedadesEdo#LEGIONELOSIS` produce un `Coding` con
+`system` y `code` **y sin nombre**. La forma con nombre lleva el literal detrás:
+`EnfermedadesEdo#LEGIONELOSIS "Legionelosis"`. SUSHI compila las dos sin un aviso y el validador
+oficial da cero errores en las dos, porque un `Coding` sin `display` es perfectamente válido.
+
+Costó un fallo que solo se vio en vivo: el backend leía de ahí el nombre de la enfermedad, sacaba
+`null`, y la declaración obligatoria reventaba contra un `NOT NULL` dentro de un bucle de reintentos
+(`docs/adr/adr-0032-…`). **La regla, que vale para todo el FSH:** de una referencia entre conceptos se
+lee la **identidad** —sistema y código—, y el contenido se le pide al dueño con su propio `$lookup`.
+Poner el `display` «por si acaso» no arregla nada: duplica el nombre en dos sitios que se separan el
+día que la guía renombre algo.
+
+### ⚠️ SUSHI compila; el validador conforma. No son lo mismo
+
+SUSHI comprueba la sintaxis FSH y que los perfiles cuadren. **No comprueba las invariantes de los
+recursos que genera.** El `SearchParameter` de la guía estuvo dos días incumpliendo `spd-1` de R5
+—*«if an expression is present, there SHALL be a processingMode»*— con SUSHI diciendo *0 Errors,
+0 Warnings*. Lo vio el validador oficial, que es exactamente por lo que `ci-ig` lo ejecuta además.
+
+Práctica: un artefacto de conformidad **no está comprobado** hasta que ha pasado por
+`validator_cli.jar`, y eso incluye los que no son ejemplos.
 
 ## ⚠️ Trampas de la cadena de construcción — ya resueltas, no las reabras
 

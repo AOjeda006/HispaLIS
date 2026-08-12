@@ -33,6 +33,11 @@ respuesta de IA o librería basada en R4 que se copie sin mirar va a fallar aqu�
 | `Subscription.criteria` | cadena de búsqueda **dentro** de la suscripción | **no existe** → el criterio es un `SubscriptionTopic` aparte | Cambia el modelo entero, no un elemento |
 | `Subscription.error` | `string` dentro del recurso | **eliminado** → `SubscriptionStatus.error` (`CodeableConcept`), por `$status` | Buscarlo y no encontrarlo invita a inventarse una extensión |
 | `ConceptMap…dependsOn.property` (`uri`) | así se llama | **`dependsOn.attribute`** (`code`) + `ConceptMap.additionalAttribute`, nuevo | Modela «este mapeo solo vale si…»; **HAPI 8.10 no lo sirve** (ver abajo) |
+| `Group.actual` (`boolean 1..1`) | así se llama | **eliminado** → `Group.membership` (`definitional \| conceptual \| enumerated`) | Un `Group` de R4 **no valida** en R5; `description` pasa de `string` a `markdown` |
+| `AuditEvent.type` + `.subtype` (`Coding`) | así se llaman | **`category` (`CodeableConcept 0..*`) + `code` (`CodeableConcept 1..1`)** | Cambia el nombre **y** el tipo de dato |
+| `AuditEvent.outcome` (código) + `.outcomeDesc` | dos elementos | **`outcome` con `code` (`Coding`) y `detail`** | Un `AuditEvent` de R4 **no valida** en R5 |
+| `AuditEvent.agent.network` (`address`/`type`) | elemento con hijos | **`agent.network[x]`** (`Reference \| uri \| string`) | Y `agent.who` pasa a `1..1`; `altId`, `name` y `media` desaparecen |
+| `AuditEvent.entity.type/lifecycle/name/description` | existen | **eliminados**; `source.site` pasa de `string` a `Reference(Location)` | Nuevos: `severity`, `occurred[x]`, `patient`, `encounter`, `authorization` |
 | `Observation.bodyStructure` | no existe | `0..1 Reference` | |
 | `DiagnosticReport.composition` | no existe | `0..1 Reference` | |
 | `Specimen.combined` / `.role` / `.feature` | no existen | nuevos | |
@@ -184,6 +189,46 @@ cambiar esa línea.
 - **La declaración va sin filiación, y es una divergencia consciente del sistema real.** Una EDO de
   verdad la lleva. Aquí van códigos y referencias seudónimas, y el SVEA simulado lo **exige** desde
   el otro lado. Escrito en el perfil, en `SaludPublicaHttp` y en `PLAN.md`.
+
+## La exportación masiva y la traza de acceso (ítems 49 y 50)
+
+- **La cohorte no la compone nadie: se forma sola al declarar.** `ApuntarEnLaCohorte` mete al sujeto
+  del resultado declarado en `Group/cohorte-{enfermedad}`, en la misma transacción que abre la
+  declaración. `ProveedorDeCohorte` cierra `POST` y `PUT`: si el cliente compone la lista, exporta a
+  quien quiera y el «motivo legal real» del diseño (§4.4) se queda en adorno.
+- **Exportar exige `system/Group.rs` Y `system/*.rs`, y el primero por su nombre.** Un `system/*.rs`
+  a secas *incluye* `Group` y aun así no basta: si el comodín valiera, la mitad «autorización sobre
+  el grupo» de la regla no existiría y cualquier cliente de lectura total exportaría. Un testigo de
+  usuario no exporta ni con `user/*.cruds`. Es la forma de la regla de `$reconciliar`, y **el 403 va
+  antes que el 404**: qué cohortes hay es, en sí, información epidemiológica.
+- **Lo que sale va seudonimizado, y es una divergencia consciente del estándar.** Un `$export`
+  conforme entrega el compartimento tal cual. Aquí: sexo, año de nacimiento y municipio INE; sin
+  `meta.profile` —un paciente sin NHC no cumple `PacienteLabES`— y sin `note` en nada, porque un
+  campo de texto escrito con prisa acaba conteniendo el nombre de otro.
+- **Un parámetro no soportado se rechaza con `400`.** Al revés que en la búsqueda normal. Ignorar
+  `_since` devolvería la cohorte entera a quien pidió solo lo nuevo, sin decírselo.
+- **Nada de PHI en la URL ni en el nombre del fichero.** El sondeo va por el id del trabajo y la
+  descarga por un billete opaco; en el disco, una carpeta por trabajo (`adr-0016`).
+- **Caduca, se borra, y el barrendero busca además huérfanos.** Lo que queda en el disco sin trabajo
+  que lo reclame es lo que deja un reinicio a mitad de exportación, y no lo iba a pedir nadie.
+- **La traza se escribe DESPUÉS de contestar**, con `SystemRequestDetails`. Lo primero, por lo mismo
+  que el notificador EDO no bloquea la validación; lo segundo, porque si no, un testigo de solo
+  lectura no dejaría rastro — el que más interesa registrar sería el único sin registrar.
+- **`AuditEvent.entity.query` y `entity.detail` están prohibidos en el perfil**, a `0..0`. El primero
+  guarda la consulta en base64: es donde acabaría el NHC de `GET /fhir/Patient?identifier=…`, y en
+  base64 ni se ve al leer el recurso (`adr-0016`).
+- **En una traza, la referencia es literal SOLO si la ha publicado este servidor.** HAPI comprueba la
+  integridad referencial al escribir, así que apuntar a lo que no existe **tumba la traza entera** —y
+  la del acceso fallido es la que más falta hace—. Va literal lo que salió por la respuesta; van
+  lógicas (`type` + `identifier`) `entity.what` de lo que solo se pidió, **`agent.who` siempre** —el
+  `fhirUser` lo afirma el proveedor de identidad, no nosotros— y `source.observer`. Al revés, una
+  traza tampoco puede impedir borrar lo que observó: por eso la integridad al borrar está desactivada
+  **solo** para esos caminos. Todo en `adr-0030`, que apareció dos veces por dos elementos distintos.
+- **⚠️ Y dos trampas más, cada una con su ADR.** Un `read` de una DAO que lanza dentro de una
+  transacción la marca *rollback-only* y **cazar la excepción no lo deshace**: dentro de una
+  transacción, «¿existe esto?» se pregunta **buscando** (`adr-0031`). Y `Sistema#CODIGO` en FSH
+  compila a un `Coding` **sin `display`**, así que leer de ahí un nombre da `null` — lo que es de un
+  concepto se pide con el `$lookup` de ese concepto (`adr-0032`).
 
 ## Invariantes de negocio que FHIR no puede expresar (§10)
 

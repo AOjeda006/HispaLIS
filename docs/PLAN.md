@@ -165,6 +165,59 @@ aceptable bajo ninguna de las tres opciones. Si algún día se implementa (a), e
 - **La ventana de huérfano se documenta en la IG**, no se esconde: un `ServiceRequest` sin `Specimen`
   es un estado transitorio legítimo del sistema mientras el reproceso no ha corrido.
 
+### D23 — quién exporta, sobre qué y qué pasa con el fichero (ítems 49 y 50)
+
+**Fecha:** 2026-08-12. **Decidida por el usuario** sobre cuatro preguntas planteadas antes de escribir
+la operación, porque el ítem 49 lo pedía así: *«Bulk Data exige repensar la autorización, no solo
+añadir una operación»*. Las cuatro salieron en la opción recomendada, y las cuatro se sostienen entre
+sí: son una decisión con cuatro caras, no cuatro decisiones sueltas.
+
+| | La pregunta | Lo decidido |
+|---|---|---|
+| 1 | **Quién puede exportar** | Un cliente de **sistema** con **los dos scopes a la vez**: `system/Group.rs` **nombrando a `Group`** y `system/*.rs`. Un `system/*.rs` a secas **no vale** |
+| 2 | **Sobre qué `Group`** | La **cohorte EDO**, que el laboratorio abre él mismo al declarar. De fuera es **de solo lectura** |
+| 3 | **Qué sale en el NDJSON** | Una cohorte **seudonimizada**: sexo, **año** de nacimiento y municipio INE.\* Ni nombre, ni DNI, ni NUHSA, ni NHC |
+| 4 | **Qué pasa con el fichero** | **Caduca**, un barrendero lo borra, y un `DELETE` sobre la URL de sondeo lo borra en el acto |
+
+**(1) Por qué los dos scopes, y por qué `Group` por su nombre.** El consentimiento recurso a recurso
+del ítem 35 no aplica igual aquí: un `GET /fhir/Patient/123` entrega una historia y `$export` entrega
+la población entera de una enfermedad. La regla exige las dos mitades de lo que de verdad ocurre —
+autorización sobre **la cohorte** (que es lo que la IG de Bulk Data pide) y sobre **lo que el fichero
+se lleva**—, y exige que la primera esté escrita con el tipo `Group` delante. Aceptar el comodín
+`system/*.rs` para las dos haría la regla decorativa: quien tuviera lectura general exportaría sin que
+nadie hubiera decidido que podía. Como está, **ningún cliente del *realm* lo tiene de fábrica**, igual
+que `system/*.cruds` de `$reconciliar`.
+
+**(2) Por qué la cohorte EDO y no un `Group` que se pueda pedir.** Las tres formas de gobernar un
+`Group` que describe la IG de Bulk Data son de solo lectura, por miembros o por criterio; aquí se toma
+la primera y el laboratorio es quien la llena, en la transacción de la declaración. Dejar que un
+cliente componga la cohorte convertiría `$export` en una consulta arbitraria sobre toda la base: quien
+elige a los miembros elige qué se lleva. Y **qué cohortes hay es, en sí mismo, información
+epidemiológica**, así que el `403` va antes que el `404` — si el servidor contestara «no existe» a
+quien no está autorizado, se podrían averiguar las enfermedades del laboratorio probando nombres.
+
+**(3) Por qué seudonimizada, aunque Bulk Data no lo exija.** El destinatario verosímil de esto es
+vigilancia epidemiológica o investigación, y ninguno de los dos necesita saber quién es cada quién.
+El exportador **no filtra campos: construye un `Patient` nuevo** desde una lista blanca, que es la
+diferencia entre olvidarse de quitar algo y no tener por dónde colarlo. La fecha de nacimiento se
+recorta al **año**: el día y el mes son un cuasi-identificador y no cambian ninguna curva epidémica.
+
+\* **El municipio, hoy, no llega** — y no por el exportador, que lo copiaría: la proyección no guarda
+la dirección porque el agregado del dominio no la modela. Comprobado en vivo. Está en *Notas /
+riesgos*, porque sin municipio una cohorte de vigilancia no permite dibujar un mapa de casos, que es
+la mitad de para qué existe.
+
+**(4) Por qué las tres formas de borrar, y no una.** `Expires` acota la ventana en la respuesta; el
+barrendero es lo que la hace cierta cuando nadie vuelve a mirar —incluidos los **huérfanos**, ficheros
+en disco sin trabajo detrás—; y el `DELETE` es lo que el estándar define para cancelar. Un NDJSON con
+doscientos pacientes esperando en un disco es exactamente lo que el proyecto lleva dos hitos
+evitando, y *«el servidor de ficheros es el blanco más atractivo de todo el montaje»* es literal en
+las convenciones de Bulk Data.
+
+**Lo que no se negocia en ninguna de las cuatro:** nada de PHI **en la URL de descarga ni en el nombre
+del fichero**. La URL lleva un **billete opaco** (un UUID que no es el del trabajo) y el fichero se
+llama como el tipo de recurso.
+
 ### Decisiones tomadas con lo que solo existe en R5 (ítems 44 y 45)
 
 - **2026-08-09 — El `SubscriptionTopic` vive en la guía Y en el servidor, y una puerta de `ci-ig`
@@ -1439,6 +1492,95 @@ UTF-8, y el emisor recibía una conexión cortada —que parece una caída y no 
 `400` con su motivo, que es la misma regla que ya seguía el receptor del ítem 44: contesta el código
 que corresponde, nunca en silencio.
 
+### Lo masivo y la traza (ítems 49 y 50, 2026-08-12)
+
+**Las dos cosas que más fácil se convierten en una fuga de datos, cerradas.** Una exportación masiva
+por Bulk Data y un registro de auditoría de toda la API — y en las dos, lo que se ha construido con
+cuidado es lo que **no** llevan.
+
+**La autorización se decidió antes de escribir la operación** (D23), porque `$export` no es «una
+operación más»: entrega la población de una enfermedad en un fichero que después vive en un disco.
+
+| | |
+|---|---|
+| El rojo | `db89c0e` |
+| Quién exporta | `system/Group.rs` **y** `system/*.rs`, los dos, desde un cliente de sistema, con `Group` nombrado. Cinco tests de la puerta, incluido `user/*.cruds`, que **no** exporta |
+| El `403` va antes que el `404` | Se comprueba con una cohorte que no existe: qué cohortes hay es información epidemiológica |
+| De dónde sale la cohorte | De declarar. `ApuntarEnLaCohorte` cuelga de `AbrirNotificacionEdo`, en su transacción; de fuera, `422` |
+| El camino del estándar | `202` + `Content-Location` → sondeo (`202` + `X-Progress`, luego `200`) → manifiesto con `transactionTime`, `request`, `requiresAccessToken`, `output`, `deleted`, `error` y `Expires` |
+| Lo que sale | Un `Patient` **construido de nuevo** desde una lista blanca, no uno filtrado: `active`, `gender`, **año** de nacimiento, y el municipio con su código INE — que hoy va vacío porque la proyección no guarda la dirección (*Notas / riesgos*) |
+| Sin PHI en la URL | Un **billete opaco** (`_billete=<uuid>`), y el fichero se llama como el tipo de recurso |
+| El parámetro que no se soporta | **`400`**, no se ignora. Es al revés que en una búsqueda, y lo pide la IG de Bulk Data |
+| El borrado | Tres caminos: `Expires`, barrendero (huérfanos incluidos) y `DELETE`, que borra en el acto |
+
+**Y la traza:** un interceptor con tres enganches —`SERVER_OUTGOING_RESPONSE` para saber qué salió de
+verdad, `SERVER_HANDLE_EXCEPTION` para el desenlace de lo que no salió, `SERVER_PROCESSING_COMPLETED`
+para cerrar—, escrita **después de contestar** y con `SystemRequestDetails`. El perfil `TrazaDeAcceso`
+pone `entity.query` y `entity.detail` a **`0..0`**: la prohibición vive en el contrato publicado, no
+en un comentario del código.
+
+| Comprobación del ítem 50 | Resultado |
+|---|---|
+| La traza está completa | Quién (`agent.who` + `requestor`), qué (`entity.what`), cuándo (`recorded`) y desde dónde (`agent.network[x]`, que en R4 era otra cosa) |
+| No hay PHI | Recorrido el circuito entero —alta, lectura, búsqueda, resultado—, **ninguna** traza contiene apellidos, nombre, DNI, NUHSA ni NHC |
+| Ni el criterio de búsqueda | Se busca **por NHC** y `entity.query` va vacío en todas. No es que se recorte: el perfil no deja dónde ponerlo (`adr-0016`) |
+| El acceso que falla también deja rastro | `outcome:not=0` devuelve las trazas de lo denegado y lo inexistente |
+| Y no la escribe el cliente | `POST /fhir/AuditEvent` → `422` |
+
+**Tres trampas medidas, y las tres eran la misma clase de cosa: el código correcto contra un dato que
+nadie había mirado.**
+
+1. **`adr-0030` — la traza que el servidor se niega a guardar.** HAPI comprueba la integridad
+   referencial **al escribir**, así que un `AuditEvent` que apunta a lo que no existe se rechaza
+   entero: el acceso a un id inventado, que es el que se investiga, era el único que no quedaba
+   registrado. Apareció **dos veces**, en `entity.what` y luego en `agent.who` — el `fhirUser` de
+   quien no está en el directorio—. La regla que cubre las dos: *la referencia es literal solo si la
+   ha publicado este servidor*. Y la otra mitad, al borrar: una traza **no mantiene vivo lo que se
+   limitó a observar**, o el derecho de supresión se vuelve imposible por culpa del registro que
+   existe para respetarlo.
+2. **`adr-0031` — cazar la excepción no deshace el `rollback-only`.** `ApuntarEnLaCohorte` preguntaba
+   si la cohorte existía con un `read` y un `catch`. El `read` de la DAO es `@Transactional`, así que
+   al lanzar condenaba la transacción **antes** de que la excepción llegara al `catch`. El log decía
+   «un caso más, 1 en total» cada 200 ms y en la base de datos no había nada.
+3. **`adr-0032` — el `display` que el FSH no escribe y el `$lookup` no inventa.** Este lo cazó el
+   ensayo en vivo y **no lo veía ningún test**. `EnfermedadesEdo#LEGIONELOSIS` compila a un `Coding`
+   sin `display`, y de ahí salía el nombre de la enfermedad: `null` hasta el `NOT NULL` de la V15,
+   dentro del bucle del notificador, reintentando cada cinco segundos sin abrir ni una declaración. El
+   arreglo es la regla del ítem 48 otra vez: **lo que es de la enfermedad se lee de la enfermedad**.
+
+**El ensayo en vivo, y con qué.** Sin Docker en este equipo, así que **no** es contra el `compose`:
+es el backend **como proceso aparte**, con un **PostgreSQL de verdad**, ficheros en un directorio de
+verdad y `curl` desde fuera del JVM. La terminología la sirvió el propio backend, cargado con los
+`CodeSystem` que produce SUSHI. Con la seguridad apagada, así que la puerta de D23 **no** se ejercitó
+ahí — la prueban los cinco tests de `ExportacionAutorizadaTest` contra un JWKS real.
+
+```
+$export                    -> HTTP 202, Content-Location: …/$export-estado?_jobId=4091f014-…
+sondeo                     -> HTTP 200, Expires: Wed, 12 Aug 2026 00:58:07 GMT
+manifiesto                 -> Observation x1 · Patient x1 · Specimen x1, deleted [] / error []
+Patient.ndjson             -> {"resourceType":"Patient","id":"bf6266e4-…","active":true,
+                              "gender":"female","birthDate":"1971"}
+fugas (nombre/DNI/NUHSA/NHC) en el NDJSON y en las URL -> ninguna
+en el disco                -> <dir>/4091f014-…/{Observation,Patient,Specimen}.ndjson
+_since y _elements         -> HTTP 400 OperationOutcome, «no se ignora a propósito»
+DELETE                     -> HTTP 202, y el sondeo pasa a 404
+caducidad (PT20S + PT5S)   -> a los ~24 s no queda ni la carpeta; el sondeo contesta 404:
+                              «se canceló o se le pasó el plazo de descarga»
+```
+
+| Verificación | Resultado |
+|---|---|
+| Backend | **287 tests**, `BUILD SUCCESS` (eran 263) |
+| SUSHI | 0 errores, 0 avisos · **12 perfiles**, 39 instancias |
+| Puertas de `ci-ig` en local | 12 de 12 perfiles con ejemplo · las 2 copias de conformidad idénticas |
+| Validador oficial de HL7 | **0 errores** sobre los 68 recursos de la guía |
+| `$export` en vivo con `curl` | El bloque de arriba, entero |
+
+⚠️ **Y un error de conformidad que llevaba desde el ítem 48 y solo vio el validador oficial:** el
+`SearchParameter` de la guía incumplía la invariante **`spd-1`** de R5 —*«if an expression is present,
+there SHALL be a processingMode»*—. SUSHI compilaba sin una queja. Arreglado con
+`processingMode = #normal` y recopiada la conformidad del backend.
+
 ### Los criterios del hito 2, uno a uno
 
 Cada fila es un ítem del checklist con **la prueba concreta** de que se cumple. «En vivo» significa
@@ -2463,11 +2605,18 @@ contra la pila del `compose` levantada desde el clon limpio, no contra un doble.
   ítem 35 no aplica igual. Hay que decidir por escrito quién puede exportar, sobre qué `Group` y qué
   se hace con el fichero al terminar — un NDJSON con doscientos pacientes en un disco es exactamente
   lo que el proyecto lleva dos hitos evitando.
+  *✅ Cumplido (2026-08-12, ítem 49):* decidido **antes** de escribir la operación y con las cuatro
+  caras juntas — ver **D23**. Y una que no estaba en la lista y salió al implementarlo: el
+  **seudonimizado se construye, no se filtra**.
 - **`AuditEvent` es el recurso que más fácil se llena de PHI.** Registra quién hizo qué sobre qué, y
   la tentación es guardar «qué» con detalle. El invariante 6 se aplica igual: referencias, no
   volcados, y **nunca el criterio de búsqueda** — que es donde va el número de historia.
+  *✅ Cumplido (2026-08-12, ítem 50):* y no solo en el código: `entity.query` y `entity.detail` están
+  a **`0..0`** en el perfil publicado. Lo que apareció al probarlo es lo contrario de lo que se temía
+  —el problema no fue que la traza llevara de más, sino que **no se dejaba escribir** (`adr-0030`)—.
 - **Imports de `CLAUDE.md` que faltan**, cada uno cuando llegue su ítem:
   `interoperabilidad/bulk-data/convenciones.md` en **`backend/CLAUDE.md`** al empezar `$export`.
+  *✅ Cumplido (2026-08-12, ítem 49):* importado y leído antes de escribir la primera línea.
 - **El `compose` no crece más sin perfiles.** Son once servicios contando los de arranque; el
   receptor de notificaciones y el simulador del SVEA harían trece. A partir de ahí se reparte con
   perfiles de `compose`, y no se quitan *healthchecks*.
@@ -2622,19 +2771,43 @@ contra la pila del `compose` levantada desde el clon limpio, no contra un doble.
 
 ### Lo masivo
 
-- [ ] **49 — `Group` + `$export` (Bulk Data) por SMART Backend Services.**
+- [x] **49 — `Group` + `$export` (Bulk Data) por SMART Backend Services.** *(2026-08-12)*
   *Criterio:* `POST /fhir/Group/{id}/$export` asíncrono con `202` + `Content-Location`, el sondeo del
   estado y NDJSON por tipo de recurso. Lo pide un cliente `system/` **con un scope propio que no
   tiene nadie por defecto** —la misma regla que `system/*.cruds` del ítem 35—. El fichero caduca y se
   borra, y eso se prueba. Nada de PHI en la URL de descarga.
+  *Hecho:* el rojo en el historial (`db89c0e`) y el verde detrás. La autorización, decidida por
+  escrito antes de implementarla (**D23**). La cohorte es un `Group` que el laboratorio **abre él
+  solo al declarar** —`ApuntarEnLaCohorte` cuelga de `AbrirNotificacionEdo`, en su transacción— y que
+  de fuera es de solo lectura (`ProveedorDeCohorte`). `$export` contesta `202` + `Content-Location`;
+  el sondeo contesta `202` con `X-Progress` mientras trabaja y `200` con el manifiesto al terminar
+  —`transactionTime`, `request`, `requiresAccessToken`, `output`, y `deleted`/`error` aunque vengan
+  vacíos—, más `Expires`. Lo que sale es una **cohorte seudonimizada**: `LoQueSaleDeLaCohorte`
+  construye un `Patient` **nuevo** desde una lista blanca (sexo, año de nacimiento, municipio INE), en
+  vez de quitarle campos al original. La URL de descarga lleva un **billete opaco** y el fichero se
+  llama como el tipo de recurso. **Un parámetro no soportado se rechaza con `400`**, que es al revés
+  que en una búsqueda y lo pide la IG de Bulk Data. Caducidad (`PT15M`), barrendero (`PT1M`, huérfanos
+  incluidos) y `DELETE` que borra en el acto. Esquema `exportacion` en la V16. Diez tests del circuito
+  y cinco de la puerta.
 
 ### Trazabilidad
 
-- [ ] **50 — `AuditEvent` completo (justificación de D17).**
+- [x] **50 — `AuditEvent` completo (justificación de D17).** *(2026-08-12)*
   *Criterio:* toda lectura y escritura de la API deja un `AuditEvent` con quién, qué, cuándo y desde
   dónde; **con referencias, nunca con volcados**, y sin el criterio de búsqueda —que es donde va el
   número de historia (`adr-0016`)—. Un test que recorre el circuito y comprueba que la traza está
   completa **y** que no hay PHI en ella.
+  *Hecho:* un interceptor con **tres** enganches, porque hacen falta los tres:
+  `SERVER_OUTGOING_RESPONSE` es el único sitio donde se ve qué salió de verdad,
+  `SERVER_HANDLE_EXCEPTION` el desenlace de lo que no salió, y `SERVER_PROCESSING_COMPLETED` cierra
+  salga como salga. Se escribe **después de contestar** y con `SystemRequestDetails` — sin eso, un
+  testigo de solo lectura no dejaría rastro, que es justo el que más interesa registrar. El perfil
+  `TrazaDeAcceso` **prohíbe** `entity.query` y `entity.detail` a `0..0`: la regla vive en el contrato
+  publicado y no solo en el código. Ocho tests, dos de ellos el aserto del ítem —recorrido el circuito
+  entero, ninguna traza lleva nombre, DNI, NUHSA ni NHC; y una búsqueda **por NHC** deja la traza sin
+  el criterio—. Dos trampas medidas por el camino, las dos con ADR: la traza que el servidor se niega
+  a guardar (`adr-0030`, y su segunda mitad, el `fhirUser` que no está en el directorio) y el
+  `rollback-only` que un `catch` no deshace (`adr-0031`).
 
 ### Cierre del hito
 
@@ -2648,6 +2821,30 @@ contra la pila del `compose` levantada desde el clon limpio, no contra un doble.
 
 ## Notas / riesgos
 
+- **⚠️ El NDJSON exportado NO lleva municipio, aunque D23 lo prevea — y no es culpa del exportador.**
+  `LoQueSaleDeLaCohorte` copia la dirección y su código INE si el `Patient` la tiene, y **no la
+  tiene**: el agregado del dominio no modela la dirección, así que la proyección la descarta al
+  escribir. Comprobado en vivo: se manda un `Patient` con `address.city = Sevilla` y el `GET`
+  posterior lo devuelve sin `address`. La consecuencia práctica es que hoy la cohorte exportada no
+  permite dibujar un mapa de casos, que es la mitad de para qué sirve una cohorte de vigilancia.
+  Arreglarlo es trabajo de **dominio**, no de exportación: hasta que el paciente tenga dirección, esto
+  se queda como está y escrito aquí.
+- **Los NDJSON viven en un disco local, no en MinIO.** El `compose` tiene MinIO y esto no lo usa: un
+  `AlmacenDeFicheros` con dos implementaciones sería lo correcto el día que haya dos backends, porque
+  hoy el que sondea tiene que ser atendido por el mismo proceso que escribió el fichero. Con una sola
+  instancia no se nota, y el barrendero tiene la misma limitación que el notificador EDO y el relay
+  del `outbox`.
+- **⚠️ SUSHI no comprueba las invariantes de los recursos que compila.** El `SearchParameter` del
+  ítem 48 incumplía `spd-1` de R5 —*«if an expression is present, there SHALL be a
+  processingMode»*—, y SUSHI daba 0 errores y 0 avisos durante dos días. Lo vio el **validador
+  oficial**, que es la razón por la que `ci-ig` lo ejecuta además de SUSHI. Regla práctica: *«SUSHI
+  compila, el validador conforma»*, y un artefacto de conformidad que solo ha pasado por SUSHI no
+  está comprobado.
+- **La suite tenía 24 ficheros sin formatear al empezar esta tanda, ocho de ellos ya commiteados**
+  (los del ítem 48). `spotless:check` corre dentro de `verify` y de la CI, así que `ci-backend`
+  habría estado en rojo por formato en el siguiente `push`. Pasado `spotless:apply` y commiteado
+  aparte. **La lección operativa:** el `verify` que cierra un turno hay que leerlo hasta el final —
+  un `grep` de «Tests run» y «BUILD» no ve un fallo de plugin posterior a los tests.
 - **⚠️ HAPI 8.10.1 solo indexa los `SearchParameter` en `active`.** Uno en `draft` se guarda, se
   publica, se lee por la API — y el servidor no lo indexa: la búsqueda contesta `HAPI-0524: Unknown
   search parameter`, sin error y sin aviso. Medido con `javap`: `SearchParameterCanonicalizer`

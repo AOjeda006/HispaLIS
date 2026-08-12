@@ -55,6 +55,11 @@ degenerar en una historia clínica electrónica en miniatura.
 > **doble validación del resultado crítico** —dos firmas de facultativos distintos— y la **detección
 > de enfermedades de declaración obligatoria**, que decide sobre códigos y sin mirar quién es el
 > paciente.
+>
+> **Y lo masivo:** `$export` de Bulk Data sobre la **cohorte de vigilancia** que el laboratorio abre
+> solo al declarar, con NDJSON **seudonimizado** y un fichero que **caduca y se borra**; más un
+> **`AuditEvent` de toda lectura y escritura** que registra quién, qué, cuándo y desde dónde — y ni
+> una palabra más.
 
 ## Arquitectura en tres frases
 
@@ -262,6 +267,55 @@ curl -s -X POST http://localhost:8080/fhir/\$reconciliar \
   -H 'Content-Type: application/fhir+json' \
   -d '{"resourceType":"Parameters","parameter":[{"name":"aplicar","valueBoolean":true}]}' | jq
 ```
+
+**Exportación masiva (Bulk Data).** `$export` no entrega una historia: entrega **la población de una
+enfermedad** en un fichero que después vive en un disco. Por eso la puerta es distinta de la de una
+lectura y hacen falta **los dos permisos a la vez**, desde un cliente de sistema:
+
+```bash
+# `system/Group.rs` Y `system/*.rs`. Con uno solo, 403 — y ningún cliente del realm los trae de fábrica
+curl -s -D - -o /dev/null -X POST http://localhost:8080/fhir/Group/cohorte-legionelosis/\$export \
+  -H "Authorization: Bearer $TESTIGO" -H 'Prefer: respond-async'
+# → 202 Accepted · Content-Location: …/fhir/$export-estado?_jobId=<uuid>
+
+curl -s "$SONDEO" -H "Authorization: Bearer $TESTIGO" | jq   # 202 mientras trabaja, luego el manifiesto
+curl -s "$URL_DEL_OUTPUT" -H "Authorization: Bearer $TESTIGO"  # el NDJSON, por un billete opaco
+curl -s -X DELETE "$SONDEO" -H "Authorization: Bearer $TESTIGO"  # y borrarlo antes de que caduque
+```
+
+Cuatro cosas que conviene saber antes de usarlo, todas deliberadas:
+
+- **La cohorte no la compone el cliente.** Es el `Group` que el laboratorio abre solo al declarar una
+  enfermedad obligatoria; desde fuera es de solo lectura (`POST /fhir/Group` → `422`). Quien elige a
+  los miembros elige qué se lleva.
+- **Lo que sale va seudonimizado**: sexo, **año** de nacimiento y municipio. El exportador **construye
+  un `Patient` nuevo** desde una lista blanca en vez de quitarle campos al original, que es la
+  diferencia entre olvidarse de tapar algo y no tener por dónde colarlo. *(El municipio sale vacío
+  hoy: el dominio no modela la dirección, así que la proyección no la tiene. Ver `docs/PLAN.md` →
+  Notas / riesgos.)*
+- **Un parámetro no soportado se rechaza con `400`.** Al revés que en una búsqueda, y a propósito:
+  ignorar un `_since` devolvería más datos de los que has pedido sin decírtelo.
+- **El fichero caduca (`Expires`, quince minutos), un barrendero lo borra y `DELETE` lo borra ya.**
+  Vive en `HISPALIS_EXPORT_DIR` —en el `compose`, el volumen `exportaciones`— y se lo lleva un
+  `docker compose down -v`.
+
+**Y todo acceso deja traza.** Cada lectura y cada escritura de la API escriben un `AuditEvent`: quién,
+qué, cuándo y desde dónde. **Referencias, nunca volcados**, y **nunca el criterio de búsqueda** — el
+perfil `TrazaDeAcceso` cierra `entity.query` y `entity.detail` a `0..0`, que es justo donde acabaría
+el número de historia de un `GET /fhir/Patient?identifier=…`.
+
+```bash
+# lo que alguien ha mirado de una persona
+curl -s "http://localhost:8080/fhir/AuditEvent?patient=Patient/<id>" -H "Authorization: Bearer $TESTIGO" | jq
+
+# y los accesos que NO salieron bien, que es la mitad que se investiga
+curl -s "http://localhost:8080/fhir/AuditEvent?outcome:not=0" -H "Authorization: Bearer $TESTIGO" | jq
+```
+
+Quien llamó va **por identificador y no por referencia** (`agent:identifier=…|Practitioner/…`): el
+`fhirUser` lo afirma el proveedor de identidad, no este servidor, y con una referencia literal la
+traza de alguien que no figura en el directorio **no se podría guardar** — que es justo la que hay que
+guardar (`adr-0030`).
 
 **La base arranca vacía.** No es un descuido: la pantalla de alta de petición busca al paciente por
 su número de historia y, si no consta, lo da de alta ahí mismo — que es lo que hace el mostrador de
