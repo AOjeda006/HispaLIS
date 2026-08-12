@@ -2,6 +2,7 @@ package es.hispalis.backend.aplicacion.edo;
 
 import ca.uhn.fhir.jpa.api.dao.DaoRegistry;
 import ca.uhn.fhir.rest.api.server.SystemRequestDetails;
+import es.hispalis.backend.aplicacion.exportacion.ApuntarEnLaCohorte;
 import es.hispalis.backend.dominio.edo.CatalogoEdo;
 import es.hispalis.backend.dominio.edo.NotificacionEdo;
 import es.hispalis.backend.dominio.edo.ReglaDeDeclaracion;
@@ -43,6 +44,7 @@ public class AbrirNotificacionEdo {
     private final CatalogoEdo catalogo;
     private final TraductorDeNotificacionEdo traductor;
     private final DestinatarioDeLaDeclaracion destinatario;
+    private final ApuntarEnLaCohorte cohorte;
     private final DaoRegistry daos;
 
     public AbrirNotificacionEdo(
@@ -51,12 +53,14 @@ public class AbrirNotificacionEdo {
             CatalogoEdo catalogo,
             TraductorDeNotificacionEdo traductor,
             DestinatarioDeLaDeclaracion destinatario,
+            ApuntarEnLaCohorte cohorte,
             DaoRegistry daos) {
         this.resultados = resultados;
         this.declaraciones = declaraciones;
         this.catalogo = catalogo;
         this.traductor = traductor;
         this.destinatario = destinatario;
+        this.cohorte = cohorte;
         this.daos = daos;
     }
 
@@ -104,6 +108,10 @@ public class AbrirNotificacionEdo {
                 cuandoSeValido);
         declaraciones.guardar(declaracion);
         proyectar(declaracion);
+        // Y el caso entra en la cohorte de su enfermedad, aquí y no en otro sitio: si la declaración
+        // existe, la cohorte la cuenta. Cualquier hueco entre las dos cosas es el momento en el que
+        // alguien investigando un brote pediría la cohorte y le faltaría un caso.
+        cohorte.ejecutar(declaracion);
 
         // Se traza la enfermedad y el plazo, nunca el caso: un log que atase «legionelosis» a un
         // paciente concreto sería historia clínica en un fichero sin consentimiento.

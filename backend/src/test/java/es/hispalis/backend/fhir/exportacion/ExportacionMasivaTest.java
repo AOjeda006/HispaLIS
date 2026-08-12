@@ -154,8 +154,11 @@ class ExportacionMasivaTest extends TestDeIntegracion {
 
         circuito.validar(resultado);
 
-        Group cohorte = esperarA(this::leerLaCohorte, grupo -> grupo.isPresent() && !grupo.get().getMember().isEmpty())
-                .orElseThrow();
+        // Se espera a ESTE paciente y no a que la cohorte tenga alguien: los tests comparten base de
+        // datos, así que «no vacía» la cumple el caso que dejó el test anterior y esto pasaría sin
+        // haber comprobado nada.
+        esperarALaCohorteCon(resultado);
+        Group cohorte = leerLaCohorte().orElseThrow();
         assertThat(cohorte.getType()).isEqualTo(Group.GroupType.PERSON);
         assertThat(cohorte.getMembership())
                 .as("R5 sustituyó `actual` por `membership`: los miembros están enumerados uno a uno")
@@ -309,17 +312,21 @@ class ExportacionMasivaTest extends TestDeIntegracion {
         JsonNode manifiesto = esperarAlManifiesto(sondeo);
         String descarga = urlDe(manifiesto, "Observation");
 
-        assertThat(rest.exchange(descarga, HttpMethod.GET, vacia(), String.class).getStatusCode())
+        assertThat(rest.exchange(descarga, HttpMethod.GET, vacia(), String.class)
+                        .getStatusCode())
                 .as("recién terminada la exportación, el fichero está")
                 .isEqualTo(HttpStatus.OK);
 
-        esperarA(() -> rest.exchange(sondeo, HttpMethod.GET, vacia(), String.class).getStatusCode(),
+        esperarA(
+                () -> rest.exchange(sondeo, HttpMethod.GET, vacia(), String.class)
+                        .getStatusCode(),
                 estado -> estado == HttpStatus.NOT_FOUND);
 
-        assertThat(rest.exchange(descarga, HttpMethod.GET, vacia(), String.class).getStatusCode())
+        assertThat(rest.exchange(descarga, HttpMethod.GET, vacia(), String.class)
+                        .getStatusCode())
                 .as("un enlace caducado no sirve datos: se vuelve a pedir el manifiesto, y ya no hay")
                 .isEqualTo(HttpStatus.NOT_FOUND);
-        assertThat(ficherosEnDisco())
+        assertThat(ficherosDe(sondeo))
                 .as("y el volcado no se queda en el disco esperando a que alguien se acuerde")
                 .isEmpty();
     }
@@ -341,7 +348,7 @@ class ExportacionMasivaTest extends TestDeIntegracion {
         assertThat(rest.exchange(sondeo, HttpMethod.GET, vacia(), String.class).getStatusCode())
                 .as("después de un DELETE el trabajo no existe, y la norma dice 404")
                 .isEqualTo(HttpStatus.NOT_FOUND);
-        assertThat(ficherosEnDisco()).isEmpty();
+        assertThat(ficherosDe(sondeo)).isEmpty();
     }
 
     // ─── Los bordes ─────────────────────────────────────────────────────────
@@ -398,7 +405,8 @@ class ExportacionMasivaTest extends TestDeIntegracion {
                 this::leerLaCohorte,
                 cohorte -> cohorte.isPresent()
                         && cohorte.get().getMember().stream()
-                                .anyMatch(miembro -> paciente.equals(miembro.getEntity().getReference())));
+                                .anyMatch(miembro ->
+                                        paciente.equals(miembro.getEntity().getReference())));
     }
 
     private Optional<Group> leerLaCohorte() {
@@ -447,8 +455,19 @@ class ExportacionMasivaTest extends TestDeIntegracion {
         return todo.toString();
     }
 
-    private List<Path> ficherosEnDisco() throws IOException {
-        try (Stream<Path> rutas = Files.walk(directorio)) {
+    /**
+     * Lo que queda en el disco <strong>de esta exportación</strong>.
+     *
+     * <p>Acotado al trabajo y no a la carpeta entera: los tests de esta clase comparten directorio y
+     * corren seguidos, así que un recuento global mediría los ficheros del vecino —que todavía están en
+     * plazo— y este test fallaría por algo que no es suyo.
+     */
+    private List<Path> ficherosDe(String sondeo) throws IOException {
+        Path carpeta = directorio.resolve(sondeo.substring(sondeo.indexOf("_jobId=") + "_jobId=".length()));
+        if (!Files.exists(carpeta)) {
+            return List.of();
+        }
+        try (Stream<Path> rutas = Files.walk(carpeta)) {
             return rutas.filter(Files::isRegularFile).toList();
         }
     }
@@ -553,7 +572,9 @@ class ExportacionMasivaTest extends TestDeIntegracion {
                 @Override
                 public CodeableConcept pruebaDelCatalogo(String codigoLocal) {
                     return new CodeableConcept()
-                            .addCoding(new Coding().setSystem(CatalogoDePruebas.SYSTEM).setCode(codigoLocal));
+                            .addCoding(new Coding()
+                                    .setSystem(CatalogoDePruebas.SYSTEM)
+                                    .setCode(codigoLocal));
                 }
 
                 @Override

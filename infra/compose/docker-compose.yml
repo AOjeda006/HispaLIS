@@ -297,6 +297,16 @@ services:
       # resultado se valida igual y la declaración se queda pendiente. Levantar el perfil es lo que
       # cierra el circuito, no lo que lo permite.
       HISPALIS_EDO_DESTINO: 'http://svea:8091/declaraciones'
+      # Dónde viven los NDJSON de `$export` mientras existen. Se declara aunque coincida con el
+      # valor por defecto, porque abajo hay un volumen montado justo ahí y las dos líneas tienen que
+      # decir lo mismo: el proceso corre como `hispalis` (UID 10001) y no puede crear directorios
+      # bajo `/var/lib`, así que sin el volumen la primera exportación fallaría al escribir.
+      HISPALIS_EXPORT_DIR: /var/lib/hispalis/exportaciones
+    volumes:
+      # Un volumen y no un `tmpfs`: un fichero a medio descargar no debe desaparecer porque el
+      # contenedor se reinicie. Que se borre es trabajo de la caducidad y del barrendero, que son
+      # quienes saben cuándo toca.
+      - exportaciones:/var/lib/hispalis/exportaciones
     ports:
       # Se publica aunque la web no lo necesite —le llega por el proxy—, porque el circuito se
       # recorre con `curl` y el validador oficial también entra por aquí.
@@ -491,3 +501,7 @@ volumes:
   # El índice de texto completo del servidor de terminología. Vive en disco y no en la base, así
   # que sin volumen habría que reindexar en cada arranque — y hasta entonces `$expand` iría vacío.
   datos-terminologia:
+  # Los NDJSON de Bulk Data mientras están en plazo. Es el único volumen de esta pila que contiene
+  # datos de varias personas en un solo fichero, y por eso el que menos tiempo debe durar lleno: la
+  # caducidad son quince minutos y el barrendero pasa cada uno. `docker compose down -v` se lo lleva.
+  exportaciones:

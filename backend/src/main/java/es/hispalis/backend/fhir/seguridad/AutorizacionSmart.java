@@ -1,6 +1,7 @@
 package es.hispalis.backend.fhir.seguridad;
 
 import ca.uhn.fhir.rest.api.server.RequestDetails;
+import ca.uhn.fhir.rest.api.server.SystemRequestDetails;
 import ca.uhn.fhir.rest.server.interceptor.auth.AuthorizationInterceptor;
 import ca.uhn.fhir.rest.server.interceptor.auth.IAuthRule;
 import ca.uhn.fhir.rest.server.interceptor.auth.IAuthRuleBuilder;
@@ -11,6 +12,7 @@ import ca.uhn.fhir.rest.server.interceptor.auth.RuleBuilder;
 import es.hispalis.backend.fhir.seguridad.AmbitoSmart.Permiso;
 import java.util.List;
 import java.util.Optional;
+import org.hl7.fhir.r5.model.Group;
 import org.hl7.fhir.r5.model.Observation;
 import org.hl7.fhir.r5.model.Provenance;
 
@@ -50,6 +52,20 @@ public class AutorizacionSmart extends AuthorizationInterceptor {
     public List<IAuthRule> buildRuleList(RequestDetails peticion) {
         IAuthRuleBuilder reglas = new RuleBuilder();
 
+        // Lo que hace el SERVIDOR por su cuenta no se juzga con los scopes de nadie, porque no hay
+        // nadie: un `SystemRequestDetails` no puede llegar por el cable, es la marca con la que HAPI
+        // dice «esto lo estoy haciendo yo». Es lo que usan el notificador EDO al abrir una
+        // declaración, el reconciliador al reparar y la traza de acceso al levantar acta.
+        //
+        // Sin esta regla, esas tres escrituras se evalúan contra el testigo del hilo en curso —o
+        // contra ninguno, en un hilo de fondo— y se deniegan. Y falla en el peor sentido posible: la
+        // traza del acceso de un testigo de solo lectura sería justo la que no se escribe, así que el
+        // registro quedaría lleno de los accesos inocuos y vacío de los que interesa mirar.
+        if (peticion instanceof SystemRequestDetails) {
+            return reglas.allowAll("operación interna del servidor: no hay cliente al que aplicar scopes")
+                    .build();
+        }
+
         // El `CapabilityStatement` es público: es como un cliente descubre el contrato y dónde está
         // el servidor de autorización. Pedir testigo para leerlo sería pedir que se adivine.
         reglas.allow("descubrimiento").metadata();
@@ -63,9 +79,72 @@ public class AutorizacionSmart extends AuthorizationInterceptor {
         for (AmbitoSmart ambito : testigo.get().ambitos()) {
             aplicar(reglas, ambito);
         }
+        if (puedeExportar(testigo.get())) {
+            permitirLaExportacion(reglas);
+        }
 
         return reglas.denyAll("Los scopes de este testigo no alcanzan a lo que se ha pedido.")
                 .build();
+    }
+
+    /**
+     * Quién puede exportar una cohorte entera.
+     *
+     * <p>Es la única regla del fichero que mira el testigo <strong>completo</strong> y no scope a
+     * scope, porque lo que exige es una <em>combinación</em>: {@code system/Group.rs} y
+     * {@code system/*.rs}, las dos, desde un cliente de sistema. La IG de Bulk Data lo dice así —hacen
+     * falta dos cosas, autorización sobre los recursos y sobre el propio {@code Group}— y aquí tiene el
+     * mismo efecto que la regla de {@code $reconciliar}: <strong>ningún cliente del <em>realm</em> lo
+     * tiene concedido de fábrica</strong>, así que dárselo a alguien es un acto explícito de quien
+     * administra la identidad.
+     *
+     * <p>Un testigo de <strong>usuario</strong> no exporta ni con {@code user/*.cruds}, que es más de
+     * lo que tiene ningún facultativo. No es rigidez: una exportación masiva no es un acto asistencial
+     * —nadie atiende a doscientas personas a la vez— y el consentimiento recurso a recurso del ítem 35
+     * no se le puede aplicar.
+     *
+     * <p><strong>El permiso sobre {@code Group} tiene que pedirse por su nombre.</strong> Un
+     * {@code system/*.rs} a secas <em>incluye</em> {@code Group} y aun así no basta, y es a propósito:
+     * si el comodín valiera, la mitad «autorización sobre el grupo» de la regla no existiría en la
+     * práctica y cualquier cliente de lectura total exportaría sin que nadie lo hubiera decidido.
+     * Escribirlo obliga a que quien emite el testigo sepa que habrá exportaciones.
+     */
+    private static boolean puedeExportar(Testigo testigo) {
+        List<AmbitoSmart> deSistema = testigo.ambitosDe(AmbitoSmart.Contexto.SISTEMA);
+
+        boolean sobreLaCohorte = deSistema.stream()
+                .anyMatch(ambito -> "Group".equals(ambito.tipoDeRecurso()) && ambito.alcanza("Group", Permiso.LEER));
+        boolean sobreTodoLoQueSeLleva = deSistema.stream()
+                .anyMatch(ambito -> ambito.todosLosTipos() && ambito.permisos().contains(Permiso.LEER));
+
+        return sobreLaCohorte && sobreTodoLoQueSeLleva;
+    }
+
+    /**
+     * Las tres puertas de Bulk Data, autorizadas juntas.
+     *
+     * <p>El sondeo y la descarga van {@code onServer()} porque no cuelgan de ningún recurso — el
+     * trabajo no es un recurso FHIR—. Que estén aquí y no sueltas significa que <strong>quien no puede
+     * exportar tampoco puede sondear ni descargar</strong>, que es lo que hay que exigir: el
+     * identificador de un trabajo viaja en una cabecera y en el log de un proxy, y sin esto valdría
+     * como llave.
+     */
+    private static void permitirLaExportacion(IAuthRuleBuilder reglas) {
+        reglas.allow("exportar una cohorte")
+                .operation()
+                .named("$export")
+                .onInstancesOfType(Group.class)
+                .andAllowAllResponses();
+        reglas.allow("sondear la exportación")
+                .operation()
+                .named("$export-estado")
+                .onServer()
+                .andAllowAllResponses();
+        reglas.allow("descargar la exportación")
+                .operation()
+                .named("$export-fichero")
+                .onServer()
+                .andAllowAllResponses();
     }
 
     private static void aplicar(IAuthRuleBuilder reglas, AmbitoSmart ambito) {

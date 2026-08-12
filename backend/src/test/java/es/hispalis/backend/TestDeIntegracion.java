@@ -3,6 +3,8 @@ package es.hispalis.backend;
 import io.zonky.test.db.postgres.embedded.EmbeddedPostgres;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -54,11 +56,25 @@ public abstract class TestDeIntegracion {
 
     private static final EmbeddedPostgres POSTGRES = arrancarPostgres();
 
+    private static final Path EXPORTACIONES = directorioTemporal();
+
     @DynamicPropertySource
     static void apuntarAPostgresEmbebido(DynamicPropertyRegistry registro) {
         registro.add("spring.datasource.url", () -> POSTGRES.getJdbcUrl("postgres", "postgres"));
         registro.add("spring.datasource.username", () -> "postgres");
         registro.add("spring.datasource.password", () -> "postgres");
+        // Las exportaciones van a un temporal y no al directorio de producción, que en un portátil se
+        // traduce a crear `C:\var\lib\…` la primera vez que alguien corre los tests. Quien prueba la
+        // exportación de verdad se apunta al suyo — `ExportacionMasivaTest` lo hace.
+        registro.add("hispalis.exportacion.directorio", EXPORTACIONES::toString);
+    }
+
+    private static Path directorioTemporal() {
+        try {
+            return Files.createTempDirectory("hispalis-tests-exportaciones");
+        } catch (IOException e) {
+            throw new UncheckedIOException("No se pudo preparar el directorio de exportaciones de los tests", e);
+        }
     }
 
     private static EmbeddedPostgres arrancarPostgres() {

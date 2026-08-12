@@ -54,7 +54,15 @@ class ExportacionAutorizadaTest extends TestDeIntegracion {
     /** Los dos permisos, juntos y desde un cliente de sistema. Es el único que abre la puerta. */
     private static final String EL_QUE_EXPORTA = "system/Group.rs system/*.rs";
 
-    private static final String UNA_COHORTE = "/fhir/Group/cohorte-legionelosis/$export";
+    /**
+     * Una cohorte que <strong>no existe y no la abre nadie</strong>, y tiene que ser así.
+     *
+     * <p>Lo que se prueba aquí es la puerta, no la exportación, y usar una cohorte real haría el test
+     * dependiente de qué otra clase haya corrido antes: los tests comparten base de datos, y
+     * `ExportacionMasivaTest` abre la de la legionelosis. Con una que nunca existe, el `404` del último
+     * caso significa exactamente lo que dice — se pasó la autorización— y no «hoy no había datos».
+     */
+    private static final String UNA_COHORTE = "/fhir/Group/cohorte-que-no-abre-nadie/$export";
 
     private static Path directorio;
 
@@ -105,8 +113,7 @@ class ExportacionAutorizadaTest extends TestDeIntegracion {
     @Test
     @DisplayName("un testigo de usuario no exporta ni con permiso total")
     void unUsuarioNoExporta() {
-        String deLaFacultativa =
-                IDENTIDAD.testigo("dra.alvarez", "user/*.cruds", null, "Practitioner/dra-alvarez");
+        String deLaFacultativa = IDENTIDAD.testigo("dra.alvarez", "user/*.cruds", null, "Practitioner/dra-alvarez");
 
         assertThat(lanzar(deLaFacultativa).getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
     }

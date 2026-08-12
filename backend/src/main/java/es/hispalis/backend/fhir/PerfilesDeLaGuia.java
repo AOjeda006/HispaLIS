@@ -24,7 +24,9 @@ public enum PerfilesDeLaGuia {
     FACULTATIVO_LAB("Practitioner", "facultativo-lab"),
     COBERTURA_LAB("Coverage", "cobertura-lab"),
     NOTIFICACION_EDO("Task", "notificacion-edo"),
-    PROCEDENCIA_VALIDACION("Provenance", "procedencia-validacion");
+    PROCEDENCIA_VALIDACION("Provenance", "procedencia-validacion"),
+    COHORTE_VIGILANCIA("Group", "cohorte-vigilancia"),
+    TRAZA_DE_ACCESO("AuditEvent", "traza-de-acceso");
 
     private static final String BASE_CANONICA = "https://aojeda006.github.io/HispaLIS/fhir/StructureDefinition/";
 

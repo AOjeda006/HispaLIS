@@ -1,15 +1,16 @@
 package es.hispalis.backend.infraestructura.edo;
 
 import ca.uhn.fhir.context.FhirContext;
+import ca.uhn.fhir.jpa.api.dao.DaoRegistry;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import es.hispalis.backend.aplicacion.edo.AbrirNotificacionEdo;
 import es.hispalis.backend.aplicacion.edo.DestinatarioDeLaDeclaracion;
 import es.hispalis.backend.aplicacion.edo.EnviarNotificacionEdo;
+import es.hispalis.backend.aplicacion.exportacion.ApuntarEnLaCohorte;
 import es.hispalis.backend.dominio.edo.CatalogoEdo;
 import es.hispalis.backend.dominio.edo.RepositorioDeNotificacionesEdo;
 import es.hispalis.backend.dominio.resultado.RepositorioDeResultados;
 import es.hispalis.backend.fhir.edo.TraductorDeNotificacionEdo;
-import ca.uhn.fhir.jpa.api.dao.DaoRegistry;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -46,8 +47,9 @@ class ConfiguracionEdo {
             CatalogoEdo catalogo,
             TraductorDeNotificacionEdo traductor,
             DestinatarioDeLaDeclaracion destinatario,
+            ApuntarEnLaCohorte cohorte,
             DaoRegistry daos) {
-        return new AbrirNotificacionEdo(resultados, declaraciones, catalogo, traductor, destinatario, daos);
+        return new AbrirNotificacionEdo(resultados, declaraciones, catalogo, traductor, destinatario, cohorte, daos);
     }
 
     @Bean

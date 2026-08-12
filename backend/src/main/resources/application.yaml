@@ -120,6 +120,30 @@ hispalis:
     # queda abierta y, pasado el plazo, vencida y visible. Ver `NotificadorEdo`.
     intentos: 3
 
+  auditoria:
+    # Encendida por defecto. Apagar el registro de quién accede a datos de salud tiene que ser una
+    # decisión escrita, no un valor que falta — y aquí, además, es lo que justifica la trazabilidad
+    # que D17 deja fuera de alcance como certificación pero no como diseño.
+    habilitada: ${HISPALIS_AUDITORIA:true}
+    # Con qué nombre firma este servidor sus trazas. En un SIEM que recoge de varios sistemas, una
+    # traza sin observador no se puede atribuir a ninguno.
+    observador: ${HISPALIS_AUDITORIA_OBSERVADOR:hispalis-backend}
+
+  exportacion:
+    # Bulk Data. Encendida por defecto porque lo que la cierra no es el interruptor, son los scopes:
+    # exportar exige `system/Group.rs` Y `system/*.rs`, que ningún cliente tiene de fábrica.
+    habilitada: ${HISPALIS_EXPORT:true}
+    # Dónde viven los NDJSON mientras existen. Fuera del árbol de la aplicación a propósito: un
+    # volcado de población no se despliega ni se empaqueta con el código.
+    directorio: ${HISPALIS_EXPORT_DIR:/var/lib/hispalis/exportaciones}
+    # Quince minutos. Es tiempo de sobra para descargar y poco para olvidarse: el fichero es el
+    # activo más apetecible de todo el montaje mientras existe.
+    caducidad: PT15M
+    barrido: PT1M
+    # Tope de miembros por cohorte exportada. Sin él, una cohorte que crezca sola acaba siendo una
+    # exportación que tumba la operación asistencial.
+    maximo-de-miembros: 5000
+
   bus:
     # Encendido por defecto: que el laboratorio no publique lo que ya ha apuntado tiene que ser una
     # decisión escrita, no un valor que falta. Con el broker caído no pasa nada — el hecho se queda
