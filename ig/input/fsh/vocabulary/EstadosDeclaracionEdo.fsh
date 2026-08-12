@@ -39,9 +39,13 @@ que devolvió Salud Pública, no una línea de log diciendo que se intentó.
 * #RECHAZADA "Rechazada" "Salud Pública ha contestado que no la admite, con su motivo. Es una respuesta, no un fallo del canal, y por eso no se reintenta sola."
 
 
+// ⚠️ El título NO puede ser el mismo que el del `CodeSystem` de arriba. El IG Publisher lo trata
+// como **error**: «There are multiple resources with the same title […]. This is not allowed because
+// it produces duplicate entries in the table of contents». Es de las pocas cosas que ni SUSHI ni el
+// validador oficial ven, porque no es un problema del recurso sino de la guía que lo publica.
 ValueSet: EstadosDeDeclaracion
 Id: estados-de-declaracion
-Title: "Estados de una declaración a Salud Pública"
+Title: "Estados admitidos en una declaración a Salud Pública"
 Description: """
 Los cuatro de `CodeSystem/estados-declaracion-edo`. Es el conjunto al que enlaza
 `NotificacionEDO.businessStatus`, y el enlace es **`required`**.
