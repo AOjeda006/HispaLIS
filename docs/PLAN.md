@@ -1649,8 +1649,10 @@ cliente `almacen-analitico` con clave recién generada, le da los dos ámbitos, 
 `private_key_jwt` y lo borra en un `trap`. Así el realm versionado conserva la propiedad que D23
 exige: **nadie tiene los ámbitos de exportación de fábrica**.
 
-**Las puertas de los siete workflows, reproducidas en local** (en GitHub corren al empujar; aquí se
-ha ejecutado cada una con la misma orden que ejecuta la CI):
+**Las puertas de los siete workflows, reproducidas en local** con la misma orden que ejecuta cada
+CI. En GitHub, seis corrieron sobre `5dda172` y las seis en verde; la séptima —`app-ciudadano`— está
+filtrada por `paths:` y su verde vigente es el de `0094350`. El detalle, en la entrada 16 de *Lo que
+queda abierto*:
 
 | Workflow | Puerta | Resultado |
 |---|---|---|
@@ -1774,10 +1776,19 @@ le falta está terminado; uno que lo esconde, no.
     guía en paralelo— ese test falló una vez por tiempo agotado. Aislado y con la máquina libre, la
     suite pasa entera. Es deuda conocida: una espera por reloj es una apuesta sobre el hardware, y lo
     correcto sería esperar por una señal del propio sistema.
-16. **Los siete workflows están reproducidos en local, no vistos en verde en GitHub.** Cada puerta se
-    ha ejecutado aquí con la misma orden que ejecuta la CI (tabla en *Estado actual*), pero **la
-    ejecución en GitHub necesita el `push`**, que a esta fecha no se ha hecho. `gh` no está instalado
-    en este equipo, así que tampoco se ha podido consultar el estado remoto.
+16. **Un monorepo filtrado por `paths:` no tiene «los siete verdes en un commit», y hay que decirlo
+    así.** Sobre `5dda172` —el commit que cerró el hito— corrieron **seis** workflows y los seis
+    terminaron en verde: `CI · backend` (#25), `CI · integracion` (#8), `CI · IG` (#10, con sus dos
+    jobs, incluido **«Publicar la IG en GitHub Pages»**, que desplegó), `CI · web-profesional` (#8),
+    `CI · simuladores` (#11) y `CI · terminologia` (#7). El séptimo, `CI · app-ciudadano`, **no corre
+    ahí, y que no corra es lo correcto**: está filtrado por `paths:` y en ese commit no cambió nada
+    suyo. Su verde vigente es el de `0094350` (run #3), que incluye `78cee96` — **el único cambio que
+    la app tuvo en todo el hito 3**, así que ese verde cubre el código que hay hoy en el repo.
+    La guía está publicada y navegable en `https://aojeda006.github.io/HispaLIS/`.
+    Lo que queda abierto de aquí no es un pendiente sino una **propiedad del montaje**: el filtrado
+    por rutas es obligatorio (§13.1 del diseño) y su precio es que el estado de la CI se lee por
+    componente y por commit, nunca de un vistazo sobre `HEAD`. Quien quiera los siete a la vez tiene
+    que lanzarlos a mano con `workflow_dispatch`.
 
 ### Los criterios del hito 2, uno a uno
 
@@ -3019,8 +3030,9 @@ contra la pila del `compose` levantada desde el clon limpio, no contra un doble.
   *Estado actual*. Lo que se llevó la tanda no fue la transcripción, sino **lo que la transcripción
   destapó**: siete fallos que los 290 tests no veían, cinco de ellos con ADR (`0033`–`0036` y la
   tercera parte de `0030`) y todos arreglados en rojo→verde. Las puertas de los siete workflows,
-  reproducidas en local, y la guía reconstruida y de vuelta en su línea base (**1 error**, el de la
-  plantilla). El dossier de destilación, en `docs/destilacion.md`: 36 ADR, 22 ficheros de la
+  reproducidas en local y después **verdes en GitHub** —seis sobre `5dda172` y la de la app sobre
+  `0094350`, que es donde le tocaba correr—, y la guía reconstruida y de vuelta en su línea base
+  (**1 error**, el de la plantilla), desplegada a Pages por su job. El dossier de destilación, en `docs/destilacion.md`: 36 ADR, 22 ficheros de la
   biblioteca, y las dos aportaciones que venían arrastradas desde el hito 1 y el 2.
 
 ---
