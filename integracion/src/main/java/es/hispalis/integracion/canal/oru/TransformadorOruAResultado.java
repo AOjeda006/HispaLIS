@@ -1,10 +1,14 @@
 package es.hispalis.integracion.canal.oru;
 
+import ca.uhn.hl7v2.model.Composite;
+import ca.uhn.hl7v2.model.DataTypeException;
+import ca.uhn.hl7v2.model.Primitive;
 import ca.uhn.hl7v2.model.Varies;
 import ca.uhn.hl7v2.model.v251.datatype.CE;
 import ca.uhn.hl7v2.model.v251.group.ORU_R01_ORDER_OBSERVATION;
 import ca.uhn.hl7v2.model.v251.message.ORU_R01;
 import ca.uhn.hl7v2.model.v251.segment.OBX;
+import es.hispalis.integracion.fhir.ResultadosCualitativos;
 import es.hispalis.integracion.hl7.Campos;
 import es.hispalis.integracion.terminologia.CatalogoDelLaboratorio;
 import es.hispalis.integracion.terminologia.PruebaDelCatalogo;
@@ -181,6 +185,14 @@ public class TransformadorOruAResultado {
                         .setSystem(UCUM)
                         .setCode(medido.unidadUcum())));
         medido.texto().ifPresent(texto -> recurso.setValue(new StringType(texto)));
+        // Y si el analizador mandó un CONCEPTO, sale como concepto. El código es lo que hace que el
+        // laboratorio pueda decidir si esto hay que declararlo; el texto solo sirve para leerlo.
+        medido.codificado()
+                .ifPresent(valor -> recurso.setValue(new CodeableConcept()
+                        .addCoding(new Coding()
+                                .setSystem(valor.sistema())
+                                .setCode(valor.codigo())
+                                .setDisplay(valor.nombre()))));
 
         // De cuándo es la cifra. `Must Support` en el perfil: si llega, se guarda.
         medido.medidoEn().ifPresent(cuando -> recurso.setEffective(new DateTimeType(Date.from(cuando))));
@@ -226,6 +238,7 @@ public class TransformadorOruAResultado {
                     codigoLocal,
                     Optional.of(cifra(valor, codigoLocal)),
                     Optional.empty(),
+                    Optional.empty(),
                     unidadQueCuadre(obx, prueba),
                     cuando);
         }
@@ -233,7 +246,14 @@ public class TransformadorOruAResultado {
             if (valor.isBlank()) {
                 throw new ResultadoInaceptable("El resultado de «%s» viene sin valor en OBX-5.".formatted(codigoLocal));
             }
-            return new ResultadoMedido(codigoLocal, Optional.empty(), Optional.of(valor), null, cuando);
+            Optional<ValorCodificado> codificado = codificadoDe(obx);
+            return new ResultadoMedido(
+                    codigoLocal,
+                    Optional.empty(),
+                    codificado.isPresent() ? Optional.empty() : Optional.of(valor),
+                    codificado,
+                    null,
+                    cuando);
         }
         throw new ResultadoInaceptable(("El tipo de valor «%s» de OBX-2 no está soportado en este canal. Se rechaza en "
                         + "vez de adivinar cómo se guarda.")
@@ -278,7 +298,57 @@ public class TransformadorOruAResultado {
             return "";
         }
         Varies valor = obx.getObservationValue(0);
+        // Un valor codificado es un compuesto y su `toString()` es la codificación entera
+        // —`CWE[POS^Positivo^99HISPCUAL]`—, que no es el valor de nada. El valor es el primer
+        // componente; los otros dos son cómo se lee y de dónde sale.
+        if (valor.getData() instanceof Composite concepto) {
+            return componente(concepto, 0);
+        }
         return valor.getData() == null ? "" : valor.getData().toString().strip();
+    }
+
+    /**
+     * El valor de {@code OBX-5} cuando viene <strong>codificado</strong> y sabemos de qué vocabulario.
+     *
+     * <p>Vacío en los otros dos casos, y los dos son distintos. Un {@code ST} no trae código: trae una
+     * frase. Y un {@code CWE} de un vocabulario que este motor no conoce —el diccionario interno del
+     * aparato, un serotipo— trae un código que <strong>no podemos situar</strong>: ponerle una
+     * {@code system} nuestra afirmaría una equivalencia que nadie ha declarado, y tirarlo perdería el
+     * dato. Los dos acaban en texto, que es exactamente lo que son mientras nadie los mapee.
+     */
+    private static Optional<ValorCodificado> codificadoDe(OBX obx) {
+        if (obx.getObservationValueReps() == 0
+                || !(obx.getObservationValue(0).getData() instanceof Composite concepto)) {
+            return Optional.empty();
+        }
+        // `CE`, `CWE` y `CNE` comparten los tres primeros componentes —código, texto y vocabulario—,
+        // así que se leen por posición y no por el tipo concreto que HAPI haya instanciado según
+        // `OBX-2`. Preguntar por la clase obligaría a enumerarlas y a fallar en silencio con la
+        // siguiente.
+        String codigo = componente(concepto, 0);
+        String sistema = sistemaDelValor(componente(concepto, 2));
+        if (codigo.isBlank() || sistema == null) {
+            return Optional.empty();
+        }
+        return Optional.of(new ValorCodificado(codigo, componente(concepto, 1), sistema));
+    }
+
+    /** Un componente de un compuesto de v2, o cadena vacía si no está o no es un valor simple. */
+    private static String componente(Composite compuesto, int indice) {
+        try {
+            return compuesto.getComponent(indice) instanceof Primitive parte ? Campos.texto(parte) : "";
+        } catch (DataTypeException noHayTantosComponentes) {
+            return "";
+        }
+    }
+
+    /**
+     * Los vocabularios de <em>valores</em> que el motor sabe situar. No es el de {@link #systemDe} —
+     * ese traduce el vocabulario de la <strong>prueba</strong>, y son campos distintos del mismo
+     * segmento.
+     */
+    private static String sistemaDelValor(String nombreEnV2) {
+        return ResultadosCualitativos.NOMBRE_EN_V2.equalsIgnoreCase(nombreEnV2) ? ResultadosCualitativos.SYSTEM : null;
     }
 
     private static String systemDe(String nombreEnV2) {
@@ -305,7 +375,8 @@ public class TransformadorOruAResultado {
      *
      * @param codigoDePrueba código del catálogo local
      * @param cifra el valor numérico, si la prueba es cuantitativa
-     * @param texto el valor textual, si es cualitativa
+     * @param texto el valor textual, si el analizador mandó una frase y no un concepto
+     * @param codificado el concepto, si mandó uno de un vocabulario que el motor sabe situar
      * @param unidadUcum la unidad del catálogo; {@code null} en las cualitativas
      * @param medidoEn {@code OBX-14}
      */
@@ -313,8 +384,18 @@ public class TransformadorOruAResultado {
             String codigoDePrueba,
             Optional<BigDecimal> cifra,
             Optional<String> texto,
+            Optional<ValorCodificado> codificado,
             String unidadUcum,
             Optional<Instant> medidoEn) {}
+
+    /**
+     * Un valor cualitativo con su código y su vocabulario.
+     *
+     * @param codigo el código, primer componente de {@code OBX-5}
+     * @param nombre cómo se lee; segundo componente. Puede venir vacío
+     * @param sistema la URI canónica del vocabulario, ya resuelta
+     */
+    public record ValorCodificado(String codigo, String nombre, String sistema) {}
 
     /** El resultado no se puede aplicar tal y como viene. */
     public static class ResultadoInaceptable extends RuntimeException {

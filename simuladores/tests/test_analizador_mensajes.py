@@ -10,7 +10,14 @@ from __future__ import annotations
 import pytest
 
 from analizador.__main__ import medidas_de
-from analizador.mensajes import CATALOGO_LOCAL, CATALOGO_LOINC, Medida, Paciente, oru
+from analizador.mensajes import (
+    CATALOGO_CUALITATIVO,
+    CATALOGO_LOCAL,
+    CATALOGO_LOINC,
+    Medida,
+    Paciente,
+    oru,
+)
 
 PACIENTE = Paciente(nhc="70000001", apellidos="MUÑOZ DE LA TORRE", nombre="Begoña")
 
@@ -147,3 +154,24 @@ def test_una_medida_sin_unidad_se_emite_como_texto(especificacion: str, tipo: st
 
     assert medida.tipo == tipo
     assert medida.unidad == unidad
+
+
+def test_un_cualitativo_con_codigo_se_emite_como_concepto() -> None:
+    """Y con `^` en el valor deja de ser una frase: es un concepto, y `OBX-2` va como `CWE`.
+
+    De esto depende que el laboratorio pueda declarar. Su regla compara **códigos** contra el
+    catálogo, y «Positivo» escrito con letras no es un código: la Legionella positiva que entrase
+    como texto no se declararía nunca.
+    """
+    medida = medidas_de("LEGIOAG:POS^Positivo")[0]
+
+    assert medida.tipo == "CWE"
+    assert medida.valor == f"POS^Positivo^{CATALOGO_CUALITATIVO}"
+    assert medida.unidad == ""
+
+
+def test_el_vocabulario_del_valor_se_respeta_si_viene_puesto() -> None:
+    """Un analizador que informa en su diccionario lo dice, y el simulador no se lo cambia."""
+    medida = medidas_de("LEGIOAG:SG7^Serogrupo 7^99AU5800")[0]
+
+    assert medida.valor == "SG7^Serogrupo 7^99AU5800"

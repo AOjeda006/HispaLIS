@@ -7,6 +7,7 @@ import sys
 from collections.abc import Sequence
 
 from analizador.mensajes import (
+    CATALOGO_CUALITATIVO,
     CATALOGO_LOCAL,
     CATALOGO_LOINC,
     CHARSET_LATIN1,
@@ -77,8 +78,19 @@ def construir_analizador() -> argparse.ArgumentParser:
 def medidas_de(especificacion: str) -> list[Medida]:
     """Traduce `codigo:valor:unidad,…` a medidas.
 
-    Una unidad vacía significa resultado cualitativo, y entonces `OBX-2` va como `ST`: es la
-    distinción que un mapeo ingenuo se salta y con la que revienta al primer cultivo.
+    Una unidad vacía significa resultado cualitativo, y entonces hay dos formas de informarlo que
+    **no** son la misma:
+
+    - `LEGIOAG:Negativo` — una frase. `OBX-2` va como `ST` y lo que llega al laboratorio es una
+      descripción. Es lo que manda un analizador que no comparte vocabulario con nadie.
+    - `LEGIOAG:POS^Positivo` — un **concepto**. `OBX-2` va como `CWE` y el valor lleva sus
+      componentes: código, cómo se lee y de qué vocabulario sale. El tercero lo pone este simulador
+      —`CATALOGO_CUALITATIVO`—, porque es el dialecto en el que está configurado *este* analizador.
+
+    La diferencia se decide por el `^`, que es el separador de componente de v2: no hay ninguna
+    lista de códigos dentro del simulador, y no puede haberla. De cuál de las dos formas llegue
+    depende que una Legionella positiva se declare: la regla del laboratorio compara **códigos**, y
+    una frase no lo es por mucho que ponga «Positivo».
     """
     medidas = []
     for trozo in especificacion.split(","):
@@ -86,9 +98,16 @@ def medidas_de(especificacion: str) -> list[Medida]:
         codigo = partes[0].strip()
         valor = partes[1].strip() if len(partes) > 1 else ""
         unidad = partes[2].strip() if len(partes) > 2 else ""
-        medidas.append(
-            Medida(codigo=codigo, valor=valor, unidad=unidad, tipo="NM" if unidad else "ST")
-        )
+        if unidad:
+            medidas.append(Medida(codigo=codigo, valor=valor, unidad=unidad, tipo="NM"))
+        elif "^" in valor:
+            componentes = valor.split("^")
+            if len(componentes) < 3:
+                componentes += [""] * (3 - len(componentes))
+                componentes[2] = CATALOGO_CUALITATIVO
+            medidas.append(Medida(codigo=codigo, valor="^".join(componentes), tipo="CWE"))
+        else:
+            medidas.append(Medida(codigo=codigo, valor=valor, tipo="ST"))
     return medidas
 
 

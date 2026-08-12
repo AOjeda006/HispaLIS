@@ -27,6 +27,11 @@ CHARSET_UTF8 = "UNICODE UTF-8"
 CATALOGO_LOINC = "LN"
 CATALOGO_LOCAL = "99HISPALIS"
 
+#: Y cómo se nombra el vocabulario de los VALORES cualitativos, que es otro distinto: `99HISPALIS`
+#: nombra las pruebas y este los resultados. Van en campos distintos del mismo `OBX` —`OBX-3` y
+#: `OBX-5`— y confundirlos guarda un resultado como si fuera una prueba.
+CATALOGO_CUALITATIVO = "99HISPCUAL"
+
 #: `SPM-4`: suero.
 SUERO = "119364003"
 
