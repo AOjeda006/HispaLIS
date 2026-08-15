@@ -21,6 +21,12 @@ Alias: $UCUM  = http://unitsofmeasure.org
 
 // SNOMED CT Edición Española + extensión nacional del SNS (D7). Los `display` de un informe español
 // van en español: la edición internacional los daría en inglés, que es un error de producto.
+//
+// ⚠️ Esto es una URI de EDICIÓN y sirve de base a un `ValueSet` implícito — el alias de abajo—, NO
+// de `system` de un `Coding`. El `system` de SNOMED es siempre `$SCT`, sin edición, y la edición
+// viaja en `version`: es lo que publica el `CodeSystem` que sube el cargador. Un `$SCT_ES#12345`
+// apunta a un sistema de códigos que no existe en el servidor, y `$lookup` contesta que no conoce
+// ese código con la misma cara con la que contestaría a uno inventado. Hay un test que lo impide.
 Alias: $SCT_ES = http://snomed.info/sct/900000001000122104
 
 // Refset «Tipos de documento para identificación personal» de la extensión española del SNS
