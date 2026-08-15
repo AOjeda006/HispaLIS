@@ -8,6 +8,74 @@
 > autosuficiente). Este PLAN es su bajada a ejecución: no lo dupliques, cítalo por sección
 > (§4.8, §6.5…).
 
+---
+
+## Nota de entrega (2026-08-15)
+
+**Lee esto primero si acabas de llegar.** Contesta, sin abrir ningún otro fichero, lo único que hace
+falta para retomar el proyecto: qué está hecho, qué no, quién desbloquea lo que falta y qué de lo que
+verás **no vale para producción**. Para levantarlo y recorrerlo, `README.md`.
+
+**Qué es.** HispaLIS es una **simulación** de un SIL —Sistema de Información de Laboratorio— de un
+laboratorio clínico privado de Sevilla, sobre **HL7 FHIR R5**. No es un producto sanitario ni un
+sistema en uso, y **todos sus datos son sintéticos**: nunca ha habido ni puede haber datos reales de
+pacientes en ningún entorno.
+
+**Qué está terminado.** Los tres hitos, cerrados: **51 de los 52 ítems** del checklist, 36 ADR y una
+guía de implementación publicada en <https://aojeda006.github.io/HispaLIS/>. El circuito completo
+—petición del HIS por MLLP → espécimen → resultado del analizador → refleja → doble validación de un
+crítico → declaración EDO a Salud Pública → informe → cohorte exportada, descargada y borrada— está
+recorrido de extremo a extremo **contra la pila levantada y con la seguridad puesta**; la
+transcripción, paso a paso, está en *Estado actual*. La CI son **siete workflows**, uno por
+componente y todos filtrados por rutas.
+
+**Qué está bloqueado, y quién lo desbloquea.** Un solo ítem, el **42**: cargar los tres códigos
+**SNOMED CT** del catálogo. La Edición Española no se redistribuye, así que **no lo desbloquea
+trabajo de agente sino el usuario**, consiguiendo la *release* con su propia licencia del SNS y
+señalándola con `HISPALIS_SNOMED`. El hueco está modelado y el cargador avisa en voz alta al arrancar;
+nada obligatorio depende de SNOMED, así que el sistema funciona sin él. Lo demás que falta no bloquea
+nada: está enumerado, entrada por entrada, en *Lo que queda abierto al cerrar el proyecto*.
+
+**Qué es demostración y NO debe confundirse con producción.** Esto se monta para enseñar cómo encaja,
+no para poner a nadie detrás:
+
+- **Las credenciales del `compose` son de juguete.** `POSTGRES_PASSWORD: hispalis`, un `.env` con dos
+  contraseñas que pone quien clona —y una tercera clave si se levanta el receptor—, tres usuarios de
+  demostración con la misma, un certificado MLLP **autofirmado** que se genera al levantar y un APK
+  firmado con la **clave de depuración**.
+- **Instancia única en todo lo asíncrono:** el relay del `outbox`, el notificador EDO, el barrendero
+  de exportaciones y el sondeo de `$export` dan por hecho que solo hay un proceso. Los NDJSON viven
+  en un volumen local, no en un almacén de objetos.
+- **Los terceros son simulados:** el HIS, el analizador, el receptor de notificaciones y el SVEA de
+  Salud Pública. El formato de la declaración EDO es **verosímil, no fiel** —el contrato de Redalerta
+  no es público— y va **sin filiación**, al revés que una declaración de verdad.
+- **Las URIs canónicas de la guía son propias, no oficiales**, y **ISO 15189 está fuera de alcance**
+  como requisito: se cita solo como justificación de las decisiones de trazabilidad.
+- **La consola del motor de integración no tiene autenticación** y por eso no se publica fuera de la
+  red del `compose`.
+
+Lo que **no** hay, comprobado el 2026-08-15 sobre los **669 ficheros versionados**: ni un secreto, ni
+una clave privada, ni un `.env` —solo `.env.example`, cuyo único valor relleno es el usuario `admin`—
+y ni un dato de paciente que no sea sintético: dos DNI y dos NUHSA, todos del generador.
+
+**El siguiente trabajo natural, si alguien continúa.** Por este orden, y ninguno es obligatorio:
+
+1. **Las tres pantallas que faltan** (entrada 11 de la lista abierta): validar, emitir informe y
+   gestionar la bandeja de EDO funcionan por API y con la seguridad puesta, pero solo las recorre un
+   guion. Es trabajo de pantalla, no de contrato — el camino más corto de aquí a algo enseñable.
+2. **La app en un dispositivo de verdad** (entrada 10): es lo único que **ninguna CI puede cubrir**,
+   porque hace falta una persona mirando.
+3. **La dirección en el agregado del dominio** (entrada 3): hasta que el paciente la tenga, la cohorte
+   exportada sale sin municipio y no se puede dibujar un mapa de casos, que es media razón de ser de
+   una cohorte de vigilancia.
+4. **El ítem 42**, el día que exista la licencia.
+
+**Cómo se trabaja aquí, en dos líneas.** El estado vive en disco, no en el chat: este PLAN es la
+fuente de verdad de qué falta, y se lee antes de tocar nada. Los commits van firmados, con la
+identidad del usuario y **sin ningún trailer ajeno**.
+
+---
+
 ## Objetivo
 
 Construir **HispaLIS**, una **simulación** de un **SIL** (Sistema de Información de Laboratorio) para
@@ -16,12 +84,16 @@ hitos: un sistema que atraviesa los ejes reales de interoperabilidad sanitaria �
 terminología, API FHIR conforme, puente HL7 v2, eventos, SMART on FHIR y una obligación legal
 española implementada (notificación EDO)— sin degenerar en una HCE en miniatura.
 
-**Hito 1: cerrado el 2026-08-06.** El circuito básico end-to-end (petición → espécimen → resultado →
-informe), sin Kafka, sin HL7 v2 y sin Keycloak. Ya hay un proyecto FHIR presentable.
+**Los tres hitos están cerrados** y el objetivo se cumplió:
 
-**Objetivo del encargo en curso: el hito 2** — la interoperabilidad de verdad: puente HL7 V2.5.1,
-bus de eventos con outbox transaccional, servidor de terminología y SMART on FHIR. Antes del puente
-van **los tres huecos de dominio** que hoy no existen y que el puente usa (ítems 17–19).
+- **Hito 1 — 2026-08-06 (ítems 0–16).** El circuito básico end-to-end (petición → espécimen →
+  resultado → informe), sin Kafka, sin HL7 v2 y sin Keycloak.
+- **Hito 2 — 2026-08-08 (ítems 17–41).** La interoperabilidad de verdad: los tres huecos de dominio,
+  puente HL7 V2.5.1 sobre MLLP/TLS, bus de eventos con outbox transaccional, servidor de terminología
+  y SMART on FHIR.
+- **Hito 3 — 2026-08-12 (ítems 42–51).** Lo clínico y lo legal: reflejas, doble validación del
+  crítico, notificaciones, declaración EDO, Bulk Data y `AuditEvent`. **Queda abierto el ítem 42**,
+  bloqueado por la licencia de SNOMED CT — ver la *Nota de entrega*.
 
 ## Alcance / No-objetivos
 
@@ -34,7 +106,7 @@ van **los tres huecos de dominio** que hoy no existen y que el puente usa (ítem
   idempotente · Kafka + Schema Registry alimentado por el outbox · reconciliador dominio → proyección
   · servidor de terminología con `$expand`/`$validate-code`/`$translate` · Keycloak con SMART on FHIR
   · app del ciudadano en Flutter con SMART standalone + PKCE.
-- **Fuera del hito 2** (hito 3, esbozado al final): `SubscriptionTopic`/`Subscription`, notificador
+- **Dentro (hito 3):** `SubscriptionTopic`/`Subscription`, reflejas y doble validación, notificador
   EDO, Bulk Data `$export` + `Group`, `AuditEvent` completo.
 - **Fuera del proyecto entero:** ISO 15189 como requisito —solo como justificación de diseño (D17)—,
   conexión al MPA de Diraya (D8), HCDSNS/Nodo SNS, Receta XXI, CMBD/RAE-CMBD y ENS (§4.6).
@@ -1078,6 +1150,10 @@ llama como el tipo de recurso.
 
 ## Estado actual
 
+> **Cómo se lee esta sección:** es una **crónica en orden cronológico**, del hito 1 al cierre, y cada
+> bloque describe lo que era cierto el día que se escribió. Lo que es cierto **hoy** está arriba, en la
+> *Nota de entrega*, y lo que falta, en *Lo que queda abierto al cerrar el proyecto*.
+
 ### De dónde se parte — hito 1 cerrado
 
 **HITO 1 CERRADO (2026-08-06). Los 17 ítems, del 0 al 16.** Los 12 criterios de aceptación de §14
@@ -1104,7 +1180,7 @@ cinco invariantes de §10 que el hito 1 alcanza viven en el núcleo de dominio, 
 > `integracion`; `app-ciudadano` la conserva. Se empuja a `origin/main` por **SSH**: el PAT de HTTPS
 > no tiene *scope* `workflow` y GitHub rechaza el push de `.github/workflows/`.
 
-### Dónde estamos ahora — hito 2: la identidad puesta, el ítem 33 a medias
+### Hito 2 — la identidad puesta y el ítem 33 a medias (2026-08-07/08)
 
 **Los tres huecos de dominio están cerrados (2026-08-06): ítems 17, 18 y 19.** Cada uno con su rojo
 en el historial —`81fdd0c`, `80b9ebf`, `abb1ddf`— y su verde detrás. `./mvnw verify` →
@@ -1704,6 +1780,47 @@ Cada fila es un ítem del checklist con **la prueba concreta**. «En vivo» sign
 | 50 | `AuditEvent` completo y sin PHI | **En vivo:** pasos 12 y 13 — 50 trazas, cero PHI, cero `entity.query`. Una búsqueda **por NHC** no deja el criterio |
 | 51 | Hito cerrado | Este bloque, `docs/destilacion.md`, y la lista honesta de lo que queda abierto |
 
+### La entrega: el README ejecutado orden por orden (2026-08-15)
+
+Repasar la puerta de entrada **ejecutándola** —desde un `down -v` y una pila levantada de cero— en vez
+de leerla. Cuatro órdenes del README no funcionaban, y ninguna se veía leyendo:
+
+| Lo que fallaba | Por qué | Dónde queda |
+|---|---|---|
+| `./mvnw spring-boot:run -Parranque-local` **no arrancaba** | Es el arranque sin Docker, así que no hay Keycloak, y desde el hito 2 la API se **niega a levantar** con la seguridad puesta y sin emisor. El perfil es del hito 1: la seguridad lo dejó inservible ocho días atrás y nadie volvió a ejecutarlo | `ArranqueLocal` apaga la seguridad **a conciencia** y el arranque lo grita en el log |
+| El perfil `notificaciones` **impedía arrancar la app** | El receptor publicaba el **8090 del equipo**, que es el origen y la redirección que la app tiene registrados en el realm | El receptor sale por el **8092**; dentro sigue en el 8090, que es lo que dice la `Subscription` |
+| `docker compose … down -v` no deja la pila de cero | **No se lleva los servicios con perfil**: `receptor` y `svea` quedan en pie apuntando a una red borrada, y el siguiente `up` de ese perfil muere con `network … not found` | El README lo escribe con `--profile '*'` |
+| Los dos `curl` de `$reconciliar` | Iban **sin cabecera de testigo** —`401`— tres líneas debajo de decir que la operación exige `system/*.cruds` | Corregidos, y comprobados con un testigo de sistema |
+
+Y seis cosas que el README decía y ya no eran ciertas: los contenedores de un solo uso son **seis** y
+no tres; `/subjects` sale **vacío** con la pila recién levantada porque el esquema se registra al
+primer envío; `exportar-cohorte.sh` necesita una cohorte **ya declarada**; `PROMPT-AGENTE-LOCAL.md`
+**nunca ha existido** en el repositorio; el generador seguía remitiendo a «trabajo del hito 2»; y ni
+`curl` ni `jq` estaban en los requisitos, usándolos cada comprobación de la página.
+
+**Las puertas de los siete componentes, hoy y en este equipo:**
+
+| Componente | Orden del README | Resultado |
+|---|---|---|
+| `backend/` | `./mvnw verify` | **291 tests**, 0 fallos · formato limpio |
+| `integracion/` | `./mvnw verify` | **86 tests**, 0 fallos · formato limpio |
+| `web-profesional/` | `npm run lint` · `npm test` · `npm run build` | limpio · **94 tests** · empaquetado · `npm start` sirve el 4200 y el proxy de `/fhir` contesta |
+| `app-ciudadano/` | `flutter analyze` · `flutter test` · `build web` · `build apk` | *No issues found* · **69 tests** · `build/web` · **APK de 48,2 MB** |
+| `simuladores/` | `ruff check .` · `ruff format --check .` · `pytest` | limpio · 38 ficheros · **143 tests** |
+| `terminologia/` | `ruff check .` · `ruff format --check .` · `pytest` | limpio · 14 ficheros · **41 tests** |
+| `ig/` | `npx --yes fsh-sushi .` | **0 errores, 0 avisos** |
+
+⚠️ **Los dos `verify` de Java no corren en este equipo tal cual**: con JDK 25 revienta Spotless
+(entrada 14), y dentro del contenedor `temurin:21` hay que pasar `--user`, porque el PostgreSQL
+empotrado **no arranca como `root`** — `initdb` se niega, y lo que se lee en el informe es
+«`Process [… /initdb …] failed`» y un `ExceptionInInitializerError` en cada test de integración, sin
+que aparezca la palabra `root` por ningún lado.
+
+**Lo que no se pudo ejecutar, y por qué:** `flutter run -d chrome --web-port 8090` y la pantalla de la
+app, que necesitan una persona delante (entrada 10); los `curl` de `$export` con `$TESTIGO`, porque no
+hay cohorte declarada sin recorrer antes el circuito clínico entero; y `java -jar publisher.jar`, que
+tarda media hora y ya corre en `ci-ig` en cada cambio de la guía.
+
 ### Lo que queda abierto al cerrar el proyecto
 
 Lista **cerrada**: esto es todo lo que se sabe que falta. Un proyecto que se cierra diciendo lo que
@@ -1735,14 +1852,19 @@ le falta está terminado; uno que lo esconde, no.
 
 **Infraestructura montada para demostrar, no para producción**
 
-5. **El registro de esquemas se probó en memoria**, no contra el servidor. La decisión de
-   compatibilidad la toma el mismo comprobador que usa el servidor, pero **el camino HTTP no se ha
-   ejercitado**: un fallo de serialización o de configuración del registro no lo vería ningún test.
-6. **El broker corre sobre ZooKeeper**, no en modo KRaft. Funciona y está congelado en una versión
-   que lo soporta; para cualquier despliegue nuevo, ZooKeeper está retirado en Kafka 4.
-7. **Los NDJSON viven en un disco local, no en MinIO.** El `compose` tiene MinIO y esto no lo usa.
-   Con una sola instancia no se nota —el que sondea es el mismo proceso que escribió—, pero es la
-   misma limitación de instancia única que el relay del `outbox`, el notificador EDO y el barrendero.
+5. **El registro de esquemas lo prueban los tests en memoria; el camino HTTP solo se ha visto en
+   vivo.** La decisión de compatibilidad la toma el mismo comprobador que usa el servidor, y contra el
+   `compose` el camino HTTP funciona —comprobado el 2026-08-15: los cuatro sujetos aparecen al primer
+   envío y `lab.resultados.v1-value` sale en `BACKWARD`—, pero **ninguna puerta automática lo cubre**:
+   un fallo de serialización o de configuración del registro no lo vería ningún test.
+6. ~~**El broker corre sobre ZooKeeper**, no en modo KRaft.~~ **Era falso desde que se escribió, y se
+   corrige aquí** (2026-08-15): el `compose` levanta Kafka en **KRaft** desde el commit que lo trajo
+   (`ac217a1`) — `KAFKA_PROCESS_ROLES: broker,controller`, sin ningún ZooKeeper. Lo que sí sigue siendo
+   cierto de esa pieza es lo de la entrada 7: una sola instancia.
+7. **Los NDJSON viven en un disco local.** El diseño prevé MinIO en su tabla de stack (§12) y **el
+   `compose` no lo trae**: son un volumen y un directorio. Con una sola instancia no se nota —el que
+   sondea es el mismo proceso que escribió—, pero es la misma limitación de instancia única que el
+   relay del `outbox`, el notificador EDO y el barrendero.
 8. **La consola del motor (8082) no tiene autenticación**, y por eso no se publica fuera de la red
    del `compose`. Decisión consciente, no olvido.
 9. **El contador `MSH-10` de los acuses del motor es efímero:** el contenedor no tiene volumen para
@@ -1775,10 +1897,15 @@ le falta está terminado; uno que lo esconde, no.
 
 **Cobertura que se sabe incompleta**
 
-13. **El reconciliador no se ha ejecutado sobre el laboratorio entero**, solo acotado a un paciente.
+13. **El reconciliador no se ha ejecutado sobre un laboratorio con volumen.** Sin acotar sí: el
+    2026-08-15, contra el `compose` y con testigo de sistema, `$reconciliar` contestó
+    `divergencias = 0` mirando y `aplicado = true` aplicando. Pero el laboratorio tenía entonces un
+    paciente y una petición: lo que está probado es **la orden**, no que aguante un corpus.
 14. **`spotless` no corre en este equipo con el JDK instalado.** `palantir-java-format` no funciona
     con JDK 25 y aquí no hay un 21; el formato se comprueba **dentro de un contenedor temurin:21**,
-    que es lo que hace la CI. Anotado porque quien retome esto se lo va a encontrar.
+    que es lo que hace la CI. Anotado porque quien retome esto se lo va a encontrar. **Y el contenedor
+    necesita `--user "$(id -u):$(id -g)"` para pasar los tests**: el PostgreSQL empotrado no arranca
+    como `root`, y el informe de fallo no dice que ese sea el motivo (2026-08-15).
 15. ~~**Hay esperas fijas en los tests que dependen de la máquina.**~~ **Cerrado el 2026-08-12.** No
     queda ni un `Thread.sleep` en los tests del backend: `EsperaDelSistema` se engancha a
     `STORAGE_PRECOMMIT_RESOURCE_*` y despierta al test **al confirmarse** la escritura que puede
@@ -2865,7 +2992,7 @@ contra la pila del `compose` levantada desde el clon limpio, no contra un doble.
 
 ---
 
-## Checklist — Hito 3 (esbozo)
+## Checklist — Hito 3
 
 > Mismo estándar que los dos anteriores: un ítem = una unidad pequeña con **criterio de aceptación
 > verificable**, ordenados para que cada uno deje algo demostrable.
@@ -3056,8 +3183,9 @@ contra la pila del `compose` levantada desde el clon limpio, no contra un doble.
   *Estado actual*. Lo que se llevó la tanda no fue la transcripción, sino **lo que la transcripción
   destapó**: siete fallos que los 290 tests no veían, cinco de ellos con ADR (`0033`–`0036` y la
   tercera parte de `0030`) y todos arreglados en rojo→verde. Las puertas de los siete workflows,
-  reproducidas en local y después **verdes en GitHub** —seis sobre `5dda172` y la de la app sobre
-  `0094350`, que es donde le tocaba correr—, y la guía reconstruida y de vuelta en su línea base
+  reproducidas en local y después **verdes en GitHub**, cada una en el commit donde le tocaba correr
+  —la tabla, en la entrada 16 de *Lo que queda abierto*—, y la guía reconstruida y de vuelta en su
+  línea base
   (**1 error**, el de la plantilla), desplegada a Pages por su job. El dossier de destilación, en `docs/destilacion.md`: 36 ADR, 22 ficheros de la
   biblioteca, y las dos aportaciones que venían arrastradas desde el hito 1 y el 2.
 
@@ -3073,8 +3201,9 @@ contra la pila del `compose` levantada desde el clon limpio, no contra un doble.
   permite dibujar un mapa de casos, que es la mitad de para qué sirve una cohorte de vigilancia.
   Arreglarlo es trabajo de **dominio**, no de exportación: hasta que el paciente tenga dirección, esto
   se queda como está y escrito aquí.
-- **Los NDJSON viven en un disco local, no en MinIO.** El `compose` tiene MinIO y esto no lo usa: un
-  `AlmacenDeFicheros` con dos implementaciones sería lo correcto el día que haya dos backends, porque
+- **Los NDJSON viven en un disco local, no en MinIO.** El diseño prevé MinIO (§12) y el `compose` no
+  lo trae: un `AlmacenDeFicheros` con dos implementaciones sería lo correcto el día que haya dos
+  backends, porque
   hoy el que sondea tiene que ser atendido por el mismo proceso que escribió el fichero. Con una sola
   instancia no se nota, y el barrendero tiene la misma limitación que el notificador EDO y el relay
   del `outbox`.
