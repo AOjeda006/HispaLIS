@@ -21,6 +21,12 @@ public final class MensajesDePrueba {
     /** Corto, con eñe y con tilde a la vez. */
     public static final String PENA = "PEÑA ÁLVAREZ";
 
+    /** {@code MSH-3} por defecto: el HIS del hospital. */
+    public static final String EMISOR = "HIS_VIRGEN";
+
+    /** {@code MSH-4} por defecto. */
+    public static final String INSTALACION = "H_VIRGEN_MACARENA";
+
     private MensajesDePrueba() {
         // Utilidad.
     }
@@ -49,12 +55,35 @@ public final class MensajesDePrueba {
             String nombreDePila,
             String charset,
             String estructura) {
+        return adtDe(EMISOR, INSTALACION, evento, controlId, nhc, apellidos, nombreDePila, charset, estructura);
+    }
+
+    /**
+     * Igual, pero eligiendo también <strong>quién lo manda</strong>.
+     *
+     * <p>Hace falta para probar la clave de deduplicación, que es {@code MSH-3 + MSH-4 + MSH-10} y no
+     * {@code MSH-10} a secas: sin poder mover el emisor y la instalación, la mitad de la propiedad no
+     * se puede afirmar — solo se comprobaría que el mismo emisor no repite.
+     *
+     * @param emisor {@code MSH-3}
+     * @param instalacion {@code MSH-4}
+     */
+    public static String adtDe(
+            String emisor,
+            String instalacion,
+            String evento,
+            String controlId,
+            String nhc,
+            String apellidos,
+            String nombreDePila,
+            String charset,
+            String estructura) {
         String tipo = estructura == null || estructura.isBlank()
                 ? "ADT^" + evento
                 : "ADT^%s^%s".formatted(evento, estructura);
         return String.join(
                 "\r",
-                msh(tipo, controlId, charset),
+                msh(emisor, instalacion, tipo, controlId, charset),
                 "EVN|%s|20260806120000".formatted(evento),
                 pid(nhc, apellidos, nombreDePila),
                 pv1());
@@ -166,11 +195,15 @@ public final class MensajesDePrueba {
     }
 
     private static String msh(String tipo, String controlId, String charset) {
+        return msh(EMISOR, INSTALACION, tipo, controlId, charset);
+    }
+
+    private static String msh(String emisor, String instalacion, String tipo, String controlId, String charset) {
         List<String> campos = campos(18);
         campos.set(0, "MSH");
         campos.set(1, "^~\\&");
-        campos.set(2, "HIS_VIRGEN");
-        campos.set(3, "H_VIRGEN_MACARENA");
+        campos.set(2, emisor);
+        campos.set(3, instalacion);
         campos.set(4, "HISPALIS");
         campos.set(5, "LAB_SEVILLA");
         campos.set(6, "20260806120000");

@@ -123,6 +123,11 @@ public abstract class TestDelMotor {
         return new ClienteMllpDePrueba("127.0.0.1", PUERTO_MLLP, false);
     }
 
+    /** Dónde escucha el listener, para el arnés que escribe los bytes de sobre a mano. */
+    protected static int puertoDelListener() {
+        return PUERTO_MLLP;
+    }
+
     private static int puertoLibre() {
         try (ServerSocket sonda = new ServerSocket(0)) {
             return sonda.getLocalPort();
