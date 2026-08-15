@@ -30,13 +30,23 @@ import org.springframework.stereotype.Service;
  *
  * <p>Y es importante saberlo, porque es lo que la hace fiable. Este servicio no lleva ninguna cuenta
  * de lo que ya escribió: <strong>vuelve a ejecutar el canal desde el mensaje original</strong>, y son
- * los canales los que preguntan al laboratorio antes de cada escritura, por la clave de negocio del
- * recurso. Un registro propio de «lo que ya hice» tendría que mantenerse sincronizado con el
- * laboratorio, y el día que se desviase —una escritura que sí llegó pero cuya respuesta se perdió—
- * duplicaría exactamente cuando más falta hacía que no lo hiciera.
+ * los canales los que preguntan al laboratorio por la clave de negocio del recurso <em>antes de
+ * decidir qué escribir</em>. Un registro propio de «lo que ya hice» tendría que mantenerse
+ * sincronizado con el laboratorio, y el día que se desviase —una escritura que sí llegó pero cuya
+ * respuesta se perdió— duplicaría exactamente cuando más falta hacía que no lo hiciera.
  *
- * <p>Consecuencia práctica: reprocesar tres veces un mensaje ya aplicado deja el mismo estado que
- * aplicarlo una. Hay un test que lo hace literalmente.
+ * <p>Consecuencia práctica: reprocesar {@code n} veces un mensaje ya aplicado deja el mismo estado que
+ * aplicarlo una. {@code PropiedadDeLaIdempotenciaTest} lo comprueba para los tres canales y para
+ * {@code n} de uno a cinco.
+ *
+ * <h2>Lo idempotente es el estado, no la cuenta de escrituras</h2>
+ *
+ * <p>Los dos canales clínicos, al encontrar el recurso, <strong>no escriben</strong>. El de
+ * demografía sí: un {@code A08} es una corrección, y corregir la filiación que ya está corregida es
+ * un {@code PUT} sobre el mismo recurso con el mismo contenido. El estado final es idéntico —que es
+ * lo que la palabra significa— pero hay una escritura más por reproceso. Se deja así a propósito:
+ * comparar antes la filiación entrante con la guardada para ahorrarse el {@code PUT} metería en el
+ * motor una noción de «igual» que es del laboratorio, y equivocarla se paga en corrección perdida.
  */
 @Service
 public class Reproceso {

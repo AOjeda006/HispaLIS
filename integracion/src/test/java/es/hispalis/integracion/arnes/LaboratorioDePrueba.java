@@ -113,6 +113,28 @@ public final class LaboratorioDePrueba implements AutoCloseable {
         return escrituras.size();
     }
 
+    /**
+     * La foto del laboratorio entero: todo lo guardado, serializado y en orden estable.
+     *
+     * <p>Sirve para afirmar que dos caminos distintos dejan <strong>el mismo estado</strong>, que es lo
+     * que quiere decir «idempotente». Contar escrituras no sirve para eso y confundirlo cuesta caro: un
+     * canal puede reescribir un recurso con el mismo contenido —un {@code PUT} que corrige una
+     * filiación ya corregida— y el estado ser idéntico habiendo una escritura más.
+     */
+    public String inventario() {
+        var json = contexto.newJsonParser();
+        return almacen.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .flatMap(delTipo -> delTipo.getValue().entrySet().stream()
+                        .sorted(Map.Entry.comparingByKey())
+                        .map(guardado -> "%s/%s %s"
+                                .formatted(
+                                        delTipo.getKey(),
+                                        guardado.getKey(),
+                                        json.encodeResourceToString(guardado.getValue()))))
+                .collect(java.util.stream.Collectors.joining("\n"));
+    }
+
     /** Cuántas veces se ha escrito un tipo concreto. Cada entrada es {@code «VERBO Tipo id»}. */
     public long escriturasDe(Class<? extends Resource> tipo) {
         return escrituras.stream()
