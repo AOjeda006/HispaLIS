@@ -25,9 +25,9 @@ mitad del trabajo y la que evita que la biblioteca se llene de un solo proyecto.
 
 | | |
 |---|---|
-| ADR escritos en el proyecto | **36** (`adr-0001` … `adr-0036`) |
-| Con aportación transversal | **36** |
-| Que aportan **regla nueva** (`convenciones.md` + `referencia.md`) | **31** |
+| ADR escritos en el proyecto | **38** (`adr-0001` … `adr-0038`) |
+| Con aportación transversal | **38** |
+| Que aportan **regla nueva** (`convenciones.md` + `referencia.md`) | **33** |
 | Que aportan **solo contexto** (`referencia.md`) | **5** — `0001`, `0004`, `0006`, `0011`, `0013` |
 | Ficheros de la biblioteca tocados | **22** |
 | Aportaciones **arrastradas** de hitos anteriores, aún sin destilar | **2** — la trampa documental de MLLP (hito 1) y la tabla 0354 (hito 2) |
@@ -38,7 +38,7 @@ mitad del trabajo y la que evita que la biblioteca se llene de un solo proyecto.
 |---|---|
 | `interoperabilidad/fhir/` | 0001, 0011, 0029, 0030, 0036 |
 | `interoperabilidad/terminologia/` | 0006, 0009, 0026, 0028, 0032 |
-| `interoperabilidad/hl7-v2/` | **0005**, **0018**, 0021, 0034 |
+| `interoperabilidad/hl7-v2/` | **0005**, **0018**, 0021, 0034, 0037 |
 | `interoperabilidad/smart-on-fhir/` | 0024, 0025, 0033 |
 | `interoperabilidad/perfilado-fsh/` | 0007, 0010 |
 | `interoperabilidad/integracion/` | 0005, 0019, 0034 |
@@ -55,8 +55,9 @@ mitad del trabajo y la que evita que la biblioteca se llene de un solo proyecto.
 | `herramientas/autenticacion.md` | 0024, 0025 |
 | `herramientas/docker.md` | 0026, 0035 |
 | `herramientas/entrega-continua.md` | 0004, 0007, 0008 |
-| `principios/testing.md` | 0014, 0026, 0033, 0034 |
-| `principios/manejo-errores.md` | 0031, 0036 |
+| `principios/testing.md` | 0014, 0026, 0033, 0034, 0037, 0038 |
+| `principios/manejo-errores.md` | 0031, 0036, 0037 |
+| `stacks/typescript/` | 0038 |
 | `principios/git-workflow.md` | 0008 |
 | `principios/desarrollo-con-ia.md` | 0004 |
 | `diseno/` | 0002, 0014, 0028, 0032 |
@@ -532,6 +533,47 @@ Ficha B de arriba. **Aportación arrastrada del hito 2.**
 - **Autoridad:** FHIR R5, `Subscription.parameter.value` (`string`, no elección); Javadoc de
   `Optional.of`; HAPI FHIR, manejador de errores permisivo por defecto.
 - **Se queda aquí:** el relay de notificaciones y el identificador de clave.
+
+### ADR-0037 · El camino que atiende el fallo también falla
+
+- **Transversal:** cinco cosas, y las cinco valen fuera de HL7 v2. (1) **En un protocolo con acuse,
+  el manejador de errores es código de primera línea**: su contrato incluye qué responder cuando no
+  se puede componer una respuesta buena, y hay que probarlo con entrada que ni siquiera parsee.
+  (2) **Comprueba qué hace tu librería cuando el manejador devuelve nulo** — HAPI lanza «Application
+  exception handler may not return null» y el emisor no recibe nada. (3) **Un mensaje de error tiene
+  dos destinatarios que no comparten texto**: el de fuera necesita saber qué hacer, el de dentro qué
+  pasó; fundirlos es cómo el `getMessage()` de una excepción acaba en la respuesta con la sentencia
+  SQL dentro. (4) **Al inventariar qué está dentro de la red de seguridad, mira lo que ocurre antes
+  de entrar**: registrar, autenticar y auditar van delante del `try` por buenas razones, y por eso
+  sus fallos salen por caminos que nadie ha diseñado. (5) **El criterio de un *fuzzer* no es «no se
+  cae»**, sino: se contesta o se cierra, no se filtra el interior, no se filtra el dato del usuario y
+  **el servicio sigue atendiendo al siguiente** — lo último se comprueba mandando algo bueno después
+  de cada entrada mala.
+- **Destino:** `principios/manejo-errores.md` (**C**: los dos destinatarios de un mensaje de error, y
+  que el camino de fallo del fallo tiene que contestar), `principios/testing.md` (**C**: los cuatro
+  criterios de un fuzzer, que no son «no se cae»; **R**: por qué la lista de rastros prohibidos vive
+  en el test) e `interoperabilidad/hl7-v2/referencia.md` (**R**: el recorrido de
+  `ApplicationRouterImpl` cuando el `MSH` no se deja leer, y que el lector MLLP lee `MSH-18` sobre
+  bytes crudos).
+- **Autoridad:** `hapi-base` 2.6.0, `ApplicationRouterImpl.processMessage` verificado con `javap`;
+  PostgreSQL, `0x00` no admitido en `text`.
+- **Se queda aquí:** las propiedades del canal con las que se compone el `ACK` de último recurso.
+
+### ADR-0038 · Medir la cobertura cambió lo que se medía
+
+- **Transversal:** (1) **Activar la cobertura cambia cómo se transforma el código** — instrumenta, y
+  con ello puede cambiar rutas, `sourcemaps`, identidad de módulos y tiempos; un test que pasa sin
+  cobertura y falla con ella no es un fallo de la herramienta, es un test que dependía del
+  empaquetado. (2) **`__dirname` e `import.meta.url` no son fiables dentro de un test empaquetado**:
+  si un test lee un fichero, la ruta se ancla a algo que el ejecutor garantice —el directorio de
+  trabajo— o se inyecta. (3) **La primera medición de cobertura es un test del arnés antes que del
+  código.**
+- **Destino:** `principios/testing.md` (**C**: anclar rutas de fichero en tests empaquetados; **R**:
+  la primera medición como revisión del arnés) y `stacks/typescript/referencia.md` (**R**: el caso
+  concreto con `@angular/build:unit-test` y el proveedor `v8`).
+- **Autoridad:** medido en este repositorio con `@angular/build` 22 y `vitest` 4: los mismos tres
+  tests, verdes sin `--coverage` y `ENOENT` con él.
+- **Se queda aquí:** que la fuente de verdad de los `system` sea `ig/input/fsh/aliases.fsh`.
 
 ---
 

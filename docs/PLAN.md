@@ -1821,6 +1821,154 @@ app, que necesitan una persona delante (entrada 10); los `curl` de `$export` con
 hay cohorte declarada sin recorrer antes el circuito clínico entero; y `java -jar publisher.jar`, que
 tarda media hora y ya corre en `ci-ig` en cada cambio de la guía.
 
+### La ronda de testing: tres reglas que faltaban y la entrada 13 (prompt 23, 2026-08-15)
+
+`principios/testing.md` es normativo en este proyecto y tres de sus reglas no se habían cumplido en
+ningún hito: **fuzzing** de lo que parsea formato externo, **property-based** sobre los invariantes y
+**cobertura leída como linterna**. Esta ronda las cumple, y el resultado bueno de una ronda así no es
+la ausencia de fallos: **son los cinco que aparecieron**.
+
+#### A · Fuzzing del parser v2 — dos fallos, los dos reales
+
+Ciento cinco entradas generadas con semilla fija e impresa, por el camino de verdad: socket, TLS y
+sobre MLLP escrito a mano por `EmisorCrudoMllp`, que existe porque la capa MLLP de HAPI siempre pone
+un sobre bien formado y medio fuzzing va justo del sobre. Siete familias: truncados, `MSH`
+incompleto, segmentos imposibles, delimitadores redefinidos, campos enormes, charset mentiroso y
+sobre roto. El criterio no es «no se cae»: se contesta o se cierra, no se filtra el interior ni la
+filiación, y **después de cada entrada el canal sigue contestando `AA` a un mensaje bueno**.
+
+| Fallo | Qué pasaba | Arreglado en |
+|---|---|---|
+| **Un `MSH` ilegible se quedaba sin acuse ninguno** | HAPI no puede componer el acuse de error, llama al manejador con `outgoing = null`, y el nuestro lo devolvía tal cual; HAPI lanza «Application exception handler may not return null» y **el emisor no recibe nada**. Cuarenta y cinco de las ciento cinco entradas | `AcusePorFalloInterno` compone un `AR` de último recurso (`8d2fcae`) |
+| **Un byte nulo sacaba la sentencia `SQL` por el cable** | PostgreSQL no admite `0x00` en `text`; el `INSERT` del archivo revienta **fuera** de la red del despachador y HAPI mete `e.getMessage()` en el `ERR`: el HIS recibía `INSERT INTO integracion.mensaje …` entera | `Desenlace` con dos textos, cable y archivo (`6bcf528`) |
+
+Y dos errores **del arnés**, que también valen: leer el `MSA` dando por hecha la barra vertical —un
+mensaje que redefine `MSH-1` produce un acuse con **su** separador— y contar como silencio la
+conexión cerrada. Un fuzzer que lee mal la respuesta inventa fallos y, peor, tapa los que hay.
+
+**Lo que no se arregla, dicho:** un cuerpo de menos de cuatro bytes muere en el lector MLLP de HAPI
+—busca `MSH-18` en los bytes crudos y se sale del array— antes de que exista mensaje al que
+responder. Se acepta porque el motor **cierra la conexión**: el emisor se entera en el acto, que no
+es el silencio que la regla prohíbe. Arreglarlo exigiría envolver el *framing* de MLLP a mano, que es
+justo lo que este proyecto no hace (§7.1).
+
+#### B · Property-based — cuatro propiedades escritas, un candidato descartado y sustituido
+
+Nombres generados con `NombresEspanoles`: dobles apellidos, partículas (`de la`, `del`, `i`), `Ñ`,
+tildes y `ç`.
+
+| Invariante | Cómo se genera | Resultado |
+|---|---|---|
+| El charset del hilo, ida y vuelta | 30 nombres × 3 juegos de `MSH-18` | verde a la primera |
+| La clave de deduplicación `MSH-3+MSH-4+MSH-10` | 24 pares, las 8 combinaciones de qué cambia | verde a la primera |
+| Idempotencia del reproceso | 3 canales × `n` de 1 a 5 | **rojo, y era del test** |
+| El `ORU` saliente, ida y vuelta reserializando | 25 informes con pruebas del catálogo | verde a la primera |
+
+El rojo de la idempotencia salió en los cinco casos del `ADT` con una escritura de más por reproceso.
+No era un fallo: `CanalAdtPaciente` busca el NHC y, si lo encuentra, **corrige** con un `PUT`; los dos
+clínicos se saltan lo que ya existe, pero un `A08` *es* una corrección. «Idempotente» dice que el
+estado final no cambia, no que no se toque el disco, así que la afirmación pasó a ser el estado
+entero del laboratorio comparado byte a byte. De paso se corrigió el javadoc de `Reproceso`, que
+prometía de más.
+
+**Descartado por escrito:** la sustitución de caracteres de la tarjeta sanitaria —`ñ` viaja como `$`
+y `ç` como `c`, con lo que `MUÑOZ` sale `MU$OZ`—. **No existe en este sistema.** Es la banda
+magnética, documentada en `interoperabilidad/espana/convenciones.md`, y HispaLIS **no lee ni escribe
+tarjetas**: no hay lector, no hay pista 2 y no hay una sola línea que sustituya esos caracteres.
+Probar `deshacer∘aplicar == identidad` sobre una función que no existe habría sido escribirla para
+poder probarla. Su equivalente aquí —el único sitio donde este proyecto sí transforma caracteres— es
+el juego declarado en `MSH-18`, y ese es el que se prueba con entradas generadas.
+
+**Lo que no se cumple de la regla, y se dice:** los generadores son propios y **no hacen *shrinking***
+al contraejemplo mínimo. A cambio, la semilla es fija y se imprime, cada caso es un test con nombre
+propio y el fallo enseña la entrada renderizada byte a byte. Traer jqwik solo por el *shrinking*
+habría añadido una dependencia de test a un módulo para reducir entradas que ya caben en una línea.
+
+#### C · Cobertura, medida una vez por componente y leída
+
+Sin umbral y sin `check`, a propósito: un umbral convierte «revelar huecos» en «subir el número», y
+la forma barata de subirlo es escribir tests que recorran código sin afirmar nada.
+
+| Componente | Herramienta | Cobertura |
+|---|---|---|
+| `backend/` | JaCoCo | 89,8 % de instrucciones |
+| `integracion/` | JaCoCo | 88,5 % de instrucciones |
+| `simuladores/` | `coverage` | 92 % de sentencias |
+| `terminologia/` | `coverage` | 91,5 % del cargador |
+| `web-profesional/` | vitest + v8 | 74,9 % contando **todos** los fuentes (90,9 % contando solo los que algún test importa) |
+| `app-ciudadano/` | `flutter test --coverage` | 79,5 % → **83,6 %** tras cubrir dos huecos |
+
+Leerla encontró **tres fallos más**, y ninguno se veía en el porcentaje:
+
+1. **Una fecha de nacimiento que no era una fecha tumbaba el canal ADT** (`344db87`). `Campos.fechaIso`
+   salía con un cero redondo porque no la llamaba nadie: el transformador llevaba su propia copia de
+   la regla, sin comprobar que los ocho caracteres de `PID-7` fueran dígitos. Con `ABCDEFGH` o
+   `00000000` se componía un `birthDate` imposible, HAPI lo rechazaba y la excepción —que no cazaba
+   ningún `catch` del canal— archivaba el mensaje como **fallo interno del laboratorio** cuando era un
+   dato del emisor y ni siquiera grave.
+2. **Tres tests de la web estaban en verde por casualidad** (`7ae7f55`). `__dirname` dentro de un
+   `.spec` no es el directorio del fichero —los specs se empaquetan— y al medir cobertura cambió la
+   transformación: la ruta al `aliases.fsh` se fue cuatro niveles por encima del repositorio y los
+   tres se cayeron con `ENOENT`.
+3. **`CabeceraMsh.claveDeDeduplicacion()` no la llamaba nadie** (`ccce375`). La deduplicación la impone
+   el `UNIQUE` de la tabla; ese método era una segunda forma de decir lo mismo que nada ejecutaba. Se
+   borra y su javadoc —que era lo valioso— se muda a `AlmacenDeMensajes`, donde la regla se aplica.
+
+Y **cuatro huecos cubiertos** porque eran caminos de negocio de verdad:
+
+- **La red del despachador por el lado que no se probaba**: que lo que sale por el cable no lleve el
+  mensaje de la excepción, que es la fuga que encontró el fuzzing.
+- **La renovación silenciosa de la app**: un refresco rechazado **cierra la sesión y vacía el
+  almacén**. Es seguridad, no comodidad.
+- **El modelo de la pantalla de entrada**, que si se queda con `trabajando` en cierto deja la app
+  girando para siempre.
+- **El resultado textual** (`Resultado.informarTextual`, cero redondo). Se llega por dos caminos desde
+  la API —un `valueString` y un `valueCodeableConcept` **sin código**— y el segundo es la caída que
+  dejó `adr-0034`. Importa por su consecuencia: un `{text: "Positivo"}` sin `coding` **no** es un
+  positivo declarable, y darlo por tal sería declarar una enfermedad comparando cadenas.
+
+**Los huecos que quedan, y por qué se quedan:**
+
+| Dónde | Qué no toca ningún test | Por qué se deja |
+|---|---|---|
+| `app-ciudadano` · `almacen_seguro`, `navegador_de_autorizacion` | Los dos adaptadores de plataforma | Son Keystore y navegador del sistema: no hay forma de ejercitarlos sin dispositivo, y por eso son puertos (entrada 10) |
+| `app-ciudadano` · `rutas`, `pantalla_de_entrada` | El cableado de rutas y el widget del botón | La lógica está en el modelo, ya cubierto; falta la pantalla, que es la entrada 10 |
+| `web-profesional` · `callback`, `lanzamiento`, `alta-peticion`, `consulta-informe` | Los componentes de ruta | Su lógica vive en `lanzamiento-smart` (95 %) y en los *view-model*; lo que no monta nadie es el componente |
+| `integracion` · `EmisorMllp` (66 %) y su `NoSePudoEntregar` (0 %) | Que el HIS **no** acuse el `ORU` saliente | Camino de negocio real y hueco real: hoy solo se prueba el HIS que contesta |
+| `integracion` · `ClaveDelMotor.deLaVariableDeEntorno` (0 %) | Cargar la clave PKCS#8 del entorno | Solo corre en el `compose`; los tests usan la efímera |
+| `backend` · `ConsentimientoDelPaciente.recogerPacientes` (0 %) y `pacientesDe` (21 %) | La búsqueda **en profundidad** del dueño del compartimento | Hueco real y de seguridad: lo que se prueba hoy es el camino simple. Queda anotado como lo más gordo que sigue abierto |
+| `backend` · `TerminologiaDelServidor.valorCualitativo` (0 %) | El adaptador **de verdad** contra el servidor | Los tests usan dobles, y `ContraElServidorRealTest` —apagado salvo que se le diga dónde mirar— es quien cubre esa clase de riesgo |
+| `backend` · `LoQueSaleDeLaCohorte.seudonimizar` (40 %) y `RelayDelOutbox.confirmar` (29 %) | Las ramas de dato ausente y de reintento | Ninguna es un camino nuevo: son variantes de caminos ya probados |
+
+#### D · El reconciliador con volumen — y en negativo
+
+La entrada 13 decía que solo se había ejercitado con un paciente. Ahora hay corpus, medida y prueba
+en negativo, en `ReconciliacionDelLaboratorioEnteroTest`: **60 pacientes en la CI**,
+`-Dhispalis.reconciliacion.pacientes=300` para la tanda larga, y el corpus se escribe **por la API**
+recorriendo el circuito entero por paciente.
+
+Con 300 pacientes: escribir el corpus **35 s**, el barrido de revisión **50 s** (166 ms por paciente,
+cero divergencias), el barrido con divergencias provocadas **65 s** y la reparación completa **46 s**.
+**No escala lineal** —con 60 eran 64 ms por paciente—, y ese número confirma lo que §15 decía de
+memoria: sobre un laboratorio con historia la vía practicable es la acotada por paciente, y para eso
+existe el parámetro.
+
+La prueba en negativo rompe la proyección a propósito de las **cuatro** formas en que puede romperse,
+repartidas por el corpus —al principio, por el medio y al final, para que un barrido que se quedara
+corto se notara—: un informe borrado, una cifra alterada, un resultado publicado sin agregado y **un
+`Patient` publicado sin paciente detrás**. El cuarto es la razón de ser del test: lo caza
+`pacientesSinAgregado`, que **solo** corre en el recorrido sin acotar y no lo tocaba ninguna línea de
+ningún test. Las cuatro aparecen, las cuatro se reparan y una tercera pasada no encuentra nada.
+
+*Lo que no se hizo, y por qué:* el corpus **no** sale del generador de datos sintéticos. Sus recursos
+traen sus propios `id` y referencias, y el único camino de escritura del laboratorio los asigna en el
+alta (D3, §9) — `PUT` es actualizar, no dar de alta —, así que cargarlo tal cual habría exigido un
+remapeador de identidades cuyo único aporte sobre este arnés es la **variedad** de la demografía, que
+es justo lo que el reconciliador no mira: compara la serialización del agregado contra la del recurso
+publicado, sea cual sea el contenido. La variedad que sí importa —`Ñ`, tildes, partículas, `ç`— está
+en los apellidos del corpus por si alguna inestabilidad de codificación produjera una divergencia
+falsa.
+
 ### Lo que queda abierto al cerrar el proyecto
 
 Lista **cerrada**: esto es todo lo que se sabe que falta. Un proyecto que se cierra diciendo lo que
@@ -1897,10 +2045,17 @@ le falta está terminado; uno que lo esconde, no.
 
 **Cobertura que se sabe incompleta**
 
-13. **El reconciliador no se ha ejecutado sobre un laboratorio con volumen.** Sin acotar sí: el
-    2026-08-15, contra el `compose` y con testigo de sistema, `$reconciliar` contestó
-    `divergencias = 0` mirando y `aplicado = true` aplicando. Pero el laboratorio tenía entonces un
-    paciente y una petición: lo que está probado es **la orden**, no que aguante un corpus.
+13. ~~**El reconciliador no se ha ejecutado sobre un laboratorio con volumen.**~~ **Cerrado el
+    2026-08-15** con `ReconciliacionDelLaboratorioEnteroTest` (sección de la ronda de testing, arriba).
+    Corpus escrito por la API recorriendo el circuito entero, 60 pacientes en la CI y 300 en la tanda
+    larga; el barrido de revisión sobre 300 tarda **50 s** y no encuentra nada, y las **cuatro** formas
+    de divergir provocadas a propósito aparecen las cuatro y se reparan de una pasada. Entre ellas la
+    que solo caza el recorrido **sin acotar** —un `Patient` publicado sin paciente detrás—, cuya rama
+    no la recorría ninguna línea de ningún test.
+    *Lo que el número deja dicho:* **no escala lineal** (166 ms por paciente con 300, 64 ms con 60),
+    así que sobre un laboratorio con historia la vía practicable es la acotada, que es para lo que
+    existe el parámetro. Y *lo que sigue sin hacerse:* el corpus no sale del generador de datos
+    sintéticos, por lo que se explica en la sección de arriba.
 14. **`spotless` no corre en este equipo con el JDK instalado.** `palantir-java-format` no funciona
     con JDK 25 y aquí no hay un 21; el formato se comprueba **dentro de un contenedor temurin:21**,
     que es lo que hace la CI. Anotado porque quien retome esto se lo va a encontrar. **Y el contenedor
@@ -3625,3 +3780,17 @@ contra la pila del `compose` levantada desde el clon limpio, no contra un doble.
   no funciona con JDK 25, y aquí no hay un JDK 21 instalado. Se ejecuta dentro de un contenedor
   `eclipse-temurin:21-jdk` montando el repositorio y la caché de Maven, que es exactamente lo que
   hace `ci-backend`. Quien retome esto se lo va a encontrar: los tests sí corren con 25.
+- **⚠️ Cinco fallos que las suites por ejemplo no veían, y el patrón que los une** (ronda de testing,
+  2026-08-15; `adr-0037` y `adr-0038`). Los cinco viven en **el camino que se recorre cuando el camino
+  normal ya ha fallado**, o en el que nadie recorre nunca: el acuse que se compone cuando el mensaje
+  no se deja parsear, el texto de error que viaja al emisor, la fecha que no es una fecha, el método
+  que no llama nadie y la rama del reconciliador que solo corre sin acotar. Un test por ejemplo lo
+  escribe quien conoce el camino bueno, y por eso los ejemplos cubren el camino bueno; **entrada
+  generada y cobertura son las dos herramientas que entran por donde nadie mira**. La lección
+  operativa: cuando una suite lleva mucho tiempo en verde, lo que falta no son más ejemplos — es
+  cambiar de instrumento.
+- **La tanda de fuzzing y el barrido con volumen alargan dos CI.** `ci-integracion` suma unos 45 s
+  por las 105 entradas hostiles y `ci-backend` unos 95 s por los 60 pacientes del reconciliador. Se
+  acepta: las dos son puertas que encuentran cosas. Si algún día molesta, el número de casos y el de
+  pacientes son propiedades del sistema (`-Dhispalis.fuzzing.casos`,
+  `-Dhispalis.reconciliacion.pacientes`), no constantes.
