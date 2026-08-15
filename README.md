@@ -393,7 +393,9 @@ Notas de las cadenas de construcción, por si sorprenden:
   `./mvnw spring-boot:run` necesita un PostgreSQL en `localhost:5432`; si no tienes uno,
   **`./mvnw spring-boot:run -Parranque-local` levanta el suyo propio** —el mismo binario embebido que
   usan los tests, sin Docker y sin instalar nada—. La base de datos se crea vacía y desaparece al
-  parar el proceso, así que cada arranque empieza sin pacientes.
+  parar el proceso, así que cada arranque empieza sin pacientes. **Ese arranque deja la API abierta**,
+  sin testigo: no hay ningún Keycloak al que preguntar, el propio arranque lo avisa en el log y para
+  ejercitar la seguridad está el `compose`.
 - **`web-profesional/`** — los tests corren con **vitest sobre jsdom**, el ejecutor por defecto de
   Angular 22. **No es Karma**: `--browsers=ChromeHeadless` no es una opción válida aquí.
   `npm start` y `npm run build` traen antes el catálogo de pruebas de `ig/fsh-generated/` (D15), así
@@ -409,6 +411,16 @@ Notas de las cadenas de construcción, por si sorprenden:
   ```bash
   docker run --rm -v "$PWD":/repo -v "$HOME/.m2":/root/.m2 -w /repo/backend \
     eclipse-temurin:21-jdk ./mvnw -o spotless:check
+  ```
+
+  Ese contenedor sirve para el formato, **no para los tests**: corre como `root` y el PostgreSQL
+  embebido se niega a arrancar (`initdb`), con un error que no menciona el motivo. Para el `verify`
+  entero hace falta salir de `root`, y `clean` si antes se compiló con el JDK del equipo:
+
+  ```bash
+  docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp \
+    -v "$PWD":/repo -v "$HOME/.m2":/tmp/.m2 -w /repo/backend \
+    eclipse-temurin:21-jdk ./mvnw clean verify
   ```
 
 ## Integración continua

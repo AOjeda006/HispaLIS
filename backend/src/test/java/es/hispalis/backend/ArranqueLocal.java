@@ -18,6 +18,11 @@ import org.springframework.boot.SpringApplication;
  * base de datos se crea vacía en un directorio temporal y desaparece al parar el proceso, así que
  * cada arranque empieza sin pacientes.
  *
+ * <p><strong>Y con la seguridad apagada</strong>, porque aquí no hay ningún proveedor de identidad
+ * levantado. La API <em>abierta de par en par</em> es exactamente lo que sale de aquí, y el arranque
+ * lo avisa en el log; para ejercitar la seguridad de verdad está el {@code docker compose}, que trae
+ * su Keycloak.
+ *
  * <pre>{@code
  * ./mvnw spring-boot:run -Parranque-local
  * }</pre>
@@ -41,6 +46,13 @@ public final class ArranqueLocal {
         System.setProperty("HISPALIS_BD_URL", postgres.getJdbcUrl("postgres", "postgres"));
         System.setProperty("HISPALIS_BD_USUARIO", "postgres");
         System.setProperty("HISPALIS_BD_CLAVE", "postgres");
+
+        // Y la seguridad apagada, porque en este arranque no hay Keycloak al que preguntar. La API se
+        // niega a levantar con la seguridad puesta y sin emisor —bien hecho: un servidor que dice
+        // exigir testigo y no sabe quién los firma es peor que uno abierto—, así que desde que existe
+        // el hito 2 este perfil moría al arrancar. Apagarla aquí es la única lectura coherente con lo
+        // que este arranque es: la API queda ABIERTA y el propio arranque lo grita en el log.
+        System.setProperty("hispalis.seguridad.habilitada", "false");
 
         SpringApplication.run(AplicacionHispaLis.class, argumentos);
     }
