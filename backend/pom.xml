@@ -32,6 +32,7 @@
     <hapi-fhir.version>8.10.1</hapi-fhir.version>
     <embedded-postgres.version>2.1.0</embedded-postgres.version>
     <spotless.version>2.44.5</spotless.version>
+    <jacoco.version>0.8.13</jacoco.version>
 
     <!--
       Las serdes de Confluent y el registro de esquemas. La línea 7.9.x es la que va con Kafka 3.9,
@@ -265,6 +266,36 @@
             <id>comprobar-formato</id>
             <goals>
               <goal>check</goal>
+            </goals>
+            <phase>verify</phase>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!--
+        Cobertura: se MIDE y no se exige. Deliberadamente sin `check` y sin umbral.
+
+        La convención de la biblioteca dice que la cobertura sirve para revelar huecos y no como fin
+        en sí mismo, y un umbral en el build convierte lo segundo en obligatorio: a partir del día en
+        que rompe, la forma barata de arreglarlo es escribir tests que recorran código sin afirmar
+        nada, que suben el número y no protegen de nada. El informe queda en
+        `target/site/jacoco/index.html` para leerlo cuando se quiera saber qué NO se está probando.
+      -->
+      <plugin>
+        <groupId>org.jacoco</groupId>
+        <artifactId>jacoco-maven-plugin</artifactId>
+        <version>${jacoco.version}</version>
+        <executions>
+          <execution>
+            <id>preparar-el-agente</id>
+            <goals>
+              <goal>prepare-agent</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>informe-de-cobertura</id>
+            <goals>
+              <goal>report</goal>
             </goals>
             <phase>verify</phase>
           </execution>
