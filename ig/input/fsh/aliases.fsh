@@ -23,9 +23,17 @@ Alias: $UCUM  = http://unitsofmeasure.org
 // van en español: la edición internacional los daría en inglés, que es un error de producto.
 Alias: $SCT_ES = http://snomed.info/sct/900000001000122104
 
-// Refset «Tipos de documento para identificación personal» de la extensión española del SNS.
-// Es el `system` con el que ÚNICAS codifica `Identifier.type` del DNI, el pasaporte y el NIE.
-Alias: $SCT_ES_REFSET_DOCUMENTOS = http://snomed.info/sct/900000001000122104?fhir_vs-refset/900000251000122107
+// Refset «Tipos de documento para identificación personal» de la extensión española del SNS
+// (`refsetId` 900000251000122107, OID 2.16.724.4.21.5.8.45). Es el `system` con el que ÚNICAS
+// codifica `Identifier.type` del DNI, el pasaporte y el NIE — y **tres** son exactamente sus
+// miembros, todos de la jerarquía «objeto físico», según la ficha del CNR de la edición 20260601.
+// Es un documento, no un código: los CIP del ítem 42 NO salen de aquí.
+//
+// ⚠️ El `?fhir_vs=` lleva un signo igual. Es una de las cinco formas del `ValueSet` implícito de
+// SNOMED y la única que un servidor resuelve; con cualquier otra cosa detrás de la interrogación
+// queda una URI que SUSHI compila igual y que no expande nadie. Estuvo escrita con un guion desde
+// el ítem 3 sin que nada lo notara, porque este alias todavía no lo usa ningún perfil.
+Alias: $SCT_ES_REFSET_DOCUMENTOS = http://snomed.info/sct/900000001000122104?fhir_vs=refset/900000251000122107
 
 Alias: $TIPOS_IDENTIFICADOR_HL7 = http://terminology.hl7.org/CodeSystem/v2-0203
 
