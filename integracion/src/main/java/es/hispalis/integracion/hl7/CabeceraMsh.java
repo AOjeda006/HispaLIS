@@ -50,18 +50,6 @@ public record CabeceraMsh(
                 CharsetDeclarado.de(terser.get("MSH-18")));
     }
 
-    /**
-     * La clave con la que se deduplica.
-     *
-     * <p><strong>No es {@code MSH-10} a secas, y esa es la trampa.</strong> El estándar solo obliga a
-     * que el identificador de control sea único <em>por emisor</em>. Dos analizadores que reinician
-     * su contador coinciden a la primera, y deduplicar por {@code MSH-10} solo descartaría mensajes
-     * buenos <strong>en silencio</strong>, que es bastante peor que procesarlos dos veces.
-     */
-    public String claveDeDeduplicacion() {
-        return "%s|%s|%s".formatted(aplicacionEmisora, instalacionEmisora, controlId);
-    }
-
     /** {@code ADT^A01}, para mensajes y para el filtro del canal. */
     public String tipoYEvento() {
         return "%s^%s".formatted(tipo, evento);

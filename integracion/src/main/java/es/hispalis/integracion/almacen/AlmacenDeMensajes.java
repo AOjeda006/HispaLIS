@@ -21,6 +21,14 @@ public interface AlmacenDeMensajes {
     /**
      * Registra el mensaje si no se había visto, y dice qué hacer con él.
      *
+     * <p>La clave es {@code MSH-3 + MSH-4 + MSH-10}, y <strong>no {@code MSH-10} a secas</strong>: esa
+     * es la trampa. El estándar solo obliga a que el identificador de control sea único <em>por
+     * emisor</em>, así que dos analizadores que reinician su contador coinciden a la primera, y
+     * deduplicar solo por él descartaría mensajes buenos <strong>en silencio</strong> —bastante peor
+     * que procesarlos dos veces—. La impone el {@code UNIQUE} de la tabla, no un {@code SELECT}
+     * previo: con la comprobación aparte hay una ventana en la que caben dos.
+     * {@code PropiedadDeLaClaveDeDeduplicacionTest} recorre las ocho combinaciones de qué cambia.
+     *
      * @return {@link Admision#NUEVO} si es la primera vez; {@link Admision#YA_PROCESADO} si ese mismo
      *     emisor ya mandó ese identificador de control y salió bien; {@link Admision#REINTENTO} si se
      *     vio antes pero no llegó a procesarse
