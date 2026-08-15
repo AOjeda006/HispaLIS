@@ -477,7 +477,13 @@ services:
       HISPALIS_CLAVE_HIS: ${HISPALIS_CLAVE_HIS:-}
     ports:
       # Se publica para poder mirar el log y para probarlo con `curl` desde el equipo.
-      - '8090:8090'
+      #
+      # ⚠️ Fuera 8092 y no 8090, aunque dentro escuche en el 8090: el 8090 **del equipo** es de la app
+      # del ciudadano —`flutter run -d chrome --web-port 8090`, que es el origen y la redirección
+      # registrados en el realm— y no se puede cambiar sin tocar el realm. Con el receptor levantado
+      # ocupando ese puerto, la app no arrancaba. Dentro del `compose` nadie se entera: el endpoint de
+      # la suscripción es `http://receptor:8090/notificaciones`, por la red interna.
+      - '8092:8090'
 
   # ─── Salud Pública: el servicio de declaraciones del SVEA (ítem 48) ─────────
   #
