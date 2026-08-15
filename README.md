@@ -35,43 +35,33 @@ degenerar en una historia clínica electrónica en miniatura.
 
 - **Diseño completo:** [`docs/diseno.md`](docs/diseno.md) — decisiones D1–D20, arquitectura, perfiles,
   contexto legal español. Es la fuente de verdad.
-- **Estado del trabajo:** [`docs/PLAN.md`](docs/PLAN.md) — checklist, decisiones y estado actual.
+- **Estado del trabajo:** [`docs/PLAN.md`](docs/PLAN.md) — **nota de entrega**, checklist, estado
+  actual y las decisiones D21–D23, que se tomaron ejecutando y no en el diseño.
 - **Decisiones de arquitectura:** [`docs/adr/`](docs/adr/).
 - **Guía de implementación publicada:** <https://aojeda006.github.io/HispaLIS/>.
 
-> **Hito 1 cerrado.** El circuito básico —petición → espécimen → resultado → informe— funciona de
-> extremo a extremo con un `docker compose up`, con la guía FHIR propia publicada, la web del
-> profesional y el generador de datos sintéticos.
+> **Los tres hitos están cerrados, y con ellos el proyecto.**
 >
-> **Hito 2 cerrado.** El bus de eventos sobre Kafka, el motor de integración HL7 v2 sobre MLLP, el
-> servidor de terminología, **la identidad con SMART on FHIR** y **la app del ciudadano**. La pila
-> entera —ocho servicios— se levanta **con un solo comando**.
+> - **Hito 1** — el circuito básico (petición → espécimen → resultado → informe) de extremo a extremo,
+>   la guía FHIR propia publicada, la web del profesional y el generador de datos sintéticos.
+> - **Hito 2** — bus de eventos sobre Kafka con outbox transaccional, motor de integración HL7 v2
+>   sobre MLLP/TLS, servidor de terminología, **identidad con SMART on FHIR** —la API exige testigo y
+>   el laboratorio decide **recurso a recurso** de quién son los datos— y la app del ciudadano.
+> - **Hito 3** — valores críticos con su fuente citada, `SubscriptionTopic` entregando `id-only`,
+>   reflejas con `Observation.triggeredBy`, **doble validación del crítico** (dos firmas de
+>   facultativos distintos), **detección de EDO** por códigos y su declaración a Salud Pública,
+>   `$export` de Bulk Data sobre una **cohorte seudonimizada que caduca y se borra**, y un
+>   **`AuditEvent` de toda lectura y escritura** — quién, qué, cuándo y desde dónde, ni una palabra más.
 >
-> **La API FHIR exige testigo**: lo que antes se recorría con `curl` a pelo ahora necesita uno, y el
-> laboratorio decide **recurso a recurso** de quién son los datos.
+> El circuito entero está recorrido **contra la pila levantada y con la seguridad puesta**, de la
+> petición del HIS por MLLP a la cohorte exportada y borrada; la transcripción, paso a paso, está en
+> [`docs/PLAN.md`](docs/PLAN.md) → *Estado actual*. Ese recorrido destapó **siete fallos que 290 tests
+> no veían** (`adr-0033`–`adr-0036` y la tercera parte de `adr-0030`), arreglados en rojo→verde.
 >
-> **Hito 3 cerrado — y con él, el proyecto.** Los valores críticos publicados con su fuente citada,
-> las notificaciones de `SubscriptionTopic` entregando `id-only`, las pruebas reflejas con
-> `Observation.triggeredBy`, la **doble validación del resultado crítico** —dos firmas de facultativos
-> distintos— y la **detección de enfermedades de declaración obligatoria**, que decide sobre códigos y
-> sin mirar quién es el paciente.
->
-> **Y lo masivo:** `$export` de Bulk Data sobre la **cohorte de vigilancia** que el laboratorio abre
-> solo al declarar, con NDJSON **seudonimizado** y un fichero que **caduca y se borra**; más un
-> **`AuditEvent` de toda lectura y escritura** que registra quién, qué, cuándo y desde dónde — y ni
-> una palabra más.
->
-> El circuito entero está recorrido **de extremo a extremo contra la pila levantada y con la
-> seguridad puesta** —de la petición del HIS por MLLP a la cohorte exportada y borrada—, y la
-> transcripción, paso a paso, está en [`docs/PLAN.md`](docs/PLAN.md) → *Estado actual*. Ese recorrido
-> destapó **siete fallos que 290 tests no veían**: están arreglados, en rojo→verde, y contados en
-> `adr-0033`–`adr-0036` y en la tercera parte de `adr-0030`.
->
-> **Lo que queda abierto** —SNOMED sin cargar por licencia, `Observation.device`, la app sin ejecutar
-> en un dispositivo y ocho cosas más— es una lista **cerrada y explícita** en
-> [`docs/PLAN.md`](docs/PLAN.md) → *Lo que queda abierto al cerrar el proyecto*. Y lo que el proyecto
-> aporta a la biblioteca de convenciones está inventariado ADR por ADR en
-> [`docs/destilacion.md`](docs/destilacion.md).
+> **Lo que queda abierto** —SNOMED sin cargar por licencia, la app sin ejecutar en un dispositivo y
+> una docena más— es una lista **cerrada y explícita** en [`docs/PLAN.md`](docs/PLAN.md) → *Lo que
+> queda abierto al cerrar el proyecto*. Lo que el proyecto aporta a la biblioteca de convenciones está
+> inventariado ADR por ADR en [`docs/destilacion.md`](docs/destilacion.md).
 
 ## Arquitectura en tres frases
 
@@ -105,7 +95,9 @@ Cada subproyecto tiene su propio `CLAUDE.md` con las convenciones de su stack (v
 
 **Requisitos:** Docker y Docker Compose · **JDK 21** · **Node 24** (Angular 22 exige
 `^22.22.3 || ^24.15.0 || >=26`) · **Python 3.11 o superior** · (Flutter, solo para `app-ciudadano/`).
-SUSHI y el IG Publisher necesitan Node y JDK 21, ya cubiertos por lo anterior.
+SUSHI y el IG Publisher necesitan Node y JDK 21, ya cubiertos por lo anterior. Las comprobaciones de
+más abajo se escriben con **`curl` y `jq`**, y los guiones de `infra/` usan además `bash`, `python3` y
+`openssl`.
 
 Maven **no hace falta instalarlo**: el backend trae el *wrapper* (`./mvnw`), configurado en modo
 `only-script` para que el repositorio no contenga ningún binario.
@@ -119,17 +111,21 @@ docker compose -f infra/compose/docker-compose.yml up -d
 ```
 
 Levanta **ocho servicios** —PostgreSQL, Kafka, registro de esquemas, servidor de terminología,
-Keycloak, backend, motor de integración y web profesional— más tres de arranque que hacen su trabajo
-y terminan: los tópicos de Kafka, la carga de terminología y el almacén de claves del MLLP. Van en
-ese orden y esperando a que cada uno esté listo. La primera vez tarda unos minutos: compila el
-backend y el motor con Maven y la web con Angular.
+Keycloak, backend, motor de integración y web profesional— más **seis contenedores de un solo uso**
+que hacen su trabajo y terminan: los tópicos de Kafka, la carga de terminología, las contraseñas de
+los usuarios de demostración, el almacén de claves del MLLP y los dos que dan permiso de escritura a
+los volúmenes recién creados (`terminologia-datos` y `exportaciones-datos`; montar un volumen no es
+poder escribir en él, `adr-0035`). Van en ese orden y esperando a que cada uno esté listo. La primera
+vez tarda unos minutos: compila el backend y el motor con Maven y la web con Angular.
 
 Fuera del `compose` se quedan **solo los terceros**: el HIS y el analizador simulados
 (`simuladores/`), que son los sistemas del hospital y del laboratorio, no parte de HispaLIS.
 
 El **receptor de notificaciones** es otro tercero, y va detrás de un perfil por lo mismo: tenerlo
 siempre arriba daría a entender que el laboratorio depende de que esté, y no depende — si no está, la
-notificación se reintenta y la suscripción se corta sola.
+notificación se reintenta y la suscripción se corta sola. Es el único servicio que necesita la
+**tercera** clave del `.env` (`HISPALIS_CLAVE_HIS`, el secreto con el que se firma cada notificación):
+sin ella no arranca, y lo dice.
 
 ```bash
 docker compose -f infra/compose/docker-compose.yml --profile notificaciones up -d receptor
@@ -198,6 +194,9 @@ cd simuladores && python -m his --mensaje adt --evento A01 --nhc 70000001 && cd 
 infra/keycloak/vincular-paciente.sh paciente.demo Patient/<id>
 ```
 
+El guion escribe en el realm el id que le des y **no comprueba que exista**: es Keycloak quien guarda
+el atributo, y el laboratorio no se entera hasta que alguien entra con esa identidad.
+
 ### La app del ciudadano
 
 ```bash
@@ -244,7 +243,8 @@ trabajo — que es exactamente para lo que está.
 # comprobar que el servidor declara R5
 curl -s http://localhost:8080/fhir/metadata | jq '.fhirVersion'   # → "5.0.0"
 
-# los cuatro tópicos y sus esquemas registrados
+# los cuatro tópicos y sus esquemas registrados. Ojo: el esquema se registra al PRIMER envío, así
+# que con la pila recién levantada y sin tráfico esto contesta `[]` — no es un fallo del registro
 curl -s http://localhost:8085/subjects | jq
 curl -s http://localhost:8085/config/lab.resultados.v1-value | jq '.compatibilityLevel'  # → "BACKWARD"
 
@@ -260,8 +260,10 @@ curl -s "$BASE/ConceptMap/\$translate?url=$IG/ConceptMap/catalogo-a-loinc&system
 curl -s "$BASE/CodeSystem/\$lookup?system=$IG/CodeSystem/catalogo-pruebas&code=K" \
   | jq '[.parameter[] | select(.name=="property") | {(.part[0].valueCode): (.part[1] | .valueDecimal // .valueString // .valueCoding.code)}] | add'
 
-# empezar de cero (la base y el log de Kafka se conservan entre arranques en volúmenes)
-docker compose -f infra/compose/docker-compose.yml down -v
+# empezar de cero (la base y el log de Kafka se conservan entre arranques en volúmenes).
+# ⚠️ Con el comodín de perfiles: sin él, `down` deja en pie los contenedores de `receptor` y `svea`,
+# que quedan apuntando a una red que ya no existe y fallan al volver a levantarlos
+docker compose -f infra/compose/docker-compose.yml --profile '*' down -v
 ```
 
 **Recuperación.** Si alguna vez el dominio y lo publicado dejan de coincidir, la vía oficial es
@@ -270,12 +272,13 @@ publicados de cualquier tipo— y ese *scope* está definido en el realm pero **
 cliente**: dárselo a alguien es un acto explícito, no una consecuencia de una plantilla.
 
 ```bash
-# qué está divergente, sin tocar nada
-curl -s -X POST http://localhost:8080/fhir/\$reconciliar \
+# qué está divergente, sin tocar nada. El testigo es de SISTEMA: el que exige el ámbito de arriba
+curl -s -X POST http://localhost:8080/fhir/\$reconciliar -H "Authorization: Bearer $TESTIGO" \
   -H 'Content-Type: application/fhir+json' -d '{"resourceType":"Parameters"}' | jq
+# → {"name":"aplicado","valueBoolean":false}, {"name":"divergencias","valueInteger":0}
 
 # y arreglarlo
-curl -s -X POST http://localhost:8080/fhir/\$reconciliar \
+curl -s -X POST http://localhost:8080/fhir/\$reconciliar -H "Authorization: Bearer $TESTIGO" \
   -H 'Content-Type: application/fhir+json' \
   -d '{"resourceType":"Parameters","parameter":[{"name":"aplicar","valueBoolean":true}]}' | jq
 ```
@@ -319,6 +322,10 @@ hay un guion que hace **el acto administrativo completo** —concede, usa y reti
 infra/fhir/exportar-cohorte.sh            # o … exportar-cohorte.sh Group/cohorte-legionelosis
 ```
 
+Necesita **una cohorte ya abierta**, y las abre el laboratorio al declarar: sobre una base recién
+levantada contesta *«No hay ninguna cohorte que exportar todavía»* y sale con `69`, retirando el
+permiso igual que si hubiera exportado.
+
 Crea un cliente `almacen-analitico` con una clave RSA recién generada, le da los dos ámbitos, canjea
 una aserción `private_key_jwt` (SMART Backend Services de verdad, sin secreto compartido), exporta,
 comprueba **sobre el NDJSON descargado** que no se ha llevado filiación, borra el trabajo y **borra el
@@ -346,9 +353,15 @@ guardar (`adr-0030`).
 **La base arranca vacía.** No es un descuido: la pantalla de alta de petición busca al paciente por
 su número de historia y, si no consta, lo da de alta ahí mismo — que es lo que hace el mostrador de
 un laboratorio privado con quien llega por primera vez. Para un corpus grande está el generador
-(`simuladores/`), que hoy **escribe ficheros y no publica en la API**: cargarlo es trabajo del hito 2,
-cuando exista el motor de integración.
+(`simuladores/`), que **escribe ficheros y no publica en la API** — cargar ese corpus dentro del
+laboratorio no lo hace nadie todavía y no estaba en ningún hito. Lo que sí llena la base es el HIS
+simulado por MLLP, mensaje a mensaje, y la propia pantalla de alta.
 
+> **En Windows, clónalo en una ruta corta.** La ruta más larga del repositorio son **117 caracteres**
+> desde la raíz (`integracion/src/main/java/…/CatalogoDelServidorDeTerminologia.java`), así que en una
+> carpeta profunda el clon se pasa del límite de 260 y `git` deja ficheros sin escribir, uno a uno,
+> con `Filename too long`. La otra salida es `git config --global core.longpaths true`.
+>
 > **En Windows no hace falta Docker Desktop.** Con WSL2 basta instalar Docker dentro de la distro
 > (`sudo apt install docker.io docker-compose-v2`) y ejecutar el `compose` desde ella, con el
 > repositorio en `/mnt/c/...`. Los puertos publicados se ven igual en `localhost` desde Windows.
@@ -365,12 +378,13 @@ El estado real de cada pieza está en [`docs/PLAN.md`](docs/PLAN.md).
 
 | Componente | Build | Tests | Lint / formato | Arranque |
 |---|---|---|---|---|
-| `ig/` | `npx fsh-sushi .` · `java -jar publisher.jar -ig . -no-sushi` | validador oficial sobre `fsh-generated/resources/` | `npx fsh-sushi .` con **0 warnings** | salida en `ig/output/` |
+| `ig/` | `npx fsh-sushi .` · `java -jar publisher.jar -ig . -no-sushi` (el jar no se versiona: se baja de la *release* de [HL7](https://github.com/HL7/fhir-ig-publisher/releases/latest), como hace la CI) | validador oficial sobre `fsh-generated/resources/` | `npx fsh-sushi .` con **0 warnings** | salida en `ig/output/` |
 | `backend/` | `./mvnw -q package` | `./mvnw verify` | `./mvnw spotless:check` · `./mvnw spotless:apply` | `./mvnw spring-boot:run` · sin base de datos propia: `-Parranque-local` |
 | `integracion/` | `./mvnw -q package` | `./mvnw verify` | `./mvnw spotless:check` · `./mvnw spotless:apply` | `./mvnw spring-boot:run` — o el servicio `motor` del `compose` |
 | `web-profesional/` | `npm run build` | `npm test` | `npm run lint` · `npm run format` | `npm start` |
 | `app-ciudadano/` | `flutter build web` · `flutter build apk` | `flutter test` | `flutter analyze` (falla también con los avisos `info`) | `flutter run -d chrome --web-port 8090` |
 | `simuladores/` | — | `pytest` | `ruff check .` · `ruff format --check .` | `python -m generador --seed 42` |
+| `terminologia/` | `docker build -f terminologia/Dockerfile .` (desde la raíz) | `pytest` | `ruff check .` · `ruff format --check .` | el servicio `terminologia` del `compose` |
 
 Notas de las cadenas de construcción, por si sorprenden:
 
@@ -415,8 +429,8 @@ un fallo del manifiesto o del `network_security_config` no lo veía nadie.
 ## Desarrollo con agentes
 
 El repo está preparado para trabajar con **Claude Code**: `CLAUDE.md` (raíz y por componente),
-`AGENTS.md` (contrato operativo), `docs/PLAN.md` (estado en disco) y `PROMPT-AGENTE-LOCAL.md` (prompts
-de arranque). Los `CLAUDE.md` importan las convenciones de **`BibliotecaDocumentacion`**, que debe
+`AGENTS.md` (contrato operativo) y `docs/PLAN.md` (estado en disco, y **nota de entrega** al
+principio). Los `CLAUDE.md` importan las convenciones de **`BibliotecaDocumentacion`**, que debe
 estar clonada como **carpeta hermana** de este repo:
 
 ```
