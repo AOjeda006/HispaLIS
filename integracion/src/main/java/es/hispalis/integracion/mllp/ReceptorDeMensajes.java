@@ -110,7 +110,25 @@ public class ReceptorDeMensajes implements ReceivingApplication<Message> {
         Canal.Indices indices = canal.get().indices(recibido);
         MensajeEntrante mensaje = MensajeEntrante.recienLlegado(cabecera, indices.nhc(), indices.episodio(), crudo);
 
-        AlmacenDeMensajes.Admision admision = almacen.registrarSiEsNuevo(mensaje);
+        AlmacenDeMensajes.Admision admision;
+        try {
+            admision = almacen.registrarSiEsNuevo(mensaje);
+            if (admision != AlmacenDeMensajes.Admision.YA_PROCESADO) {
+                almacen.anotarIntento(mensaje.id());
+            }
+        } catch (RuntimeException noSePudoArchivar) {
+            // El archivo es la única pieza que queda FUERA de la red del despachador, porque ocurre
+            // antes de que haya nada que despachar. Sin este `catch`, un fallo suyo se escapaba hasta
+            // HAPI, que compone el acuse metiendo dentro el mensaje de la excepción: el fuzzing lo
+            // encontró con un byte nulo en el texto —PostgreSQL rechaza el `INSERT`— y el HIS recibía
+            // la sentencia SQL del laboratorio por el puerto MLLP.
+            LOG.error(
+                    "No se pudo archivar el mensaje con control {}; no se aplica",
+                    cabecera.controlId(),
+                    noSePudoArchivar);
+            return Desenlace.falloInterno("No se pudo archivar el mensaje: " + noSePudoArchivar.getMessage());
+        }
+
         if (admision == AlmacenDeMensajes.Admision.YA_PROCESADO) {
             LOG.info(
                     "Canal {}: {} con control {} ya se había aplicado; no se escribe otra vez",
@@ -120,7 +138,6 @@ public class ReceptorDeMensajes implements ReceivingApplication<Message> {
             return Desenlace.duplicado("Ya aplicado en una entrega anterior de este mismo mensaje.");
         }
 
-        almacen.anotarIntento(mensaje.id());
         return despachador.aplicar(mensaje, recibido);
     }
 

@@ -51,15 +51,17 @@ public class Despachador {
         if (canal.isEmpty()) {
             Desenlace sinCanal = Desenlace.rechazado("No hay ningún canal para %s en este laboratorio."
                     .formatted(mensaje.cabecera().tipoYEvento()));
-            almacen.marcarRechazado(mensaje.id(), sinCanal.detalle());
+            almacen.marcarRechazado(mensaje.id(), sinCanal.detalleTecnico());
             return sinCanal;
         }
 
+        // Al archivo va el detalle TÉCNICO y al emisor el otro. Ver `Desenlace`: son dos
+        // destinatarios distintos y compartir texto sacaba la sentencia SQL por el puerto MLLP.
         Desenlace desenlace = conCuidado(canal.get(), mensaje, recibido);
         if (desenlace.seAplico()) {
-            almacen.marcarProcesado(mensaje.id(), desenlace.detalle());
+            almacen.marcarProcesado(mensaje.id(), desenlace.detalleTecnico());
         } else {
-            almacen.marcarRechazado(mensaje.id(), desenlace.detalle());
+            almacen.marcarRechazado(mensaje.id(), desenlace.detalleTecnico());
         }
         return desenlace;
     }
@@ -70,9 +72,11 @@ public class Despachador {
      * <p>Se traduce a {@code AE} —error de aplicación, mírelo una persona— y queda en el archivo con
      * su motivo, que es lo que lo pone en la DLQ y lo hace reprocesable.
      *
-     * <p>El mensaje del fallo va al log; <strong>el contenido del mensaje v2 no</strong>. Un mensaje
-     * v2 volcado en un log es un volcado clínico completo, y el sitio donde tiene que estar es el
-     * archivo, no el fichero de trazas.
+     * <p>El mensaje del fallo va al log y al archivo; <strong>no sale por el cable</strong> y
+     * <strong>el contenido del mensaje v2 tampoco va al log</strong>. Lo primero porque el mensaje de
+     * una excepción inesperada puede ser cualquier cosa —el fuzzing encontró una que traía la
+     * sentencia SQL del archivo entera— y lo segundo porque un mensaje v2 volcado en un log es un
+     * volcado clínico completo.
      */
     private static Desenlace conCuidado(Canal canal, MensajeEntrante mensaje, Message recibido) {
         try {
@@ -83,7 +87,8 @@ public class Despachador {
                     canal.nombre(),
                     mensaje.cabecera().controlId(),
                     inesperado);
-            return Desenlace.errorDeAplicacion("El motor no pudo aplicar el mensaje: " + inesperado.getMessage());
+            return Desenlace.falloInterno(
+                    "El canal %s no pudo aplicar el mensaje: %s".formatted(canal.nombre(), inesperado.getMessage()));
         }
     }
 }

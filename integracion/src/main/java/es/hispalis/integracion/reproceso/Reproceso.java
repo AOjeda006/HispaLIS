@@ -104,7 +104,8 @@ public class Reproceso {
                 cabecera.controlId(),
                 cabecera.tipoYEvento(),
                 desenlace.resultado());
-        return new Resultado(id, desenlace.seAplico(), desenlace.detalle());
+        // El detalle técnico y no el del cable: esto lo lee la consola del motor, que es interna.
+        return new Resultado(id, desenlace.seAplico(), desenlace.detalleTecnico());
     }
 
     /**
