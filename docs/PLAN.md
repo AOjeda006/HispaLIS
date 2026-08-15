@@ -1969,6 +1969,60 @@ publicado, sea cual sea el contenido. La variedad que sí importa —`Ñ`, tilde
 en los apellidos del corpus por si alguna inestabilidad de codificación produjera una divergencia
 falsa.
 
+### El ítem 42 con la documentación del CNR delante (prompt 24, 2026-08-15)
+
+**Rama B: la release no está, así que no se cabla nada.** Comprobado antes de tocar: `HISPALIS_SNOMED`
+sin definir en el entorno, sin `.env` en `infra/compose/`, y en `_fuente/_externos/espana/` de la
+biblioteca los cuatro **documentos** del Centro Nacional de Referencia y ningún fichero RF2. Los tres
+códigos siguen sin cablearse y el ítem 42 **sigue abierto**: lo que cambia es que ya no falta nada más
+que el fichero. El expediente está en el propio ítem, arriba — licencia, los tres productos que hay
+que descargar y en qué versión, qué comprueba el cargador, las tres líneas de FSH que se tocan y los
+tres avisos que se han comprado por adelantado.
+
+Los cuatro documentos son la documentación de la publicación, no la publicación: **ninguno contiene
+los tres códigos**, porque los conceptos viven en los RF2. Lo que sí traen es cómo se distribuye la
+terminología, y ahí es donde estaban los fallos.
+
+**Tres cosas rotas, las tres esperando exactamente al día del ítem 42:**
+
+| Qué | Cómo se veía | Cómo se ha arreglado |
+|---|---|---|
+| `$SCT_ES_REFSET_DOCUMENTOS` escrito `?fhir_vs-refset/…`, con un **guion** | No se veía: SUSHI lo compila y el alias no lo usa ningún perfil. La sintaxis es `?fhir_vs=refset/<refsetId>` y solo esa | Corregido, con un test que revisa **cualquier** URI de `ValueSet` implícito del FSH |
+| `$SCT_ES` es la URI de **edición** y el nombre invita a usarla de `system` | `$SCT_ES#1551000122105` produce un `Coding` de un sistema que no existe; `$lookup` contesta que no conoce el código | Aviso en el alias y guardarrail, comprobado poniendo esa línea exacta en `PacienteLabES.fsh` |
+| El cargador leía **un** fichero por patrón, y una edición española son **tres paquetes** | `display` = `888000000008` —el número del código de nombre—, conceptos que «no existen» y la versión de la edición equivocada | Se leen todos; la edición declarada es la del paquete que depende de los demás, y un empate de fechas para la carga (`adr-0039`) |
+
+El patrón que une a las tres es el mismo de la ronda anterior, girado: allí eran caminos que solo se
+recorren cuando el camino normal ya ha fallado; aquí es **configuración escrita, plausible y que no
+usa nadie todavía**. No falla nunca hasta el día en que alguien va a usarla por primera vez, que es
+el día que tendrá la release recién descargada y la atención puesta en otra cosa.
+
+**Lo que la documentación deja dicho y el proyecto no sabía:**
+
+- **Una edición de SNOMED no se descarga: se compone.** Internacional (conceptos) + *Spanish Edition*
+  (**solo** descripciones) + extensión del SNS, a cadencia mensual, trimestral y semestral, en las
+  versiones ancladas que el Área de Descarga publica como *«Dependencia EE SNS»*. La de 20260601
+  declara alinearse con la internacional de 20260401 y la española de 20260510.
+- **La licencia de afiliado es gratuita** para quien reside y trabaja en España, por un formulario.
+  El bloqueo del ítem 42 nunca fue de permiso; es de descarga.
+- **El SNS publica 80 refsets**, y tres tocan de lleno a este proyecto: tipos de muestra de
+  laboratorio (**617** miembros, para la variable «Tipo de muestra» del CMDIC, que es la misma que
+  informa este laboratorio con **10** códigos escritos a mano), tipos de documento para identificación
+  personal (**3** miembros, jerarquía *objeto físico*) y enfermedades de declaración obligatoria.
+- **Un refset oficial no es una lista cerrada ni una regla de negocio**, y lo dicen sus propias
+  fichas: la de tipos de muestra advierte que no es exhaustiva, y la de EDO, que **no forma parte de
+  ningún protocolo de declaración**. Eso último respalda una decisión ya tomada: el catálogo EDO de
+  este proyecto es propio porque una EDO es una entrada administrativa, no un diagnóstico.
+- **Un refset vaciado a cero es un aviso, no una defunción:** la extensión vació dos en esta
+  publicación como paso previo a inactivarlos en la siguiente. Una expansión vacía puede ser la ruta
+  de migración.
+
+Dos ADR nuevos, `adr-0039` y `adr-0040`; el segundo **aceptado con aplicación diferida**, porque
+comprobar la pertenencia al refset exige el fichero de miembros. `docs/destilacion.md` pasa de 38 a 40.
+Verificado con `ruff` y **47 tests** de `terminologia` en verde, cuatro de ellos nuevos y rojos antes
+del arreglo. No se ha tocado la biblioteca ni se ha copiado una línea de esos documentos: llevan
+copyright de SNOMED International, licencia de afiliado y prohibición expresa de modificarlos, y este
+repositorio es público — se citan y se destila la regla.
+
 ### Lo que queda abierto al cerrar el proyecto
 
 Lista **cerrada**: esto es todo lo que se sabe que falta. Un proyecto que se cierra diciendo lo que
@@ -1977,11 +2031,23 @@ le falta está terminado; uno que lo esconde, no.
 **Bloqueado por datos que no se pueden redistribuir**
 
 1. **SNOMED CT no está cargado** (ítem 42). La Edición Española del SNS no se redistribuye y no está
-   en este equipo. Consecuencia concreta: los tres códigos SNOMED del catálogo —tipos de muestra y
-   valores cualitativos en SNOMED— se publican en la guía y **no se pueden validar contra el
-   servidor**; `$validate-code` sobre `http://snomed.info/sct` no contesta. El hueco está modelado, el
-   cargador lo avisa en voz alta al arrancar y el sistema funciona sin él porque nada obligatorio
-   depende de SNOMED. **No es trabajo pendiente: es una licencia que falta.**
+   en este equipo. Consecuencia concreta: los **diez** códigos SNOMED que la guía referencia —los diez
+   son tipos de muestra; los resultados cualitativos son un `CodeSystem` propio y deliberado— se
+   publican y **no se pueden validar contra el servidor**; `$validate-code` sobre
+   `http://snomed.info/sct` no contesta. El hueco está modelado, el cargador lo avisa en voz alta al
+   arrancar y el sistema funciona sin él porque nada obligatorio depende de SNOMED. **No es trabajo
+   pendiente: es una descarga que falta.**
+   *Precisado el 2026-08-15 con la documentación del CNR:* la licencia de afiliado es **gratuita**
+   para quien reside y trabaja en España y se pide con un formulario en el Área de Descarga, así que
+   la barrera no es el permiso sino el fichero. Y no es un fichero: son **tres productos** a versiones
+   ancladas. El ítem 42 lleva el expediente completo —qué descargar, qué comprueba el cargador, qué se
+   toca en la guía y los tres avisos— para que el día que llegue sea trabajo y no investigación.
+   *Y lo que el mismo bloqueo deja abierto además de los tres códigos* (`adr-0040`): el SNS publica un
+   refset de **617** tipos de muestra de laboratorio para la misma variable del CMDIC que aquí se
+   enumera con diez códigos escritos a mano, y **entre las dos listas no hay ninguna relación
+   declarada**. Que la local sea más corta es correcto —es la oferta del laboratorio, no el catálogo
+   nacional—; que no se pueda comprobar, no. La comprobación necesita el fichero de miembros del
+   refset, que está en la misma release.
 
 **Modelado que se dejó fuera a propósito**
 
@@ -3161,15 +3227,107 @@ contra la pila del `compose` levantada desde el clon limpio, no contra un doble.
   *Criterio:* la Edición Española cargada en el servidor de terminología, los tres códigos
   resolviendo con `$lookup`, y los `identifier.type` de la guía llevando **las dos codificaciones** —
   la de THO, que valida en `tx.fhir.org`, y la del SNS—. `ci-ig` sigue en verde.
-  *Bloqueo declarado:* requiere registro ante el Ministerio de Sanidad y **no se redistribuye**. El
-  ítem no se puede empezar sin la release en la máquina; el camino de carga ya está implementado y
-  probado contra una mini-release RF2 sintética (ítem 32).
+  *Bloqueo declarado:* requiere licencia de afiliado y **no se redistribuye**. El ítem no se puede
+  empezar sin la release en la máquina; el camino de carga ya está implementado y probado contra una
+  mini-release RF2 sintética (ítem 32).
   *⛔ Comprobado y BLOQUEADO (2026-08-09):* no hay release. `HISPALIS_SNOMED` está sin definir en
   `infra/compose/.env` y en el archivo de releases (`BibliotecaDocumentacion/_fuente/_externos`) solo
   están LOINC 2.82 y THO. **El ítem no se empieza**: los tres códigos no se cablean «provisionalmente»
   ni se inventan, porque un código SNOMED escrito de memoria valida contra nada y se propaga a todo el
   que consuma la guía. Se desbloquea el día que la release esté en la máquina; el resto del ítem
   —cargador, deducción de la versión desde el *refset* de dependencias, `$lookup`— ya está hecho.
+
+  *⛔ Sigue bloqueado (2026-08-15), y ya no falta nada más que el fichero.* Comprobado otra vez:
+  `HISPALIS_SNOMED` sin definir, sin `.env` en `infra/compose/` y en el archivo de la biblioteca solo
+  los cuatro **documentos** del Centro Nacional de Referencia (CNR) —notas de versión 20260601, fichas
+  de los 80 refsets, guía del Área de Descarga 2026 y notas de la extensión de Medicamentos—, que son
+  la documentación de la publicación y **no contienen ningún código**: los conceptos viven en los
+  ficheros RF2. Lo que sí se ha hecho es dejar el expediente cerrado para que el día que llegue sea
+  trabajo y no investigación:
+
+  **1 · La licencia es gratuita, y el bloqueo no es económico ni largo.** España es miembro de SNOMED
+  International desde 2009, y por eso la licencia de afiliado **no cuesta nada** para quien reside y
+  trabaja en territorio nacional. Se pide con un formulario en el Área de Descarga
+  (<https://snomed-ct.sanidad.gob.es/snomed-ct/>, solicitud en `/solicitudLicencia.do`) aceptando el
+  Contrato de Licencia de SNOMED CT para Afiliado. El CNR, adscrito a la Subdirección General de
+  Información Sanitaria del Ministerio de Sanidad, es el **único canal** de distribución en España.
+  La redacción anterior de este ítem —«requiere registro ante el Ministerio»— es cierta y se quedaba
+  corta: lo que impide cerrar el ítem es **descargarla**, no conseguirla.
+
+  **2 · Hay que descargar tres cosas, no una.** Y no las últimas de cada una, porque van a cadencias
+  distintas: internacional **mensual**, española **trimestral**, extensión del SNS **semestral**. Para
+  la edición 20260601 del SNS:
+
+  | Producto del Área de Descarga | Versión | Qué aporta |
+  |---|---|---|
+  | *SNOMED CT International Edition (Dependencia EE SNS)* | **20260401** | Los conceptos y sus relaciones. De aquí salen los diez tipos de muestra |
+  | *SNOMED CT Spanish Edition (Dependencia EE SNS)* | **20260510** | **Solo descripciones** en español de los conceptos internacionales |
+  | *Extensión de SNOMED CT para España del SNS* | **20260601** | Sus propios conceptos —**los tres de este ítem**— y descripciones complementarias |
+
+  Las entradas *«(Dependencia EE SNS)»* existen exactamente para esto: son las versiones **ancladas**
+  de las que depende la extensión vigente. Las tres se descomprimen **bajo una misma carpeta** y
+  `HISPALIS_SNOMED` apunta a ella. Formato: RF2, texto delimitado por tabuladores, UTF-8.
+
+  **3 · Qué lee el cargador, ya adaptado a los tres paquetes** (`fix` del 2026-08-15, `adr-0039`):
+  `sct2_Concept_Snapshot*`, `sct2_Description_Snapshot*`, `der2_cRefset_Language*Snapshot*` y
+  `der2_ssRefset_ModuleDependency*Snapshot*`, **todos** los que haya de cada patrón. El subconjunto
+  que sube **se deduce de la guía** (`curado.py`), así que no hay ninguna lista de códigos que tocar:
+  con los tres `identifier.type` puestos en el FSH, el cargador los sube solo.
+
+  **4 · Cómo se comprueba cada código antes de cablearlo.** Un código retirado se cablea igual de
+  bien y se propaga igual de mal, así que primero se comprueba y después se escribe:
+
+  1. En `sct2_Concept_Snapshot*` de la extensión, la fila con `id` = el código: `active` tiene que ser
+     `1` y `moduleId` el `900000001000122104` (módulo de la extensión nacional de España). Si
+     `active` es `0`, el código está **retirado**: el motivo está en el *refset* de valor de atributo
+     (`der2_cRefset_AttributeValue*`) y el sustituto en los de asociación histórica
+     (`der2_cRefset_Association*`). No se cablea el retirado «hasta que se mire».
+  2. El **término preferente en español** es el de la descripción cuyo `id` aparece en
+     `der2_cRefset_Language*` con `acceptabilityId` = `900000000000548007`. Ese, y no el FSN, es el
+     `display` que se publica (D7).
+  3. Atajo: **el cargador ya hace las dos cosas**. Correrlo con la release puesta y leer el
+     `CodeSystem` que produce es la comprobación, y falla en voz alta si algún código pedido no está
+     activo.
+
+  **5 · Qué se toca en la guía.** Tres líneas de `ig/input/fsh/profiles/PacienteLabES.fsh`, que hoy
+  fijan **una** codificación cada una:
+
+  | *Slice* | Hoy | Se le añade |
+  |---|---|---|
+  | `identifier[cipSns].type` | `$TIPOS_IDENTIFICADOR_HL7#HC` | `$SCT#1551000122105` |
+  | `identifier[cipAutonomico].type` | `$TIPOS_IDENTIFICADOR_HL7#JHN` | `$SCT#1571000122102` |
+  | `identifier[dniNie].type` | `$TIPOS_IDENTIFICADOR_HL7#NI` | `$SCT#22851000122109` |
+
+  La forma es `* identifier[x].type.coding[0] = …` y `.coding[1] = …`: con la actual, `= Sistema#codigo`,
+  no caben dos. **El `system` es `$SCT`, sin edición** — `$SCT_ES` es la URI de la edición y sirve de
+  base a un `ValueSet` implícito, no de `system` de un `Coding`; hay un test que lo impide desde el
+  2026-08-15. Nada más se toca: el backend escribe `system` y `value` de los identificadores y **nunca
+  `type`** (`TraductorDePaciente`), y ningún ejemplo lo pone, así que un `pattern` con dos
+  codificaciones no obliga a reescribir nada. Si algún día un ejemplo lleva `type`, tendrá que llevar
+  **las dos**: un `pattern` con dos codificaciones las exige las dos.
+
+  **6 · Los tres avisos, comprados por adelantado.**
+  - **Los tres códigos no son homogéneos.** El refset «Tipos de documento para identificación
+    personal» (`900000251000122107`, OID `2.16.724.4.21.5.8.45`) tiene **tres** miembros y son de la
+    jerarquía **objeto físico**: documentos. Un CIP es un código, no un documento, así que **no hay que
+    esperar los dos CIP ahí** ni atar los tres *slices* a `$SCT_ES_REFSET_DOCUMENTOS`. A qué refset
+    pertenece cada uno no lo dicen los documentos —no listan miembros—: se mira en
+    `der2_Refset_Simple*Snapshot*` filtrando por `refsetId`.
+  - **`ci-ig` valida contra `tx.fhir.org`, que no sirve la extensión española.** Es el riesgo que solo
+    se resuelve el día de, y en este orden: (a) probar tal cual —el `binding` de `Identifier.type` es
+    `extensible`, así que una codificación de fuera del `ValueSet` es legal y la queja, si la hay, es
+    sobre el código, no sobre la estructura—; (b) si sale error de código desconocido, declarar la
+    `version` del `Coding` con la URI de edición, que convierte «no conozco ese código» en «no puedo
+    comprobar esa versión», que es aviso y no error; (c) si aun así molesta, `input/ignoreWarnings.txt`
+    —que además **es el fichero que hoy falta** y produce el único error de la línea base del QA.
+  - **Comprobar los diez tipos de muestra contra el refset del SNS es otro trabajo** (`adr-0040`), no
+    este. Se hace con el mismo fichero de miembros, y puede destapar que alguno de los diez no esté.
+
+  **7 · Lo que ya está hecho y no hay que rehacer:** el cargador (RF2, tres paquetes, versión deducida
+  del *refset* de dependencias, término preferente en español, fallo en voz alta si un concepto está
+  retirado), el aviso de arranque cuando la release no está, los cuatro contratos del servidor de
+  terminología y el `$lookup`. Y desde esta ronda, las dos URI que estaban mal escritas esperando a
+  este ítem: el `?fhir_vs=` del refset de documentos y el guardarrail de `$SCT_ES`.
 
 - [x] **43 — Catálogo de valores críticos, con su procedencia.** *(2026-08-09)*
   No es el fichero de rangos de normalidad: son los umbrales que obligan a avisar por teléfono.
@@ -3645,9 +3803,11 @@ contra la pila del `compose` levantada desde el clon limpio, no contra un doble.
   sigue funcionando, y un valor que no sea una cifra se rechaza en vez de aproximarse.
 - **SNOMED CT Edición Española no está cargada.** El camino está entero —el cargador lee RF2, deduce
   la versión del *refset* de dependencia de módulos, elige el término preferente en español y falla si
-  un concepto está retirado—, y está probado contra una mini-release sintética. Lo que falta es la
-  release: **es gratuita previo registro ante el Ministerio, pero no se puede redistribuir**, así que
-  no puede vivir en el repositorio ni descargarse en la CI. Sin ella, `HISPALIS_SNOMED` va vacío y el
+  un concepto está retirado—, y está probado contra mini-releases sintéticas. Lo que falta es la
+  release: **la licencia de afiliado es gratuita para quien reside y trabaja en España —un formulario
+  en el Área de Descarga—, pero no se puede redistribuir**, así que no puede vivir en el repositorio
+  ni descargarse en la CI. Y **no es una descarga, son tres** a versiones ancladas: detalle en el
+  ítem 42 y en `adr-0039`. Sin ella, `HISPALIS_SNOMED` va vacío y el
   cargador **avisa en voz alta** listando los conceptos que se quedan sin resolver, en vez de dejar el
   servidor a medias en silencio. Consecuencia concreta: los tipos de muestra y los motivos de rechazo
   validan contra el `ValueSet` de la guía, que sí está cargado, pero **un `$lookup` de un código
