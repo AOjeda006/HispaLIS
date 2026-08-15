@@ -187,7 +187,10 @@ def _opciones(argumentos: list[str] | None) -> argparse.Namespace:
     analizador.add_argument(
         "--snomed",
         default=os.environ.get(VARIABLES["snomed"], ""),
-        help="Raíz de la release RF2 de la Edición Española. Sin ella, SNOMED no se carga.",
+        help=(
+            "Raíz con las tres releases RF2 de la Edición Española descomprimidas "
+            "(Internacional + Spanish Edition + extensión del SNS). Sin ella, SNOMED no se carga."
+        ),
     )
     analizador.add_argument(
         "--espera-arranque",

@@ -38,6 +38,19 @@ HAPI, eso es un fallo, no una optimización.
 | **THO 7.3.0** | Sí (CC0) | Se extraen solo los sistemas que la guía cita |
 | **SNOMED CT Edición Española** | **No.** Gratuita previa licencia del Ministerio, **sin redistribución** | Ni un fichero en el repo. Se monta desde fuera; si no está, el cargador **avisa en voz alta** y sigue |
 
+### ⚠️ SNOMED CT no se descarga: se compone
+
+`HISPALIS_SNOMED` no apunta a *una* release, sino a la raíz con **tres** descomprimidas: la
+**Edición Internacional** (los conceptos), la ***Spanish Edition*** (**solo descripciones** en
+español) y la **extensión del SNS** (sus propios conceptos y descripciones complementarias). Y **no
+valen las últimas de cada una** —van a cadencia mensual, trimestral y semestral—: hay que coger las
+versiones ancladas, que el Área de Descarga publica como entradas *«Dependencia EE SNS»*.
+
+El cargador lee **todos** los ficheros que casan con cada patrón, no uno. Leyendo uno solo, el
+`display` en español de un concepto internacional se pierde —está en otro paquete— y el
+`CodeSystem` sale publicado con el número del código puesto de nombre, sin un aviso.
+`../docs/adr/adr-0039-…`.
+
 **Declara siempre la versión exacta del *release* que cargas.** Sin eso los `display` dejan de ser
 reproducibles: la misma consulta da un nombre distinto contra otro servidor y nadie sabe por qué. La
 de SNOMED **se deduce del propio release** —del *refset* de dependencia de módulos—, no se escribe a

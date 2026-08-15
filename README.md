@@ -147,8 +147,11 @@ curl http://localhost:8091/declaraciones   # el libro de registro: cuentas y nú
    ella se carga el catálogo de pruebas del servidor de terminología (D15).
 2. **Las *releases* de terminología** archivadas en `BibliotecaDocumentacion`, que se asume clonada
    como carpeta hermana (`HISPALIS_RELEASES` apunta a otro sitio). **SNOMED CT Edición Española no se
-   redistribuye**: hay que descargarla con la licencia propia y señalarla con `HISPALIS_SNOMED`; sin
-   ella, el cargador avisa de qué conceptos se quedan sin resolver y sigue.
+   redistribuye**: hay que descargarla con la licencia propia —gratuita para quien reside y trabaja
+   en España— y señalarla con `HISPALIS_SNOMED`; sin ella, el cargador avisa de qué conceptos se
+   quedan sin resolver y sigue. Y **no es una descarga, son tres**: Edición Internacional, *Spanish
+   Edition* y extensión del SNS, descomprimidas bajo la misma carpeta y en las versiones que se
+   enlazan entre sí (ver `infra/compose/.env.example`).
 
 - **Web profesional:** `http://localhost:4200`
 - **API FHIR:** `http://localhost:8080/fhir` — y también en `http://localhost:4200/fhir`, que es por
