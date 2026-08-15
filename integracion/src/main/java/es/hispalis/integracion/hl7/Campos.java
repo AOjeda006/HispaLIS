@@ -74,7 +74,17 @@ public final class Campos {
         }
     }
 
-    /** Los ocho primeros dígitos de un {@code TS}, que es la fecha en formato FHIR. */
+    /**
+     * Los ocho primeros dígitos de un {@code TS}, que es la fecha en formato FHIR.
+     *
+     * <p>Comprueba que <strong>sean</strong> dígitos y que compongan un día que existe, y no solo que
+     * haya ocho caracteres. Cortar por posición y confiar es lo que produce un {@code birthDate} como
+     * {@code ABCD-EF-GH} o {@code 0000-00-00}: FHIR los rechaza al construir el tipo, la excepción
+     * sale del mapeo y el mensaje acaba archivado como fallo del laboratorio cuando lo que pasa es
+     * que el emisor manda una fecha que no lo es.
+     *
+     * @return la fecha {@code AAAA-MM-DD}, o vacío si no hay una fecha reconocible
+     */
     public static Optional<String> fechaIso(String valorV2) {
         if (valorV2 == null || valorV2.strip().length() < 8) {
             return Optional.empty();
@@ -83,8 +93,15 @@ public final class Campos {
         if (!digitos.chars().allMatch(Character::isDigit)) {
             return Optional.empty();
         }
-        return Optional.of(
-                "%s-%s-%s".formatted(digitos.substring(0, 4), digitos.substring(4, 6), digitos.substring(6)));
+        try {
+            return Optional.of(LocalDate.of(
+                            Integer.parseInt(digitos.substring(0, 4)),
+                            Integer.parseInt(digitos.substring(4, 6)),
+                            Integer.parseInt(digitos.substring(6)))
+                    .toString());
+        } catch (java.time.DateTimeException noEsUnDiaQueExista) {
+            return Optional.empty();
+        }
     }
 
     private static int trozo(String digitos, int desde) {

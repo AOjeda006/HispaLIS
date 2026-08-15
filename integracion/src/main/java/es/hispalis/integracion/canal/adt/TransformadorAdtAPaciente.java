@@ -5,6 +5,7 @@ import ca.uhn.hl7v2.model.v251.datatype.CX;
 import ca.uhn.hl7v2.model.v251.datatype.XPN;
 import ca.uhn.hl7v2.model.v251.segment.PID;
 import es.hispalis.integracion.fhir.SistemasDeIdentificador;
+import es.hispalis.integracion.hl7.Campos;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -128,17 +129,16 @@ public class TransformadorAdtAPaciente {
      * {@code PID-7} → {@code birthDate}.
      *
      * <p>El tipo de V2 admite hasta el segundo y FHIR quiere una fecha, así que se toman los ocho
-     * primeros dígitos. Si vienen menos —hay HIS que mandan solo el año—, se descarta: una fecha de
-     * nacimiento a medias inventaría un día que decide en qué rango de referencia cae un resultado.
+     * primeros dígitos. Si vienen menos —hay HIS que mandan solo el año— o no son una fecha, se
+     * descarta: una fecha de nacimiento a medias inventaría un día que decide en qué rango de
+     * referencia cae un resultado, y una imposible tumba el mapeo entero.
+     *
+     * <p>La conversión la hace {@link Campos#fechaIso}, que es donde vive esa regla. Este método tuvo
+     * su propia copia hasta el 2026-08-15 y la copia era peor: no comprobaba que los ocho caracteres
+     * fueran dígitos.
      */
     private static Optional<String> fechaDeNacimientoDe(PID pid) {
-        String crudo = valor(pid.getDateTimeOfBirth().getTime().getValue());
-        if (crudo.length() < 8) {
-            return Optional.empty();
-        }
-        String soloFecha = crudo.substring(0, 8);
-        return Optional.of(
-                "%s-%s-%s".formatted(soloFecha.substring(0, 4), soloFecha.substring(4, 6), soloFecha.substring(6, 8)));
+        return Campos.fechaIso(valor(pid.getDateTimeOfBirth().getTime().getValue()));
     }
 
     /** {@code PID-8}, tabla 0001. Lo que no se reconoce es {@code unknown}, no un error. */

@@ -85,6 +85,39 @@ class TransformadorAdtAPacienteTest {
         assertThat(paciente.getBirthDateElement().asStringValue()).isEqualTo("1981-03-14");
     }
 
+    /**
+     * Regresión del 2026-08-15: un {@code PID-7} que no son dígitos reventaba el canal entero.
+     *
+     * <p>El javadoc del mapeo dice que una fecha a medias «se descarta», y era verdad solo para las
+     * cortas. Con ocho caracteres que no fueran dígitos se cortaba igual y se componía
+     * {@code ABCD-EF-GH}, que HAPI rechaza al construir el {@code DateType}. La excepción no la
+     * cazaba ninguno de los tres {@code catch} del canal, así que subía hasta la red del despachador
+     * y el mensaje se archivaba como <em>fallo interno del laboratorio</em>. Lo era del emisor, y ni
+     * siquiera grave: un paciente sin fecha de nacimiento se registra perfectamente.
+     *
+     * <p>Lo encontró la cobertura, no un fallo en producción: {@code Campos.fechaIso} —que sí valida
+     * los dígitos— aparecía con un cero redondo porque nadie la llamaba, mientras el transformador
+     * llevaba su propia copia de la misma regla, peor. Ahora hay una sola.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {"ABCDEFGH", "1981031X", "00000000", "1981-03-14"})
+    void una_fecha_de_nacimiento_que_no_es_una_fecha_se_descarta_en_vez_de_tumbar_el_canal(String pid7)
+            throws Exception {
+        ADT_A01 mensaje = (ADT_A01) CONTEXTO.getPipeParser()
+                .parse(MensajesDePrueba.adt(
+                                "A01", "MSG1", "70000001", MensajesDePrueba.MUNOZ, "Begoña^María", "UNICODE UTF-8")
+                        .replace("19810314", pid7));
+
+        Patient paciente = transformador.aPatient(mensaje.getPID());
+
+        assertThat(paciente.hasBirthDate())
+                .as("«%s» no es una fecha; el paciente se registra sin ella, que es lo que dice la regla", pid7)
+                .isFalse();
+        assertThat(paciente.getNameFirstRep().getFamily())
+                .as("y el resto de la filiación llega igual")
+                .isEqualTo(MensajesDePrueba.MUNOZ);
+    }
+
     private static ca.uhn.hl7v2.model.v251.segment.PID pidDe(String apellidos, String nombreDePila) throws Exception {
         ADT_A01 mensaje = (ADT_A01) CONTEXTO.getPipeParser()
                 .parse(MensajesDePrueba.adt("A01", "MSG1", "70000001", apellidos, nombreDePila, "UNICODE UTF-8"));
