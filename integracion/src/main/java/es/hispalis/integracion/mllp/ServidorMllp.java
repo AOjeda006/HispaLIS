@@ -42,13 +42,20 @@ public class ServidorMllp implements SmartLifecycle {
     private final PropiedadesMllp propiedades;
     private final ReceivingApplication<ca.uhn.hl7v2.model.Message> receptor;
     private final HapiContext contexto;
+    private final AcusePorFalloInterno ultimaRed;
 
     private HL7Service servicio;
 
-    public ServidorMllp(PropiedadesMllp propiedades, ReceptorDeMensajes receptor) {
+    /**
+     * @param delHis de aquí salen el {@code MSH-3} y el {@code MSH-4} con los que el laboratorio se
+     *     presenta. Los necesita el acuse de último recurso: cuando el mensaje entrante no se deja
+     *     leer no hay de dónde sacarlos, y un acuse sin emisor no le sirve de nada a quien lo recibe.
+     */
+    public ServidorMllp(PropiedadesMllp propiedades, ReceptorDeMensajes receptor, PropiedadesDelHis delHis) {
         this.propiedades = propiedades;
         this.receptor = receptor;
         this.contexto = contextoPara(propiedades);
+        this.ultimaRed = new AcusePorFalloInterno(delHis.aplicacion(), delHis.instalacion());
     }
 
     private static HapiContext contextoPara(PropiedadesMllp propiedades) {
@@ -72,7 +79,7 @@ public class ServidorMllp implements SmartLifecycle {
         }
         servicio = contexto.newServer(propiedades.puerto(), propiedades.tls().habilitado());
         servicio.registerApplication(receptor);
-        servicio.setExceptionHandler(new AcusePorFalloInterno());
+        servicio.setExceptionHandler(ultimaRed);
         try {
             servicio.startAndWait();
         } catch (InterruptedException interrumpido) {
