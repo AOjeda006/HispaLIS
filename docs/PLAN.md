@@ -1930,18 +1930,18 @@ le falta está terminado; uno que lo esconde, no.
 
     | Workflow | Verde en | Run |
     |---|---|---|
-    | `CI · backend` | `d37ec19` | #26 |
+    | `CI · backend` | `ff7e408` | #27, con el arranque sin Docker arreglado |
+    | `CI · simuladores` | `ff7e408` | #12, que es quien levanta el `compose` y por tanto valida el cambio de puerto del receptor |
     | `CI · app-ciudadano` | `75b93f3` | #5, ya **con el empaquetado dentro** |
     | `CI · IG` | `5dda172` | #10, con sus dos jobs — incluido «Publicar la IG en GitHub Pages», que desplegó |
     | `CI · integracion` | `5dda172` | #8 |
     | `CI · web-profesional` | `5dda172` | #8 |
-    | `CI · simuladores` | `5dda172` | #11 |
     | `CI · terminologia` | `5dda172` | #7 |
 
-    Las cinco últimas siguen cubriendo el código de hoy porque **desde `5dda172` no se ha tocado nada
-    suyo**: lo único que ha cambiado es `backend/src/test/`, `.github/workflows/ci-app-ciudadano.yml`,
-    `README.md` y `docs/`. La guía está publicada y navegable en
-    `https://aojeda006.github.io/HispaLIS/`.
+    Las cuatro de `5dda172` siguen cubriendo el código de hoy porque **desde entonces no se ha tocado
+    nada suyo**: lo único que ha cambiado es `backend/`, `infra/compose/docker-compose.yml`,
+    `.github/workflows/ci-app-ciudadano.yml`, `README.md` y `docs/`. La guía está publicada y
+    navegable en `https://aojeda006.github.io/HispaLIS/`.
 
 ### Los criterios del hito 2, uno a uno
 
