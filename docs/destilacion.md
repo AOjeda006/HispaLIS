@@ -25,9 +25,9 @@ mitad del trabajo y la que evita que la biblioteca se llene de un solo proyecto.
 
 | | |
 |---|---|
-| ADR escritos en el proyecto | **38** (`adr-0001` … `adr-0038`) |
-| Con aportación transversal | **38** |
-| Que aportan **regla nueva** (`convenciones.md` + `referencia.md`) | **33** |
+| ADR escritos en el proyecto | **40** (`adr-0001` … `adr-0040`) |
+| Con aportación transversal | **40** |
+| Que aportan **regla nueva** (`convenciones.md` + `referencia.md`) | **35** |
 | Que aportan **solo contexto** (`referencia.md`) | **5** — `0001`, `0004`, `0006`, `0011`, `0013` |
 | Ficheros de la biblioteca tocados | **22** |
 | Aportaciones **arrastradas** de hitos anteriores, aún sin destilar | **2** — la trampa documental de MLLP (hito 1) y la tabla 0354 (hito 2) |
@@ -37,12 +37,12 @@ mitad del trabajo y la que evita que la biblioteca se llene de un solo proyecto.
 | Fichero de la biblioteca | ADR que lo alimentan |
 |---|---|
 | `interoperabilidad/fhir/` | 0001, 0011, 0029, 0030, 0036 |
-| `interoperabilidad/terminologia/` | 0006, 0009, 0026, 0028, 0032 |
+| `interoperabilidad/terminologia/` | 0006, 0009, 0026, 0028, 0032, **0039**, **0040** |
 | `interoperabilidad/hl7-v2/` | **0005**, **0018**, 0021, 0034, 0037 |
 | `interoperabilidad/smart-on-fhir/` | 0024, 0025, 0033 |
 | `interoperabilidad/perfilado-fsh/` | 0007, 0010 |
 | `interoperabilidad/integracion/` | 0005, 0019, 0034 |
-| `interoperabilidad/espana/` | 0003 |
+| `interoperabilidad/espana/` | 0003, **0039**, **0040** |
 | `interoperabilidad/bulk-data/` | *(ninguno nuevo; ver «Lo que no aporta nada»)* |
 | `stacks/spring/` | 0012, 0013, 0020, 0031 |
 | `stacks/java/` | 0036 |
@@ -55,8 +55,8 @@ mitad del trabajo y la que evita que la biblioteca se llene de un solo proyecto.
 | `herramientas/autenticacion.md` | 0024, 0025 |
 | `herramientas/docker.md` | 0026, 0035 |
 | `herramientas/entrega-continua.md` | 0004, 0007, 0008 |
-| `principios/testing.md` | 0014, 0026, 0033, 0034, 0037, 0038 |
-| `principios/manejo-errores.md` | 0031, 0036, 0037 |
+| `principios/testing.md` | 0014, 0026, 0033, 0034, 0037, 0038, 0039, 0040 |
+| `principios/manejo-errores.md` | 0031, 0036, 0037, 0039 |
 | `stacks/typescript/` | 0038 |
 | `principios/git-workflow.md` | 0008 |
 | `principios/desarrollo-con-ia.md` | 0004 |
@@ -575,6 +575,56 @@ Ficha B de arriba. **Aportación arrastrada del hito 2.**
   tests, verdes sin `--coverage` y `ENOENT` con él.
 - **Se queda aquí:** que la fuente de verdad de los `system` sea `ig/input/fsh/aliases.fsh`.
 
+### ADR-0039 · Una edición de SNOMED no se descarga: se compone
+
+- **Transversal:** (1) **«Una release» puede ser varias.** La Edición Española de SNOMED CT son
+  **tres** descargas —Internacional (conceptos), *Spanish Edition* (**solo** descripciones) y
+  extensión nacional— a **tres cadencias** distintas, y no valen las últimas de cada una: hay que
+  coger las versiones ancladas que el Área de Descarga publica como *«Dependencia EE SNS»*. Antes de
+  escribir el lector de un formato, mirar cómo se **distribuye** el producto. (2) **Un `[-1]` sobre un
+  `glob` es una decisión disfrazada de detalle**: «el último» solo significa algo si el orden
+  significa algo, y el orden alfabético de unas carpetas que elige el usuario no significa nada.
+  (3) **Un valor por defecto que rellena un hueco esconde el hueco** — `display or fsn or codigo`
+  publicó el número del código como nombre, sin excepción y sin aviso. (4) **En terminología
+  licenciada la versión es parte del dato**, y se deduce del contenido, no se escribe a mano. (5) **Un
+  arnés sintético prueba el formato, no el producto**: la mini-*release* tenía un fichero por tabla
+  porque así se escribió, y ese detalle invisible era la premisa que fallaba.
+- **Destino:** `interoperabilidad/terminologia/` (**C**: leer todos los ficheros de una release
+  compuesta y deducir la versión del *refset* de dependencias; **R**: los tres modos de fallo
+  medidos), `interoperabilidad/espana/` (**R**: los tres productos del Área de Descarga, las entradas
+  de dependencia y que la licencia de afiliado es gratuita para quien reside y trabaja en España),
+  `principios/manejo-errores.md` (**C**: donde el hueco importa, el defecto es el error) y
+  `principios/testing.md` (**R**: el arnés sintético que fija una premisa falsa).
+- **Autoridad:** documentación del Centro Nacional de Referencia de SNOMED CT para España, edición
+  20260601 (notas para la versión y guía del Área de Descarga, archivadas en `_fuente/_externos/` de
+  la biblioteca). Los tres modos de fallo, reproducidos en `terminologia/tests/test_snomed.py`.
+- **Se queda aquí:** que este proyecto cargue un `CodeSystem` fragmentario y que la variable se llame
+  `HISPALIS_SNOMED`.
+
+### ADR-0040 · Un refset oficial se referencia, no se copia
+
+- **Transversal:** (1) **Antes de escribir una lista de códigos, buscar si la autoridad ya la
+  publica** — no para copiarla, sino para **declarar la relación** con ella; una lista local sin
+  relación declarada es una copia que nadie va a sincronizar. (2) **«Está en la lista oficial» es
+  comprobable, y donde no se comprueba es una creencia**; el sitio de la comprobación es el punto por
+  el que el contenido entra. (3) **Un refset oficial dice qué es un concepto, no qué hacer con él**:
+  confundir vocabulario con política acaba con reglas de negocio escondidas dentro de un `ValueSet`.
+  (4) **Un refset con cero miembros puede estar avisando**, no roto: es la ruta de migración antes de
+  inactivarlo. (5) **La configuración que nadie usa todavía es la que más falla**, y falla el día que
+  alguien va a usarla por primera vez.
+- **Destino:** `interoperabilidad/terminologia/` (**C**: la sintaxis del `ValueSet` implícito
+  —`?fhir_vs=refset/…`—, que la URI de edición no es un `system`, y que un subconjunto local se
+  declara contra el refset oficial; **R**: la forma de intersección de `compose.include` y por qué
+  aquí no vale), `interoperabilidad/espana/` (**R**: qué publica la extensión del SNS —80 refsets,
+  ligados al CMDIC del RD 1093/2010— y qué advierten sus fichas) y `principios/testing.md` (**C**:
+  probar también la configuración que todavía no usa nadie).
+- **Autoridad:** fichas de los conjuntos de referencias de la extensión 20260601 (CNR); FHIR R5,
+  `ValueSet.compose.include` («si se listan varios conjuntos, el código tiene que estar en todos»,
+  verificado en `hl7.fhir.r5.core@5.0.0`) y la página de SNOMED CT del estándar para las cinco formas
+  del `ValueSet` implícito.
+- **Se queda aquí:** los diez tipos de muestra concretos de este laboratorio y su catálogo de EDO
+  simulado.
+
 ---
 
 ## Lo que NO aporta nada, y conviene decirlo
@@ -585,10 +635,13 @@ Ficha B de arriba. **Aportación arrastrada del hito 2.**
   permiso del volumen (`adr-0035`, va a Docker) y la forma de la regla de autorización (`adr-0033`,
   va a seguridad). Anotarlo así evita que alguien busque en `bulk-data` una lección que está en otro
   sitio.
-- **`interoperabilidad/espana/`** recibe **un solo** ADR (`0003`). No es que el proyecto no haya
-  tocado lo español —NUHSA, apellidos dobles, INE, DNI— sino que **lo demás ya estaba escrito** en la
-  biblioteca y el proyecto lo confirmó sin corregirlo. Confirmar también es un resultado, y no genera
-  edición.
+- **`interoperabilidad/espana/`** recibía **un solo** ADR (`0003`) y ahora recibe **tres**. Lo que no
+  ha cambiado es el motivo de que fuera uno: lo español que el proyecto tocó al principio —NUHSA,
+  apellidos dobles, INE, DNI— **ya estaba escrito** en la biblioteca, y el proyecto lo confirmó sin
+  corregirlo; confirmar también es un resultado y no genera edición. Los dos nuevos (`0039`, `0040`)
+  llegan por otra puerta: **documentación oficial que el proyecto no tenía** hasta el 2026-08-15, la
+  del Centro Nacional de Referencia de SNOMED CT para España. La lección de método es esa —el hueco
+  no estaba en lo que se había hecho, sino en lo que no se había leído.
 
 ## Cómo se usa este dossier
 
