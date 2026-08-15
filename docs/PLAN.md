@@ -2015,6 +2015,10 @@ el día que tendrá la release recién descargada y la atención puesta en otra 
 - **Un refset vaciado a cero es un aviso, no una defunción:** la extensión vació dos en esta
   publicación como paso previo a inactivarlos en la siguiente. Una expansión vacía puede ser la ruta
   de migración.
+- **Y una decisión vieja que sale confirmada:** el cargador no filtra por un *refset* de idioma
+  concreto —mira la aceptabilidad y punto—, y esta edición **fusiona** el refset de lenguaje inglés
+  para España en el de inglés de EE. UU. Un cargador que hubiera fijado un `refsetId` de idioma se
+  habría roto en esta publicación; este ni se entera. La razón estaba escrita desde el ítem 32.
 
 Dos ADR nuevos, `adr-0039` y `adr-0040`; el segundo **aceptado con aplicación diferida**, porque
 comprobar la pertenencia al refset exige el fichero de miembros. `docs/destilacion.md` pasa de 38 a 40.
@@ -3278,7 +3282,8 @@ contra la pila del `compose` levantada desde el clon limpio, no contra un doble.
   bien y se propaga igual de mal, así que primero se comprueba y después se escribe:
 
   1. En `sct2_Concept_Snapshot*` de la extensión, la fila con `id` = el código: `active` tiene que ser
-     `1` y `moduleId` el `900000001000122104` (módulo de la extensión nacional de España). Si
+     `1` y `moduleId`, uno de los tres de la extensión — el `900000001000122104` para todo lo que no
+     sea vacunas individualizadas (`900000001000256103`) ni biobanco (`11000257103`). Si
      `active` es `0`, el código está **retirado**: el motivo está en el *refset* de valor de atributo
      (`der2_cRefset_AttributeValue*`) y el sustituto en los de asociación histórica
      (`der2_cRefset_Association*`). No se cablea el retirado «hasta que se mire».
