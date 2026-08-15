@@ -14,7 +14,17 @@ import { porIdentificador, SID_COLEGIADO, SID_DNI_NIE, SID_NHC } from './sistema
  * nada de forma visible — simplemente deja de encontrar pacientes, o encuentra al que no era.
  */
 
-const ALIASES = join(__dirname, '..', '..', '..', '..', 'ig', 'input', 'fsh', 'aliases.fsh');
+/**
+ * La ruta se calcula desde la raíz del proyecto y **no** desde `__dirname`.
+ *
+ * `__dirname` dentro de un `.spec` no es el directorio del fichero: los specs se empaquetan antes de
+ * correr, y a qué apunta depende de cómo los haya inlineado el bundler. Sin cobertura resolvía al
+ * directorio del spec y estos tests pasaban; al medir cobertura pasó a resolver a la raíz del
+ * proyecto, la ruta se fue cuatro niveles por encima del repositorio y los tres se cayeron con
+ * `ENOENT`. Estaban en verde por casualidad. `process.cwd()` es la raíz del proyecto Angular la
+ * ejecute quien la ejecute, que es lo que hace falta para llegar al `ig/` de al lado.
+ */
+const ALIASES = join(process.cwd(), '..', 'ig', 'input', 'fsh', 'aliases.fsh');
 
 function aliasDeclarado(nombre: string): string {
   const fsh = readFileSync(ALIASES, 'utf8');
