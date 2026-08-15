@@ -2151,22 +2151,26 @@ le falta está terminado; uno que lo esconde, no.
     commit que le afectó**, nunca de un vistazo sobre `HEAD`. Quien los quiera todos a la vez tiene
     que lanzarlos a mano con `workflow_dispatch`.
 
-    Los siete, cada uno con el commit donde le tocaba correr, y los siete en verde:
+    Los siete, cada uno con el commit donde le tocaba correr, y los siete en verde **al cierre del
+    prompt 24 (2026-08-15)**:
 
     | Workflow | Verde en | Run |
     |---|---|---|
-    | `CI · backend` | `ff7e408` | #27, con el arranque sin Docker arreglado |
-    | `CI · simuladores` | `ff7e408` | #12, que es quien levanta el `compose` y por tanto valida el cambio de puerto del receptor |
-    | `CI · app-ciudadano` | `75b93f3` | #5, ya **con el empaquetado dentro** |
-    | `CI · IG` | `5dda172` | #10, con sus dos jobs — incluido «Publicar la IG en GitHub Pages», que desplegó |
-    | `CI · integracion` | `5dda172` | #8 |
-    | `CI · web-profesional` | `5dda172` | #8 |
-    | `CI · terminologia` | `5dda172` | #7 |
+    | `CI · IG` | `baaf537` | #11, con sus dos jobs — incluido «Publicar la IG en GitHub Pages», que desplegó |
+    | `CI · terminologia` | `baaf537` | #8 |
+    | `CI · backend` | `baaf537` | #29 |
+    | `CI · integracion` | `baaf537` | #10 |
+    | `CI · web-profesional` | `baaf537` | #10 |
+    | `CI · simuladores` | `baaf537` | #13 |
+    | `CI · app-ciudadano` | `718934f` | #6, ya **con el empaquetado dentro** |
 
-    Las cuatro de `5dda172` siguen cubriendo el código de hoy porque **desde entonces no se ha tocado
-    nada suyo**: lo único que ha cambiado es `backend/`, `infra/compose/docker-compose.yml`,
-    `.github/workflows/ci-app-ciudadano.yml`, `README.md` y `docs/`. La guía está publicada y
-    navegable en `https://aojeda006.github.io/HispaLIS/`.
+    Seis de siete sobre el mismo commit, y no por casualidad: esa tanda tocó `ig/`, `terminologia/`,
+    `README.md`, `infra/compose/.env.example` y `docs/`, y las tres primeras rutas aparecen en los
+    filtros de casi todos. `CI · app-ciudadano` se queda en `718934f` porque desde entonces **no se ha
+    tocado nada suyo** — que es justo la propiedad que describe esta entrada; leerla al revés («hay uno
+    que no ha corrido») es el error que la entrada existe para evitar. Y `7c2372e`, posterior, no
+    dispara ninguno: es solo `docs/`. La guía está publicada y navegable en
+    `https://aojeda006.github.io/HispaLIS/`.
 
 ### Los criterios del hito 2, uno a uno
 
