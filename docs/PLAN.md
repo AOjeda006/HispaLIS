@@ -2027,6 +2027,46 @@ del arreglo. No se ha tocado la biblioteca ni se ha copiado una línea de esos d
 copyright de SNOMED International, licencia de afiliado y prohibición expresa de modificarlos, y este
 repositorio es público — se citan y se destila la regla.
 
+### El dossier al día, y lo que la ronda de testing no había dejado escrito (prompt 25, 2026-08-15)
+
+Esta tanda **no toca código**: cierra la materia prima con la que se enriquecerá
+`BibliotecaDocumentacion`, que es otro encargo. La biblioteca no se ha tocado.
+
+**Dos ADR nuevos, y los dos son de la ronda de testing, no de esta.** La ronda dejó `adr-0037` y
+`adr-0038` y dejó fuera dos aprendizajes que ninguno de los dos recoge:
+
+| ADR | Qué recoge | Por qué no estaba |
+|---|---|---|
+| `adr-0041` · Un cero redondo de cobertura suele ser una regla duplicada | La cobertura se lee por los **ceros**, no por el porcentaje; y código que no llama nadie **casi nunca sobra**: casi siempre hay otra copia de la misma regla y **la que corre es la peor**. Los cuatro veredictos de un cero | `adr-0038` es sobre **medir** —que instrumentar cambia lo medido—, no sobre **lo que la medición encontró**. Son dos lecciones distintas y la segunda no es de TypeScript |
+| `adr-0042` · Una propiedad mal enunciada da un rojo que es del test | Reenunciar una propiedad solo vale **si la nueva afirma más**; y no se escribe la función para poder probarla —la propiedad descartada de la banda magnética— | La parte *property-based* de la ronda no dejó ningún ADR: tres propiedades verdes a la primera y la cuarta roja **por el enunciado**, que es justo lo reutilizable |
+
+**Y dos fichas que no son de ningún ADR porque son de varios.** Es lo más transversal que ha dejado
+el proyecto y estaba disperso como una línea al final de cuatro o cinco ADR:
+
+- **El arnés también es código, y miente en las dos direcciones** (`0037`, `0038`, `0039`, `0042`): un
+  oráculo que da por hecho el separador que el atacante puede redefinir, una conexión cerrada contada
+  como silencio, una *release* sintética que fija una premisa falsa y tres verdes por casualidad.
+- **Lo que no ejecuta nadie todavía es lo que peor falla** (`0014`, `0020`, `0029`, `0040`, `0041`):
+  cinco fallos del proyecto son el mismo fallo, ninguno da error y cuatro parecen correctos en el log.
+  La regla que sale —**la declaración no es el efecto**— generaliza la que hoy solo está escrita para
+  autorización.
+
+**Lo que se repasó de lo que ya había** (la parte que más costaba): las **25** rutas de la biblioteca
+que el dossier cita **existen todas**, con su `convenciones.md` y su `referencia.md` donde son
+carpeta. Correcciones encontradas: `adr-0038` apuntaba a `stacks/typescript/` y su caso concreto es
+del constructor de Angular (`stacks/angular/`, que existe); la ficha de `adr-0014` se dejaba fuera la
+regla que mejor envejece —**la lista de lo protegido se deduce, no se escribe**—; `adr-0037` no
+llegaba a `herramientas/seguridad.md`, y la fuga por el acuse de error es divulgación de información
+antes que estilo; y una regla citaba una librería concreta en el enunciado en vez de en el ejemplo.
+**Tres reglas del dossier corrigen o matizan líneas que `principios/testing.md` ya tiene** —el
+criterio de un *fuzzer*, el *shrinking* como requisito y cómo se lee la cobertura— y van marcadas con
+⚠️, porque curarlas es reescribir, no añadir.
+
+**Lo que se marca como que no aporta nada**, además de Bulk Data: `stacks/python/` (dos componentes en
+Python y ni una lección de Python), `fundamentos/concurrencia/` (el único intermitente **confirma** la
+regla que ya está), y `ux-ipo/` (hay web y app, y sus decisiones de interfaz no se tomaron: se
+heredaron del camino más corto). El dossier queda en **42 ADR + 2 fichas transversales**, 25 destinos.
+
 ### Lo que queda abierto al cerrar el proyecto
 
 Lista **cerrada**: esto es todo lo que se sabe que falta. Un proyecto que se cierra diciendo lo que
@@ -3931,6 +3971,9 @@ contra la pila del `compose` levantada desde el clon limpio, no contra un doble.
   **Cerrado como dossier el 2026-08-12:** todo lo destilable —estas aportaciones incluidas— está
   inventariado en `docs/destilacion.md`, ADR por ADR y con el fichero de destino. La biblioteca
   **sigue sin tocarse**: su curación es otro encargo.
+  **Puesto al día el 2026-08-15:** 42 ADR y dos fichas que no son de ninguno porque son de varios; las
+  25 rutas citadas comprobadas una a una; y marcado lo que **no** aporta nada, que ahora son cinco
+  entradas y no una.
 - **⚠️ Siete fallos que 290 tests no vieron y un recorrido contra el `compose` sí** (ítem 51). Están
   en la tabla de *Estado actual*, en `adr-0033`–`adr-0036` y en la tercera parte de `adr-0030`. El
   patrón común merece quedar escrito aparte, porque es la lección más cara del proyecto: **viven en
@@ -3950,14 +3993,14 @@ contra la pila del `compose` levantada desde el clon limpio, no contra un doble.
   `eclipse-temurin:21-jdk` montando el repositorio y la caché de Maven, que es exactamente lo que
   hace `ci-backend`. Quien retome esto se lo va a encontrar: los tests sí corren con 25.
 - **⚠️ Cinco fallos que las suites por ejemplo no veían, y el patrón que los une** (ronda de testing,
-  2026-08-15; `adr-0037` y `adr-0038`). Los cinco viven en **el camino que se recorre cuando el camino
-  normal ya ha fallado**, o en el que nadie recorre nunca: el acuse que se compone cuando el mensaje
-  no se deja parsear, el texto de error que viaja al emisor, la fecha que no es una fecha, el método
-  que no llama nadie y la rama del reconciliador que solo corre sin acotar. Un test por ejemplo lo
-  escribe quien conoce el camino bueno, y por eso los ejemplos cubren el camino bueno; **entrada
-  generada y cobertura son las dos herramientas que entran por donde nadie mira**. La lección
-  operativa: cuando una suite lleva mucho tiempo en verde, lo que falta no son más ejemplos — es
-  cambiar de instrumento.
+  2026-08-15; `adr-0037`, `adr-0038`, `adr-0041` y `adr-0042`). Los cinco viven en **el camino que se
+  recorre cuando el camino normal ya ha fallado**, o en el que nadie recorre nunca: el acuse que se
+  compone cuando el mensaje no se deja parsear, el texto de error que viaja al emisor, la fecha que no
+  es una fecha, el método que no llama nadie y la rama del reconciliador que solo corre sin acotar. Un
+  test por ejemplo lo escribe quien conoce el camino bueno, y por eso los ejemplos cubren el camino
+  bueno; **entrada generada y cobertura son las dos herramientas que entran por donde nadie mira**. La
+  lección operativa: cuando una suite lleva mucho tiempo en verde, lo que falta no son más ejemplos —
+  es cambiar de instrumento.
 - **La tanda de fuzzing y el barrido con volumen alargan dos CI.** `ci-integracion` suma unos 45 s
   por las 105 entradas hostiles y `ci-backend` unos 95 s por los 60 pacientes del reconciliador. Se
   acepta: las dos son puertas que encuentran cosas. Si algún día molesta, el número de casos y el de

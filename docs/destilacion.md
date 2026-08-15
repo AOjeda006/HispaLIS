@@ -2,7 +2,9 @@
 
 **Qué es esto.** El inventario de lo que HispaLIS ha aprendido y **puede salir del proyecto**: para
 cada ADR, qué tiene de transversal una vez descartado lo que solo vale aquí, a qué fichero de
-`BibliotecaDocumentacion` iría y con qué autoridad se sostiene.
+`BibliotecaDocumentacion` iría y con qué autoridad se sostiene. Más **dos fichas que no son de ningún
+ADR porque son de varios**: aparecen como una línea suelta al final de cuatro o cinco, y solo se ven
+al ponerlas juntas.
 
 **Qué NO es.** Una edición de la biblioteca. `BibliotecaDocumentacion` es un repositorio aparte, con
 sus propias reglas de curación, y su ciclo de enriquecimiento es otro encargo. Aquí solo se deja el
@@ -25,42 +27,54 @@ mitad del trabajo y la que evita que la biblioteca se llene de un solo proyecto.
 
 | | |
 |---|---|
-| ADR escritos en el proyecto | **40** (`adr-0001` … `adr-0040`) |
-| Con aportación transversal | **40** |
-| Que aportan **regla nueva** (`convenciones.md` + `referencia.md`) | **35** |
+| ADR escritos en el proyecto | **42** (`adr-0001` … `adr-0042`) |
+| Con aportación transversal | **42** |
+| Que aportan **regla nueva** (`convenciones.md` + `referencia.md`) | **37** |
 | Que aportan **solo contexto** (`referencia.md`) | **5** — `0001`, `0004`, `0006`, `0011`, `0013` |
-| Ficheros de la biblioteca tocados | **22** |
+| **Fichas que no salen de un solo ADR** | **2** — el arnés sin probar y la configuración que no ejecuta nadie |
+| Destinos distintos en la biblioteca | **25** (una carpeta con su `convenciones.md` y su `referencia.md` cuenta como uno) |
 | Aportaciones **arrastradas** de hitos anteriores, aún sin destilar | **2** — la trampa documental de MLLP (hito 1) y la tabla 0354 (hito 2) |
+
+**Rutas comprobadas el 2026-08-15.** Los 25 destinos existen hoy en `BibliotecaDocumentacion`, con su
+`convenciones.md` y su `referencia.md` donde son carpeta. La única ruta que este dossier citaba y no
+era la correcta era la de `adr-0038`: el caso concreto es del constructor de Angular y va a
+`stacks/angular/`, no a `stacks/typescript/`, que se queda con la regla general del empaquetado.
 
 ### A qué ficheros iría, y cuántos ADR alimenta cada uno
 
 | Fichero de la biblioteca | ADR que lo alimentan |
 |---|---|
 | `interoperabilidad/fhir/` | 0001, 0011, 0029, 0030, 0036 |
-| `interoperabilidad/terminologia/` | 0006, 0009, 0026, 0028, 0032, **0039**, **0040** |
-| `interoperabilidad/hl7-v2/` | **0005**, **0018**, 0021, 0034, 0037 |
+| `interoperabilidad/terminologia/` | 0006, 0009, 0026, 0028, 0032, 0039, 0040 |
+| `interoperabilidad/hl7-v2/` | 0005, 0018, 0021, 0034, 0037 |
 | `interoperabilidad/smart-on-fhir/` | 0024, 0025, 0033 |
 | `interoperabilidad/perfilado-fsh/` | 0007, 0010 |
 | `interoperabilidad/integracion/` | 0005, 0019, 0034 |
-| `interoperabilidad/espana/` | 0003, **0039**, **0040** |
+| `interoperabilidad/espana/` | 0003, 0039, 0040 |
 | `interoperabilidad/bulk-data/` | *(ninguno nuevo; ver «Lo que no aporta nada»)* |
 | `stacks/spring/` | 0012, 0013, 0020, 0031 |
 | `stacks/java/` | 0036 |
 | `stacks/flutter/` | 0025 |
+| `stacks/typescript/` | 0038 |
+| `stacks/angular/` | 0038 |
 | `bases-de-datos/sql/` | 0015 |
 | `fundamentos/datos-distribuidos/` | 0019, 0023 |
 | `fundamentos/redes/` | 0017, 0022 |
-| `herramientas/seguridad.md` | 0016, 0020, 0022, 0027, 0033 |
+| `herramientas/seguridad.md` | 0016, 0020, 0022, 0027, 0033, **0037**, + la ficha transversal II |
 | `herramientas/api-rest.md` | 0016, 0017 |
 | `herramientas/autenticacion.md` | 0024, 0025 |
 | `herramientas/docker.md` | 0026, 0035 |
 | `herramientas/entrega-continua.md` | 0004, 0007, 0008 |
-| `principios/testing.md` | 0014, 0026, 0033, 0034, 0037, 0038, 0039, 0040 |
+| `principios/testing.md` | 0014, 0026, 0033, 0034, 0037, 0038, 0039, 0040, **0041**, **0042**, + las dos fichas transversales (I y II) |
 | `principios/manejo-errores.md` | 0031, 0036, 0037, 0039 |
-| `stacks/typescript/` | 0038 |
 | `principios/git-workflow.md` | 0008 |
 | `principios/desarrollo-con-ia.md` | 0004 |
-| `diseno/` | 0002, 0014, 0028, 0032 |
+| `diseno/` | 0002, 0014, 0028, 0032, + la ficha transversal II |
+
+`principios/testing.md` se lleva **doce de las cuarenta y cuatro entradas** de este dossier, y eso
+**no** es un reparto casual: es el fichero cuyas reglas el proyecto incumplía —fuzzing,
+*property-based* y cobertura leída— y el que se puso a prueba al cumplirlas. Tres de sus líneas
+actuales salen de aquí **matizadas o corregidas**, no solo confirmadas; van marcadas con ⚠️.
 
 ---
 
@@ -75,7 +89,7 @@ por buena.
 | | |
 |---|---|
 | **Qué es transversal** | Quien implementa MLLP busca el apéndice B de HL7 V2.5/V2.5.1 y lo encuentra **vacío**. El documento normativo real es *Transport Specification — MLLP, Release 2*, y es un estándar de **HL7 V3**, no de v2: la primera capa de la trampa es que el transporte de v2 está especificado fuera de v2. La segunda es peor: ese documento está **retirado desde mayo de 2025 y sin sustituto designado**, así que hoy **no hay fuente normativa vigente que citar** para el *framing* de v2. |
-| **Impacto en el código** | Ninguno. El *framing* (`0x0B` … `0x1C 0x0D`) lo implementan HAPI HL7v2 y cualquier librería seria, y nunca se escribe a mano. Lo que falta es **fuente citable**, no comportamiento. |
+| **Impacto en el código** | Ninguno. El *framing* (`0x0B` … `0x1C 0x0D`) lo implementa cualquier librería seria del protocolo y nunca se escribe a mano. Lo que falta es **fuente citable**, no comportamiento. |
 | **Dónde iría** | `interoperabilidad/hl7-v2/referencia.md` — es contexto puro, y de los que ahorran una tarde. Una línea en `convenciones.md`: «no busques MLLP en el apéndice B; no cites el estándar retirado como vigente; describe el *framing* y di que lo aporta la librería». |
 | **Autoridad** | HL7 V2.5.1 (2007), apéndice B (vacío, comprobado). HL7 V3 *Transport Specification — MLLP, Release 2* (retirado, mayo de 2025). |
 | **Se queda aquí** | Que este proyecto use HAPI HL7v2 y no Mirth. |
@@ -226,8 +240,9 @@ por buena.
   servidor**»: una única clase de configuración que haga de *composition root* del borde, y la
   advertencia de que **importar la configuración con el nombre de tu versión no basta** — casi siempre
   hacen falta cinco más, y ninguna avisa.
-- **Destino:** `interoperabilidad/fhir/referencia.md` (**R**), como apartado «HAPI JPA empotrado». No
-  genera regla: es un mapa de minas de una librería concreta.
+- **Destino:** `interoperabilidad/fhir/referencia.md` (**R**), como apartado «un servidor empotrado
+  dentro de una aplicación propia», con el caso medido como ejemplo. No genera regla: es un mapa de
+  minas de una librería concreta, y el nombre del apartado no debe ser el de la librería.
 - **Autoridad:** HAPI FHIR 8.10.1, medido.
 - **Se queda aquí:** las siete trampas con su código, que son de HAPI y de esta versión.
 
@@ -256,12 +271,15 @@ por buena.
 
 - **Transversal:** un framework que también escribe tiene **varias puertas** —métodos heredados,
   tipos sin reglas, transacciones/lotes, operaciones—, y hay que **enumerarlas y cerrarlas una a
-  una**. Tres reglas: lo heredado **se prueba** antes de darlo por bueno; lo que no tiene reglas
-  definidas **se rechaza**, no se permite; y las puertas laterales se cierran **en la capa que las
-  dispara**. Más el corolario de test, que es el que más vale: **el test se escribe contra el
-  dominio, no contra la proyección** — leer la proyección lo habría dado por bueno.
-- **Destino:** `diseno/convenciones.md` (**C**) + `principios/testing.md` (**C**: contra qué capa se
-  afirma).
+  una**. Cuatro reglas: lo heredado **se prueba** antes de darlo por bueno; lo que no tiene reglas
+  definidas **se rechaza**, no se permite; las puertas laterales se cierran **en la capa que las
+  dispara**; y —la que más envejece bien— **la lista de lo protegido se deduce, no se escribe**: se le
+  pregunta al sistema qué tipos gobierna. Enumerar a mano las puertas de un framework produce una
+  lista que **nace correcta**, y la siguiente versión del framework añade puertas que la lista no
+  tiene. Más el corolario de test, que es el que más vale: **el test se escribe contra el dominio, no
+  contra la proyección** — leer la proyección lo habría dado por bueno.
+- **Destino:** `diseno/convenciones.md` (**C**: enumerar y cerrar; deducir la lista en vez de
+  escribirla) + `principios/testing.md` (**C**: contra qué capa se afirma).
 - **Autoridad:** ninguna externa; es experiencia.
 - **Se queda aquí:** la lista de recursos y de interceptores de HispaLIS.
 
@@ -536,44 +554,65 @@ Ficha B de arriba. **Aportación arrastrada del hito 2.**
 
 ### ADR-0037 · El camino que atiende el fallo también falla
 
-- **Transversal:** cinco cosas, y las cinco valen fuera de HL7 v2. (1) **En un protocolo con acuse,
-  el manejador de errores es código de primera línea**: su contrato incluye qué responder cuando no
-  se puede componer una respuesta buena, y hay que probarlo con entrada que ni siquiera parsee.
-  (2) **Comprueba qué hace tu librería cuando el manejador devuelve nulo** — HAPI lanza «Application
-  exception handler may not return null» y el emisor no recibe nada. (3) **Un mensaje de error tiene
-  dos destinatarios que no comparten texto**: el de fuera necesita saber qué hacer, el de dentro qué
-  pasó; fundirlos es cómo el `getMessage()` de una excepción acaba en la respuesta con la sentencia
-  SQL dentro. (4) **Al inventariar qué está dentro de la red de seguridad, mira lo que ocurre antes
-  de entrar**: registrar, autenticar y auditar van delante del `try` por buenas razones, y por eso
-  sus fallos salen por caminos que nadie ha diseñado. (5) **El criterio de un *fuzzer* no es «no se
-  cae»**, sino: se contesta o se cierra, no se filtra el interior, no se filtra el dato del usuario y
-  **el servicio sigue atendiendo al siguiente** — lo último se comprueba mandando algo bueno después
-  de cada entrada mala.
+- **Transversal:** seis cosas, y las seis valen fuera de HL7 v2 — es la ficha con más carga de todo
+  el dossier. (1) **En un protocolo con acuse, el manejador de errores es código de primera línea**:
+  su contrato incluye qué responder cuando no se puede componer una respuesta buena, y hay que
+  probarlo con entrada que ni siquiera parsee. (2) **Comprueba qué hace tu librería cuando el
+  manejador devuelve nulo** — hay librerías que lanzan y el emisor no recibe nada; hay otras que
+  tragan y cierran. (3) ⚠️ **Un servidor que compone su acuse de error con el mensaje de la excepción
+  publica su esquema al primero que le mande basura.** Un mensaje de error tiene **dos destinatarios
+  que no comparten texto**: el de fuera necesita saber qué hacer, el de dentro qué pasó, y fundirlos
+  es exactamente cómo el `getMessage()` de una excepción acaba en la respuesta con la sentencia SQL,
+  la ruta del fichero o el nombre del servidor dentro. Vale para **cualquier protocolo con acuse**:
+  el cuerpo de un `500`, el `ERR` de un mensaje, el campo de motivo de un rechazo binario. Y no se
+  encuentra leyendo código: se encuentra mandando basura y leyendo lo que vuelve. (4) **Al
+  inventariar qué está dentro de la red de seguridad, mira lo que ocurre antes de entrar**: registrar,
+  autenticar y auditar van delante del `try` por buenas razones, y por eso sus fallos salen por
+  caminos que nadie ha diseñado. (5) ⚠️ **Un *fuzzer* contra un parser de red no busca solo caídas:
+  busca ausencia de respuesta.** En un protocolo con acuse, **el silencio es peor que un rechazo** —el
+  emisor no sabe si llegó, y su lógica de reintento decide a ciegas—, y el criterio completo son
+  cuatro cosas: se contesta o se cierra, no se filtra el interior, no se filtra el dato del usuario y
+  **el servicio sigue atendiendo al siguiente** (lo último se comprueba mandando algo bueno después de
+  cada entrada mala). (6) **Y el arnés hostil miente en las dos direcciones si su lector se escribe a
+  ojo** — ver la ficha transversal I.
 - **Destino:** `principios/manejo-errores.md` (**C**: los dos destinatarios de un mensaje de error, y
-  que el camino de fallo del fallo tiene que contestar), `principios/testing.md` (**C**: los cuatro
-  criterios de un fuzzer, que no son «no se cae»; **R**: por qué la lista de rastros prohibidos vive
-  en el test) e `interoperabilidad/hl7-v2/referencia.md` (**R**: el recorrido de
-  `ApplicationRouterImpl` cuando el `MSH` no se deja leer, y que el lector MLLP lee `MSH-18` sobre
-  bytes crudos).
+  que el camino de fallo del fallo tiene que contestar), `herramientas/seguridad.md` (**C**: la fuga
+  por el acuse de error es divulgación de información, y el sitio donde se comprueba es una entrada
+  hostil, no una revisión de código — la línea que hoy dice «nunca expongas mensajes de error con
+  detalles internos» se queda corta en el **cómo se detecta**), `principios/testing.md`
+  (**C**: los cuatro criterios de un fuzzer, que **no** son «no se cae» — ⚠️ **corrige** la línea
+  actual, que enfoca *panics*, UB y desbordes y es la lista propia de código nativo; para un servicio
+  de red el fallo que importa es el que no contesta; **R**: por qué la lista de rastros prohibidos
+  vive en el test) e `interoperabilidad/hl7-v2/referencia.md` (**R**: el recorrido del enrutador
+  cuando la cabecera no se deja leer, y que el lector MLLP mira el charset sobre bytes crudos).
 - **Autoridad:** `hapi-base` 2.6.0, `ApplicationRouterImpl.processMessage` verificado con `javap`;
-  PostgreSQL, `0x00` no admitido en `text`.
-- **Se queda aquí:** las propiedades del canal con las que se compone el `ACK` de último recurso.
+  PostgreSQL, `0x00` no admitido en `text`. Ciento cinco entradas generadas por socket, con semilla
+  fija.
+- **Se queda aquí:** que la librería sea HAPI y las propiedades del canal con las que se compone el
+  `ACK` de último recurso.
 
 ### ADR-0038 · Medir la cobertura cambió lo que se medía
 
-- **Transversal:** (1) **Activar la cobertura cambia cómo se transforma el código** — instrumenta, y
-  con ello puede cambiar rutas, `sourcemaps`, identidad de módulos y tiempos; un test que pasa sin
-  cobertura y falla con ella no es un fallo de la herramienta, es un test que dependía del
-  empaquetado. (2) **`__dirname` e `import.meta.url` no son fiables dentro de un test empaquetado**:
-  si un test lee un fichero, la ruta se ancla a algo que el ejecutor garantice —el directorio de
-  trabajo— o se inyecta. (3) **La primera medición de cobertura es un test del arnés antes que del
-  código.**
-- **Destino:** `principios/testing.md` (**C**: anclar rutas de fichero en tests empaquetados; **R**:
-  la primera medición como revisión del arnés) y `stacks/typescript/referencia.md` (**R**: el caso
-  concreto con `@angular/build:unit-test` y el proveedor `v8`).
+- **Transversal:** (1) **Medir la cobertura cambia la transformación del código y con ella lo que
+  se mide.** No es un observador pasivo: instrumenta, y con ello puede cambiar rutas, `sourcemaps`,
+  identidad de módulos y tiempos. **Hay tests que solo pasan sin instrumentar**, y un test que pasa
+  sin cobertura y falla con ella no es un fallo de la herramienta: es un test que dependía del
+  empaquetado y que se habría roto solo con la siguiente versión del constructor. El corolario
+  incómodo es que **la suite «verde» y la suite «medida» no son la misma suite**, así que la primera
+  medición se hace pronto, no el día que se quiere un número. (2) **`__dirname` e `import.meta.url`
+  no son fiables dentro de un test empaquetado**: si un test lee un fichero, la ruta se ancla a algo
+  que el ejecutor garantice —el directorio de trabajo— o se inyecta. (3) **La primera medición de
+  cobertura es un test del arnés antes que del código** — ficha transversal I.
+- **Destino:** `principios/testing.md` (**C**: anclar rutas de fichero en tests empaquetados, y medir
+  cobertura pronto porque cambia lo medido; **R**: la primera medición como revisión del arnés) y
+  `stacks/angular/referencia.md` (**R**: el caso concreto, con el constructor y el proveedor `v8`).
+  La regla del empaquetado, sin el constructor concreto, va a `stacks/typescript/convenciones.md`
+  (**C**) — cualquier ejecutor que empaquete el test tiene el mismo problema.
 - **Autoridad:** medido en este repositorio con `@angular/build` 22 y `vitest` 4: los mismos tres
   tests, verdes sin `--coverage` y `ENOENT` con él.
-- **Se queda aquí:** que la fuente de verdad de los `system` sea `ig/input/fsh/aliases.fsh`.
+- **Se queda aquí:** que la fuente de verdad de los `system` sea `ig/input/fsh/aliases.fsh`. La parte
+  de este ADR que hablaba de **qué encontró** la medición se ha separado en `adr-0041`: son dos
+  lecciones distintas y la segunda no es de TypeScript.
 
 ### ADR-0039 · Una edición de SNOMED no se descarga: se compone
 
@@ -625,9 +664,88 @@ Ficha B de arriba. **Aportación arrastrada del hito 2.**
 - **Se queda aquí:** los diez tipos de muestra concretos de este laboratorio y su catálogo de EDO
   simulado.
 
+### ADR-0041 · Un cero redondo de cobertura suele ser una regla duplicada
+
+- **Transversal:** (1) ⚠️ **La cobertura sirve por los ceros redondos, no por el porcentaje.** Entre
+  un 89 % y un 91 % no hay información; en un 0 % sobre un método con nombre de regla de negocio, toda
+  — y el porcentaje no se mueve cuando el fallo está dentro. (2) **Código que nadie llama rara vez
+  sobra: casi siempre hay otra copia de la misma regla, y la copia en uso es la peor.** La versión
+  extraída se escribió a propósito, pensando en el caso general; la que se quedó en línea la escribió
+  quien tenía prisa. Al arreglarlo se borra la de dentro y se llama a la compartida, **nunca al
+  revés**. (3) **Un cero tiene cuatro diagnósticos y hay que escribir cuál es** —regla duplicada,
+  regla redundante que impone otro de verdad, camino real sin test, inalcanzable a propósito—; el
+  cuarto se anota **con su motivo** o se vuelve a discutir en cada medición. (4) **Al borrar código
+  muerto bien documentado, el comentario vale más que el código**: se muda a donde la regla se aplica.
+  (5) **Un umbral de cobertura sustituye la pregunta por la métrica**, y la forma barata de subir el
+  número son tests que recorren sin afirmar.
+- **Destino:** `principios/testing.md` (**C**: cómo se lee una medición de cobertura y los cuatro
+  veredictos de un cero; **R**: los tres ceros con su diagnóstico, que es lo que hace creíble la
+  regla). ⚠️ **Matiza** la línea actual «usa cobertura para revelar huecos, no como fin en sí mismo»,
+  que dice **para qué** y no dice **cómo se lee**, que es donde está todo el valor.
+- **Autoridad:** medición única por componente sobre seis componentes y cuatro herramientas distintas
+  (JaCoCo, `coverage`, `vitest`+v8, `flutter test --coverage`); los tres ceros y sus arreglos, en
+  rojo→verde.
+- **Se queda aquí:** los nombres de los tres métodos y que uno de ellos tuviera consecuencias de
+  declaración obligatoria.
+
+### ADR-0042 · Una propiedad mal enunciada da un rojo que es del test
+
+- **Transversal:** (1) **Un rojo de *property-based* es, muchas veces, del enunciado.** El reflejo es
+  tocar el código; la primera pregunta es qué afirma exactamente la propiedad. «Idempotente» es la
+  palabra que más se enuncia mal: dice que **el estado final no cambia**, no que no se escriba.
+  (2) **Reenunciar una propiedad solo vale si la nueva afirma más.** Debilitarla para verla en
+  verde es silenciar lo único que estaba señalando algo; aquí pasó de contar escrituras a comparar el
+  estado final completo. (3) **No escribas la función para poder probarla.** El catálogo de
+  propiedades canónicas —ida y vuelta, idempotencia, orden— invita a buscar en el sistema una
+  transformación que encaje, y la que encaja puede no existir: elegir la que el sistema **sí** hace es
+  el trabajo. (4) **Que una propiedad salga verde a la primera es un resultado y se anota**: mide que
+  el invariante estaba bien entendido. (5) **El *shrinking* se puede sustituir, no ignorar** —semilla
+  fija e impresa, un caso por test con nombre propio, contraejemplo renderizado entero—; lo que no
+  vale es un rojo que diga «falló con una de las treinta entradas».
+- **Destino:** `principios/testing.md` (**C**: diagnosticar el enunciado antes que el código, y la
+  regla de que solo se reenuncia hacia arriba; **R**: el caso de la idempotencia y la propiedad
+  descartada). ⚠️ **Matiza** la línea actual de *property-based*, que da por supuesto el *shrinking*
+  y propone el *round-trip* como ejemplo canónico — que es justo el que invita a inventarse la
+  función.
+- **Autoridad:** cuatro propiedades sobre tres canales, con generadores propios de nombres españoles
+  (dobles apellidos, partículas, `Ñ`, tildes, `ç`) y semilla fija.
+- **Se queda aquí:** los canales concretos, y que la propiedad descartada fuera la de la banda
+  magnética de la tarjeta sanitaria.
+
+---
+
+## Dos fichas que no salen de un solo ADR
+
+Son las dos aportaciones más transversales del proyecto y **ninguna es de un ADR**: cada una aparece
+en cuatro o cinco, siempre como una línea al final, y el patrón solo se ve al ponerlas juntas. Se
+destilan como ficha propia porque en la biblioteca serían una regla, no cinco anécdotas.
+
+### I. El arnés también es código, y miente en las dos direcciones
+
+| | |
+|---|---|
+| **Qué es transversal** | El arnés de pruebas —el generador, el emisor, el lector de la respuesta, la *release* sintética, el ejecutor con cobertura— **no tiene arnés a su vez**, y por eso sus fallos son invisibles: hacia arriba inventa rojos que no existen, hacia abajo tapa los que sí. Cuatro casos medidos: un lector de acuses que daba por hecho el separador de campos, cuando el mensaje atacante puede **redefinirlo**; ese mismo lector contando como silencio una conexión cerrada, que es lo contrario de un silencio; una *release* sintética con un fichero por tabla —porque así se escribió— que fijó como premisa del lector algo que el producto real no cumple; y tres tests verdes por casualidad que solo se cayeron al instrumentar. |
+| **La regla** | (1) **El arnés no da por hecho nada del formato que ataca**: si la entrada puede redefinir la sintaxis, el oráculo no puede llevarla escrita. (2) **«Sin respuesta» es un estado del arnés antes que del sistema**: silencio, tiempo agotado y conexión cerrada son tres cosas distintas y solo una es el fallo que se persigue. (3) **Un arnés escrito a la vez que el código comparte sus premisas**, así que no puede validarlas: la premisa se comprueba contra la distribución real o contra la documentación del producto, nunca contra la *fixture*. (4) **Al cambiar de instrumento —cobertura, entrada generada, volumen— lo primero que se mide es el arnés**, y encontrar fallos en él es el resultado esperado, no un contratiempo. |
+| **Dónde iría** | `principios/testing.md` (**C**: las cuatro; es material nuevo — el fichero habla de qué prueba escribir y no de que la infraestructura de prueba sea código sin probar) + **R** con los cuatro casos. |
+| **Autoridad** | Medido en este proyecto en cuatro sitios independientes: `adr-0037` (los dos fallos del oráculo), `adr-0038` (los tres verdes por casualidad), `adr-0039` (la *release* sintética) y `adr-0042` (la reproducibilidad comprada sin *shrinking*). |
+| **Se queda aquí** | Los nombres del emisor crudo, del generador de nombres y de las mini-*releases*. |
+
+### II. Lo que no ejecuta nadie todavía es lo que peor falla
+
+| | |
+|---|---|
+| **Qué es transversal** | Cinco fallos del proyecto son **el mismo fallo**: algo escrito, revisado, plausible y en verde que **nada ejecuta**, y que por eso nadie descubre hasta el día en que hace falta. Un interceptor registrado en el registro equivocado —que no da ningún error: sencillamente no se llama nunca, y el sistema *parece* protegido—; una regla de autorización cuyo emparejador no casa con lo que sirve el otro servlet, con la cadena construida, el log correcto y la API abierta; un recurso de conformidad publicado en `draft`, que se guarda, se lee y no se indexa; dos URI de terminología que el compilador acepta y ningún servidor resuelve, en un alias que no usa ningún perfil; y los ceros redondos de cobertura. **Ninguno da error y cuatro de los cinco parecen correctos en el log.** |
+| **La regla** | (1) **La declaración no es el efecto.** Una configuración está activa cuando algo observable lo demuestra, y la afirmación se escribe **por el efecto y por el camino de verdad**: pedir sin credenciales y exigir el `401`, buscar por el parámetro y exigir que el índice lo use, resolver la URI contra el servidor que la va a resolver. Leer la configuración, o verla en el log, no es la prueba. (2) **Lo que todavía no usa nadie se prueba igual**, porque el día que se use será el día de más prisa. (3) El modo de fallo compartido es **el silencio**, así que la pregunta operativa no es «¿está bien escrito?» sino «¿qué se rompería si esto no estuviera?» — y si la respuesta es «nada, hoy», ahí está el agujero. |
+| **Dónde iría** | `principios/testing.md` (**C**: (1) y (2)) + `herramientas/seguridad.md` (**C**: generaliza lo que hoy sólo está dicho para autorización — el `401` es un caso de la regla, no la regla) + `diseno/referencia.md` (**R**: el catálogo de los cinco, que es lo que la hace creíble). |
+| **Autoridad** | `adr-0014`, `adr-0020`, `adr-0029`, `adr-0040` y `adr-0041`, los cinco medidos y arreglados en rojo→verde. |
+| **Se queda aquí** | Los cinco casos con su librería y su nombre de clase. |
+
 ---
 
 ## Lo que NO aporta nada, y conviene decirlo
+
+Decir dónde **no** hay lección vale tanto como decir dónde la hay: evita que alguien recorra un
+componente entero buscando una trampa que no existe, y evita que la biblioteca reciba relleno.
 
 - **`interoperabilidad/bulk-data/`.** El proyecto implementó `$export` entero —asíncrono, sondeo,
   manifiesto, billetes opacos, caducidad y barrendero— y **no ha encontrado ninguna trampa que la
@@ -635,13 +753,31 @@ Ficha B de arriba. **Aportación arrastrada del hito 2.**
   permiso del volumen (`adr-0035`, va a Docker) y la forma de la regla de autorización (`adr-0033`,
   va a seguridad). Anotarlo así evita que alguien busque en `bulk-data` una lección que está en otro
   sitio.
+- **`stacks/python/`.** Los dos componentes en Python —el cargador de terminología y los generadores—
+  produjeron dos ADR (`0039`, y su parte en `0026`) y **ni una sola lección de Python**. Lo del
+  cargador es del formato de distribución de SNOMED, y le habría pasado igual escrito en Java. Quien
+  vaya a buscar allí la trampa de un `rglob` la encontrará en `interoperabilidad/terminologia/`, que
+  es donde está.
+- **`fundamentos/concurrencia/`.** El único fallo de concurrencia del proyecto —un test intermitente
+  una vez de cada tres, con la traza compitiendo con el borrado— **confirma** la regla que el fichero
+  ya tiene («una prueba *flaky* es un bug, no algo tolerable») y no la corrige. Lo que sí era nuevo
+  era la causa, y esa vive en `adr-0030`. Confirmar es un resultado y no genera edición.
+- **`ux-ipo/`.** Hay una web en Angular y una app en Flutter, y **ninguna de las dos ha dejado nada**:
+  son funcionales, no diseñadas, y sus decisiones de interfaz no se tomaron —se heredaron del camino
+  más corto—. Un dossier honesto no puede convertir eso en una regla de usabilidad.
 - **`interoperabilidad/espana/`** recibía **un solo** ADR (`0003`) y ahora recibe **tres**. Lo que no
   ha cambiado es el motivo de que fuera uno: lo español que el proyecto tocó al principio —NUHSA,
   apellidos dobles, INE, DNI— **ya estaba escrito** en la biblioteca, y el proyecto lo confirmó sin
-  corregirlo; confirmar también es un resultado y no genera edición. Los dos nuevos (`0039`, `0040`)
-  llegan por otra puerta: **documentación oficial que el proyecto no tenía** hasta el 2026-08-15, la
-  del Centro Nacional de Referencia de SNOMED CT para España. La lección de método es esa —el hueco
-  no estaba en lo que se había hecho, sino en lo que no se había leído.
+  corregirlo. Los dos nuevos (`0039`, `0040`) llegan por otra puerta: **documentación oficial que el
+  proyecto no tenía** hasta el 2026-08-15, la del Centro Nacional de Referencia de SNOMED CT para
+  España. La lección de método es esa —el hueco no estaba en lo que se había hecho, sino en lo que no
+  se había leído.
+- **Y una advertencia sobre `principios/testing.md`, que es el destino más cargado.** Doce entradas no
+  significan doce reglas nuevas: tres de ellas **corrigen o matizan** líneas que ya existen (el
+  criterio de un *fuzzer*, el *shrinking* como requisito de *property-based*, y cómo se lee una
+  medición de cobertura) y esas tres son las que más cuesta curar, porque hay que reescribir sin
+  contradecir. Meterlas como líneas nuevas al lado de las viejas dejaría el fichero diciendo dos cosas
+  a la vez.
 
 ## Cómo se usa este dossier
 
@@ -656,3 +792,9 @@ Ficha B de arriba. **Aportación arrastrada del hito 2.**
 4. La **autoridad se cita en `referencia.md`**, con versión. «Medido sobre HAPI 8.10.1» envejece
    distinto que «lo dice la norma», y quien lo lea dentro de dos años necesita saber cuál de las dos
    es.
+5. **Lo marcado con ⚠️ corrige o matiza algo que el fichero ya dice**, y no se cura como una línea
+   más: hay que reescribir la que está, porque dejar las dos convierte el `convenciones.md` en un
+   fichero que se contradice. Son pocas y están todas señaladas.
+6. **`principios/testing.md` se cura al final**, cuando ya se sabe qué han dejado los demás: es el
+   destino de doce fichas y de las dos transversales, y curarlo por partes produce repeticiones que
+   solo se ven leyéndolo entero.
