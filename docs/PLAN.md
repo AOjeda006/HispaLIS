@@ -2332,26 +2332,31 @@ le falta está terminado; uno que lo esconde, no.
     commit que le afectó**, nunca de un vistazo sobre `HEAD`. Quien los quiera todos a la vez tiene
     que lanzarlos a mano con `workflow_dispatch`.
 
-    Los siete, cada uno con el commit donde le tocaba correr, y los siete en verde **al cierre del
-    prompt 24 (2026-08-15)**:
+    **Al cierre del prompt 26 (2026-08-16) los siete están en verde sobre el MISMO commit**,
+    `ee52965`, porque se lanzaron a mano justo para eso — que es la única forma de tener la foto
+    completa y está dicho en el párrafo de arriba:
 
     | Workflow | Verde en | Run |
     |---|---|---|
-    | `CI · IG` | `baaf537` | #11, con sus dos jobs — incluido «Publicar la IG en GitHub Pages», que desplegó |
-    | `CI · terminologia` | `baaf537` | #8 |
-    | `CI · backend` | `baaf537` | #29 |
-    | `CI · integracion` | `baaf537` | #10 |
-    | `CI · web-profesional` | `baaf537` | #10 |
-    | `CI · simuladores` | `baaf537` | #13 |
-    | `CI · app-ciudadano` | `718934f` | #6, ya **con el empaquetado dentro** |
+    | `CI · backend` | `ee52965` | #32 (y #31, el que verificó el arreglo del `@SpringBootTest`) |
+    | `CI · integracion` | `ee52965` | #12 |
+    | `CI · IG` | `ee52965` | #13, con sus dos jobs — incluido «Publicar la IG en GitHub Pages», que desplegó |
+    | `CI · web-profesional` | `ee52965` | #12 |
+    | `CI · app-ciudadano` | `ee52965` | #8, con el empaquetado dentro |
+    | `CI · simuladores` | `ee52965` | #15 |
+    | `CI · terminologia` | `ee52965` | #10 |
 
-    Seis de siete sobre el mismo commit, y no por casualidad: esa tanda tocó `ig/`, `terminologia/`,
-    `README.md`, `infra/compose/.env.example` y `docs/`, y las tres primeras rutas aparecen en los
-    filtros de casi todos. `CI · app-ciudadano` se queda en `718934f` porque desde entonces **no se ha
-    tocado nada suyo** — que es justo la propiedad que describe esta entrada; leerla al revés («hay uno
-    que no ha corrido») es el error que la entrada existe para evitar. Y `7c2372e`, posterior, no
-    dispara ninguno: es solo `docs/`. La guía está publicada y navegable en
-    `https://aojeda006.github.io/HispaLIS/`.
+    Y la foto anterior, la del prompt 24, que es la que enseña la propiedad de la que habla esta
+    entrada: seis sobre `baaf537` (`CI · IG` #11, `terminologia` #8, `backend` #29, `integracion` #10,
+    `web-profesional` #10, `simuladores` #13) y `CI · app-ciudadano` en `718934f` #6, porque desde
+    entonces **no se había tocado nada suyo**. Leerlo al revés —«hay uno que no ha corrido»— es el
+    error que esta entrada existe para evitar.
+
+    Aquella foto también enseña la otra mitad de la propiedad: `7c2372e`, posterior, **no dispara
+    ninguno** porque es solo `docs/`. Y en la del prompt 26 pasó lo mismo, más agudo todavía — el push
+    de `41e73c2` traía el arreglo de `infra/`, el del README, dos ADR y el plan, y **solo despertó a
+    `CI · web-profesional`**: ni un `paths:` de los siete vigila `infra/*.sh`, `README.md` ni `docs/`.
+    La guía está publicada y navegable en `https://aojeda006.github.io/HispaLIS/`.
 
 ### Los criterios del hito 2, uno a uno
 
