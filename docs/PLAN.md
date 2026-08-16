@@ -2076,7 +2076,7 @@ dentro de WSL2 y sin reutilizar nada de la copia de trabajo: ni `target/`, ni `n
 caché de Maven del usuario —que tenía **541 MB de tandas anteriores**, y es exactamente lo que hacía
 invisible el tercero de los cuatro fallos—.
 
-**Los cuatro «funciona en mi máquina», y ninguno se veía leyendo:**
+**Cinco «funciona en mi máquina», y ninguno se veía leyendo:**
 
 | Lo que falla desde el clon limpio | Por qué no se veía | Dónde queda |
 |---|---|---|
@@ -2084,6 +2084,26 @@ invisible el tercero de los cuatro fallos—.
 | **El montaje de la caché de Maven que documenta el README es inerte.** Maven no mira `$HOME`: `user.home` sale del uid contra `/etc/passwd`, y en `eclipse-temurin` el uid 1000 es `ubuntu`, así que se lo lleva a `/home/ubuntu/.m2` y el `--rm` lo borra | El volumen **no estaba vacío**: el *wrapper* sí respeta `$HOME` y dejaba ahí la distribución de Maven. Un `ls` decía que funcionaba; solo el `du` decía la verdad —11 MB tras nueve minutos de descargas— | `adr-0044` · `-Dmaven.repo.local` en el README |
 | **`./mvnw -o spotless:check` no arranca en un equipo recién montado**: *«Cannot access confluent […] in offline mode»*, y ni llega a leer el `pom` porque lo que le falta es el POM padre de Spring Boot | `-o` exige una caché poblada y **nada de la página la poblaba**. En el equipo donde se escribió había medio giga de antes | `adr-0044` · sin `-o` |
 | **`infra/fhir/exportar-cohorte.sh` no lleva bit de ejecución en el índice** (`100644`, frente al `100755` de los otros dos guiones). En un clon sobre Linux o macOS, la orden que escribe el README contesta *Permission denied* | Se desarrolla en Windows: en `/mnt/c` el sistema de ficheros da `0777` a todo, así que el guion **siempre** parece ejecutable y el modo real solo está en el índice. Es `adr-0008` —se desarrolla en Windows y se construye en Linux— por un flanco nuevo | `git update-index --chmod=+x` |
+
+**Y un quinto, que solo dio la cara en la CI y no en local — el más caro de los cinco.** `CI · backend`
+salió **rojo** con la suite verde en este equipo: dos esperas agotadas en `NotificadorEdoTest`, «el
+sistema no volvió a dar ni un `Task`», sin una sola excepción. Es la **sexta aparición** de la trampa
+de la entrada 15: `RelayDelOutboxTest` declara su propio `@SpringBootTest`, repetía la línea de la
+seguridad —con su comentario explicando por qué hay que repetirla— y **se dejaba las dos que consumen
+`outbox.hecho`**. Su contexto arrancaba con la EDO y las notificaciones en producción y, como Spring
+**cachea** los contextos y no los destruye al terminar la clase, seguía vaciando el outbox mientras
+corría `NotificadorEdoTest`. El fallo **nunca sale en el fichero que lo causa**, y el orden en que
+caigan las clases decide si aparece: por eso pasó en el *runner* y no aquí.
+
+Documentarlo se intentó dos veces —está en `PLAN.md` y en `backend/CLAUDE.md`, que además pone
+`RelayDelOutboxTest` como ejemplo de «hay que repetir la línea»— y volvió a pasar. Ahora hay un test:
+**`InterruptoresDeContextoTest`** recorre las clases compiladas, se queda con las que declaran su
+propio `@SpringBootTest` y exige que **mencionen** todos los interruptores que fija
+`TestDeIntegracion` — no con un valor concreto, solo que los digan, porque `SeguridadSmartTest`
+enciende la seguridad y `NotificacionesTest` la entrega a propósito. **La lista se deduce de la
+anotación del padre**, que es la regla de `adr-0014`: escrita a mano nacería correcta y quedaría vieja
+el día que el padre gane un interruptor nuevo — que es la forma de esta trampa, no su cura. Rojo→verde
+comprobado quitando las dos líneas: el test nombra `RelayDelOutboxTest` y las dos claves.
 
 Y **un cero de cobertura que la tabla de huecos aceptados no enumeraba**: `guarda-de-sesion.ts`, que
 corre en **cada** navegación a una pantalla clínica. Es el veredicto «camino real sin test» de
@@ -2128,7 +2148,7 @@ Desglose del circuito: ADT 0,3 s · OML 0,3 s · ORU 0,5 s · ORU de la refleja 
 
 | Puerta | Tiempo | Resultado |
 |---|---|---|
-| `ci-backend` | **954 s** (caché de Maven en frío) | **296 tests**, 0 fallos · Spotless: 218 ficheros limpios |
+| `ci-backend` | **954 s** en frío · **363 s** con la caché puesta | **297 tests**, 0 fallos · Spotless: 219 ficheros limpios |
 | `ci-integracion` | **140 s** (con la caché ya poblada por el anterior) | **299 tests**, 0 fallos, 4 omitidos |
 | `ci-web-profesional` | **167 s** | lint limpio · **98 tests** · empaquetado |
 | `ci-app-ciudadano` | **1 955 s** (32,6 min; el APK solo, 1 739 s en frío) | *No issues found* · **77 tests** · web · **APK 48,2 MB** |
@@ -2136,7 +2156,7 @@ Desglose del circuito: ADT 0,3 s · OML 0,3 s · ORU 0,5 s · ORU de la refleja 
 | `ci-terminologia` | **18 s** | ruff limpio, 15 ficheros · **47 tests** · imagen del cargador construida |
 | `ci-ig` | SUSHI 41 s + **IG Publisher 950 s** (15 min 50 s) | 12/12 perfiles con ejemplo · 2/2 copias de conformidad idénticas · `qa.html`: **1 error, 91 avisos, 822 enlaces rotos**, que es la línea base documentada · 68 recursos validados en 49 s |
 
-**Novecientos sesenta tests** en total, y **las siete puertas en verde en local**. El validador oficial
+**Novecientos sesenta y un tests** en total, y **las siete puertas en verde en local**. El validador oficial
 de HL7, aparte, sobre lo que produce cada suite: circuito del backend 30 s, canal del motor 28 s,
 **644 recursos** del corpus en 62 s y los 68 artefactos de la guía contra el paquete construido en
 49 s — los cuatro sin un solo error, solo `dom-6` (la recomendación de narrativa) y el aviso de
