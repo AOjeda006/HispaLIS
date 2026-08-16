@@ -1,0 +1,46 @@
+%% Mapa de componentes de HispaLIS y cómo se hablan entre ellos.
+flowchart TB
+  subgraph APLICACIONES["Plano de aplicaciones — FHIR R5 sobre HTTPS"]
+    WEB["Web profesional<br/>Angular · SMART EHR launch<br/>user/*.rs"]
+    APP["App del ciudadano<br/>Flutter · SMART standalone + PKCE<br/>patient/*.rs"]
+    ANA["Exportación analítica<br/>Backend Services temporal<br/>system/Group.rs + system/*.rs"]
+  end
+
+  subgraph LAB["HispaLIS — el laboratorio"]
+    API["API FHIR R5<br/>Spring Boot + HAPI FHIR JPA<br/>interceptores: autorización,<br/>consentimiento, auditoría, ETag"]
+    NUC["Núcleo de dominio<br/>agregados e invariantes<br/>FHIR es formato de borde"]
+    BD[("PostgreSQL<br/>esquema dominio · esquema fhir · outbox")]
+    ASI["Procesos asíncronos<br/>relay del bus · notificador de Subscription<br/>notificador EDO · barrendero"]
+  end
+
+  IDP["Keycloak<br/>OIDC + SMART v2<br/>realm hispalis"]
+  TERM["Servidor de terminología<br/>HAPI + subconjuntos curados<br/>expand · lookup · validate-code · translate"]
+  BUS["Kafka + Schema Registry<br/>clave de partición = paciente<br/>hechos con referencias, nunca PHI"]
+
+  MOT["Motor de integración<br/>Spring Boot + HAPI HL7v2<br/>almacén · DLQ · reproceso idempotente"]
+
+  subgraph SISTEMAS["Plano de sistemas — HL7 V2.5.1 sobre MLLP/TLS"]
+    HIS["HIS de la clínica<br/>ADT^A01 / A08 · OML^O21"]
+    ANL["Analizador<br/>ORU^R01"]
+  end
+
+  REC["Receptor de notificaciones<br/>exige id-only y firma"]
+  SVEA["Salud Pública — SVEA<br/>exige que no llegue filiación"]
+
+  WEB -->|HTTPS| API
+  APP -->|HTTPS| API
+  ANA -->|"$export"| API
+  API <-->|"testigo, JWKS, descubrimiento"| IDP
+  API --> NUC
+  NUC -->|"una sola transacción"| BD
+  API -->|"lectura: DAOs de HAPI"| BD
+  NUC -->|"lookup · validate-code · translate"| TERM
+  BD -->|outbox| ASI
+  ASI --> BUS
+  ASI -->|"id-only firmado"| REC
+  ASI -->|"Task de declaración"| SVEA
+  HIS -->|MLLP/TLS| MOT
+  ANL -->|MLLP/TLS| MOT
+  MOT -->|"escribe como cliente system/ — un solo camino de escritura"| API
+  MOT -->|"catálogo, nunca una tabla propia"| TERM
+  API -->|"ORU^R01 saliente"| MOT

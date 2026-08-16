@@ -1,0 +1,29 @@
+%% Las dos capas de seguridad, y por qué no son intercambiables.
+flowchart LR
+  PET["Petición<br/>Authorization: Bearer ..."]
+
+  subgraph C1["Capa 1 — filtro de Spring Security"]
+    F1["firma · emisor · caducidad · aud<br/><b>criptografía y protocolo</b>"]
+  end
+
+  subgraph C2["Capa 2 — interceptores dentro del servlet de HAPI"]
+    A1["AutorizacionSmart<br/>¿puede leer Observation?<br/>DENY por defecto; un scope que<br/>no se entiende no concede nada"]
+    A2["ConsentimientoDelPaciente<br/>¿puede ver ESTA?<br/>el compartimento se pregunta al<br/>registro, no se escribe a mano"]
+  end
+
+  OK["Recurso servido<br/>y AuditEvent escrito DESPUÉS de contestar"]
+  N1["401<br/>testigo ausente o inválido"]
+  N2["403 en lectura directa"]
+  N3["Omisión silenciosa en búsqueda<br/>decir «hay tres que no te enseño»<br/>ya cuenta algo"]
+
+  IDP["Keycloak<br/>.well-known/smart-configuration<br/>JWKS · descubrimiento perezoso"]
+
+  PET --> F1
+  F1 -.->|"descubre y valida contra"| IDP
+  F1 -->|no| N1
+  F1 -->|sí| A1
+  A1 -->|no| N2
+  A1 -->|sí| A2
+  A2 -->|no, lectura| N2
+  A2 -->|no, búsqueda| N3
+  A2 -->|sí| OK

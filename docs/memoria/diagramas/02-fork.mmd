@@ -1,0 +1,35 @@
+%% El fork estructural: escritura por comando, lectura por proyección, hechos aparte.
+flowchart TB
+  CLI["Cliente FHIR"]
+
+  subgraph ESCRITURA["Escritura"]
+    RPW["ResourceProvider de escritura<br/>traduce el recurso a un COMANDO"]
+    NUC["Núcleo de dominio<br/>valida los invariantes de negocio"]
+  end
+
+  subgraph TX["Una sola transacción de PostgreSQL"]
+    DOM[("esquema dominio<br/>FUENTE DE VERDAD")]
+    PRO[("esquema fhir · HAPI JPA<br/>proyección + índices de búsqueda")]
+    OUT[("outbox<br/>hechos a publicar")]
+  end
+
+  subgraph LECTURA["Lectura — cero mapeo en tiempo de lectura"]
+    DAO["DAOs de HAPI JPA<br/>búsqueda · _include · paginación<br/>_history · $validate · $export"]
+  end
+
+  REL["Relay del outbox"]
+  KAF["Kafka<br/>notificaciones · EDO · analítica"]
+  REC["Reconciliador<br/>POST /fhir/$reconciliar<br/>por defecto solo mira"]
+
+  CLI -->|"POST / PUT"| RPW
+  RPW --> NUC
+  NUC --> DOM
+  NUC --> PRO
+  NUC --> OUT
+  PRO -.->|"201 + Location + ETag W/1"| CLI
+  CLI -->|"GET / search"| DAO
+  DAO --> PRO
+  OUT --> REL
+  REL --> KAF
+  DOM -.->|"regenera y compara en las dos direcciones"| REC
+  REC -.-> PRO

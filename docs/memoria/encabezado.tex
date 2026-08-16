@@ -1,0 +1,33 @@
+% Ajustes de composición de la memoria técnica de HispaLIS.
+% Se pasa a pandoc con --include-in-header desde docs/generar-memoria-pdf.sh.
+
+\usepackage{etoolbox}
+
+% Las tablas de este documento son anchas (la de R5 frente a R4, la de los 44 ADR).
+% Un cuerpo menor dentro de longtable es lo que evita que se salgan del margen.
+\AtBeginEnvironment{longtable}{\small}
+
+% Los nombres de fichero de los ADR son largos y van en tipografía de máquina de
+% escribir, que LaTeX no parte por sílabas: `\ttfamily` deja el carácter de guion
+% desactivado y una palabra más ancha que la columna se sale del margen sin remedio.
+% Esto lo vuelve a activar en cuanto se selecciona la tipografía. Es lo que hace el
+% paquete `hyphenat` con su opción `htt`, escrito a mano porque la distribución de TeX
+% de la imagen de pandoc no lo trae — y depender de un paquete que puede no estar es
+% justo lo que un guion de publicación no debe hacer.
+\makeatletter
+\g@addto@macro\ttfamily{\hyphenchar\font=`\-\relax}
+\makeatother
+
+% Los guiones explícitos también son puntos de corte válidos, y aquí interesan.
+\exhyphenpenalty=10
+\hyphenpenalty=50
+
+% Margen de maniobra para el ajuste de línea en párrafos con muchas URLs y código.
+% Antes una línea demasiado holgada que una que invade el margen.
+\tolerance=2000
+\setlength{\emergencystretch}{4em}
+
+% Las figuras van donde se las pone: son parte del hilo del texto, no ilustraciones
+% que puedan flotar tres páginas más allá de lo que explican.
+\usepackage{float}
+\floatplacement{figure}{H}

@@ -1,0 +1,36 @@
+%% La terminología es una caja obligatoria: cuatro operaciones estándar, ninguna propietaria.
+flowchart LR
+  subgraph CLIENTES["Quién pregunta"]
+    BAK["Backend<br/>puerto Terminologia"]
+    MOT["Motor de integración<br/>CatalogoDelLaboratorio"]
+    GEN["Generador de datos<br/>sintéticos"]
+    WEB["Web profesional<br/>catálogo de la pantalla de alta"]
+  end
+
+  subgraph OPS["Las cuatro operaciones estándar de FHIR"]
+    O1["$expand<br/>el catálogo"]
+    O2["$lookup<br/>nombre, unidad UCUM,<br/>umbral crítico, refleja, EDO"]
+    O3["$validate-code<br/>¿existe esta prueba?"]
+    O4["$translate<br/>catálogo local ↔ LOINC"]
+  end
+
+  SRV["Servidor de terminología<br/>HAPI FHIR · intercambiable:<br/>migrar es cambiar una URL"]
+
+  subgraph CARGA["Lo que se le sube, por PUT de la API estándar"]
+    CUR["cargador/curado.py<br/>DEDUCE el subconjunto recorriendo<br/>lo que produce SUSHI"]
+    L1["LOINC 2.82<br/>display intacto (licencia)"]
+    L2["THO 7.3.0<br/>CC0"]
+    L3["SNOMED CT ed. Española<br/>fuera del repositorio;<br/>si no está, aviso y adelante"]
+    L4["Catálogo local + ConceptMap<br/>el «dialecto» del laboratorio"]
+  end
+
+  BAK --> OPS
+  MOT --> OPS
+  GEN --> OPS
+  WEB --> O1
+  OPS --> SRV
+  CUR --> SRV
+  L1 --> CUR
+  L2 --> CUR
+  L3 -.-> CUR
+  L4 --> CUR

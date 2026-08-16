@@ -116,3 +116,7 @@ __MACOSX/
 
 # ─── Claude Code: la configuración compartida SÍ se commitea ──────────────────
 .claude/settings.local.json
+
+# ─── Memoria técnica: los diagramas rasterizados son artefacto generado ───────
+# Las fuentes son los .mmd; los PNG los produce docs/generar-memoria-pdf.sh.
+docs/memoria/diagramas/*.png

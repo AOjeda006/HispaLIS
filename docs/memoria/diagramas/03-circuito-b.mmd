@@ -1,0 +1,22 @@
+%% Segunda mitad del circuito: doble validación, informe y declaración obligatoria.
+sequenceDiagram
+  autonumber
+  participant FAC as Facultativo<br/>(web, testigo SMART)
+  participant LAB as Laboratorio<br/>API FHIR R5 + núcleo
+  participant EDO as Notificador EDO
+  participant SP as Salud Pública<br/>(SVEA simulado)
+
+  FAC->>LAB: 1a firma del crítico (COL12345)
+  LAB-->>FAC: 200 — preliminary
+  FAC->>LAB: la MISMA persona firma otra vez
+  LAB-->>FAC: 422 — «mirar dos veces no es una segunda revisión»
+  FAC->>LAB: 2a firma, de OTRO facultativo (COL41902)
+  LAB-->>FAC: 200 — FINAL, con dos Provenance
+  LAB->>LAB: apunta el hecho en el outbox,<br/>en la misma transacción
+  FAC->>LAB: POST /DiagnosticReport
+  LAB-->>FAC: 201 + Location · el GET inmediato devuelve 200
+  LAB-)EDO: hecho: resultado declarable
+  EDO->>LAB: abrir — Task con su plazo, y el sujeto a Group/cohorte
+  EDO->>SP: enviar la declaración, sin filiación
+  SP-->>EDO: acuse con número de registro
+  EDO->>LAB: Task en completed / ACUSADA

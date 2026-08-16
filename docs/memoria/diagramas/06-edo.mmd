@@ -1,0 +1,34 @@
+%% La declaración a Salud Pública: dos fases y cuatro finales.
+flowchart TB
+  V["Se valida un resultado<br/>en la transacción del dominio"]
+  H["Hecho apuntado en el outbox<br/>RESULTADO_DECLARABLE<br/>solo referencias, nunca la enfermedad"]
+  V --> H
+
+  subgraph F1["Fase 1 — ABRIR · no puede fallar por culpa del tercero"]
+    T["Task de declaración<br/>plazo congelado, contado desde<br/>el instante del hecho"]
+    G["El sujeto entra en<br/>Group/cohorte-enfermedad"]
+  end
+
+  subgraph F2["Fase 2 — ENVIAR · esto es lo que se reintenta"]
+    E["POST al SVEA<br/>sin filiación"]
+  end
+
+  H --> T
+  T --> G
+  T --> E
+
+  A["ACUSADA<br/>con número de registro"]
+  R["RECHAZADA (4xx)<br/>no se reintenta: el contenido<br/>no mejora reenviándolo"]
+  S["RecibidaSinRegistro<br/>200 sin número: NO es declarada.<br/>Es el caso que más fácil se cuela"]
+  N["NoLlego (5xx)<br/>se reintenta hasta agotar"]
+
+  E --> A
+  E --> R
+  E --> S
+  E --> N
+  N -.->|"agotados los intentos"| P["Queda pendiente y visible<br/>solo por log y por búsqueda de Task"]
+  R -.-> P
+  S -.-> P
+
+  NOTA["Con Salud Pública caída, el resultado se valida igual:<br/>validar solo apunta el hecho, y salir a declarar<br/>ocurre en otra transacción"]
+  V -.- NOTA

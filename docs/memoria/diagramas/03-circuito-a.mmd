@@ -1,0 +1,22 @@
+%% Primera mitad del circuito: del volante del HIS al resultado con su refleja.
+sequenceDiagram
+  autonumber
+  participant HIS as HIS / Analizador<br/>(MLLP sobre TLS)
+  participant MOT as Motor de integración
+  participant LAB as Laboratorio<br/>API FHIR R5 + núcleo
+  participant TER as Servidor de<br/>terminología
+
+  Note over LAB: El directorio de facultativos<br/>se siembra antes, con un guion
+  HIS->>MOT: ADT^A01 — filiación
+  MOT->>LAB: POST /Patient, con testigo system/
+  MOT-->>HIS: MSA|AA
+  HIS->>MOT: OML^O21 — volante
+  MOT->>TER: $validate-code y $translate del catálogo
+  MOT->>LAB: POST /ServiceRequest y POST /Specimen
+  MOT-->>HIS: MSA|AA
+  HIS->>MOT: ORU^R01 — TSH 8,5 · K 7,5 · antígeno POSITIVO
+  MOT->>LAB: POST /Observation con el CÓDIGO, nunca texto libre
+  LAB->>TER: $lookup del umbral crítico y de la prueba refleja
+  LAB-->>LAB: dispara la refleja: ServiceRequest intent=reflex-order
+  HIS->>MOT: ORU^R01 de la refleja — T4 libre
+  MOT->>LAB: POST /Observation con triggeredBy=reflex
