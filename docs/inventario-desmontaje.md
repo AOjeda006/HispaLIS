@@ -41,7 +41,7 @@ importaban. Nada de eso hay que rescatar aquí, porque nunca vivió aquí.
 | Qué contiene que merece sobrevivir | Dónde ha quedado |
 |---|---|
 | Qué es HispaLIS: simulación de un SIL privado en Sevilla sobre FHIR R5 | §1 |
-| Stack completo por capas | §5.1 y §5 (componente a componente) |
+| Stack completo por capas | §5.1 y §5 (componente a componente); **MinIO y Redis**, que el diseño preveía y no llegaron a montarse, en §12.2 |
 | Objetivo y no-objetivos del encargo; qué queda fuera del proyecto entero | §2.1, §2.2 |
 | **Los nueve invariantes del proyecto** | §4.1 (íntegros, uno a uno) |
 | La advertencia R5 no es R4 y el puntero a la tabla | §6.5 |
@@ -65,9 +65,9 @@ El fichero más denso de los ocho (23 KB). Es el que más rescate necesitaba.
 | Read-your-writes como norma, `201` + `Location` + `ETag`, y por qué no es rendimiento | §3.3 |
 | El reconciliador como vía de recuperación oficial, y que detecta las dos direcciones | §3.4, §5.2 |
 | El bus: clave de partición = paciente, entrega al menos una vez, dedup por `hechoId`, Kafka no alimenta la lectura, nunca PHI en el bus | §5.2, §4.1 (invariante 6) |
-| Notificaciones: el criterio vive en el `SubscriptionTopic`, la copia en `resources/conformidad/` y la puerta de `ci-ig` que impide que se bifurquen | §6.6, §11.2 |
-| `id-only` cerrado en dos sitios; el secreto se firma con HMAC y no va en el recurso; el corte es el estado | §6.6, §7.5 |
-| Terminología como servicio aparte: el puerto, nada de `Map<String,String>`, `display` español, solo LOINC `equivalent`, `422` frente a `400`, degradación si el servidor cae | §6.6 |
+| Notificaciones: el criterio vive en el `SubscriptionTopic`, la copia en `resources/conformidad/` y la puerta de `ci-ig` que impide que se bifurquen | §2.1, §6.2, §9.5 |
+| `id-only` cerrado en dos sitios; el secreto se firma con HMAC y no va en el recurso; el corte es el estado | §5.2, §5.6 |
+| Terminología como servicio aparte: el puerto, nada de `Map<String,String>`, `display` español, solo LOINC `equivalent`, `422` frente a `400`, degradación si el servidor cae | §6.6 (el `422` frente al `400`, en §6.1) |
 | La regla del crítico y la de la EDO: el agregado recibe el puerto y pregunta él; firmado no es validado; un cualitativo se guarda codificado | §5.2, §4.2 |
 | La declaración EDO: dos fases, sin acuse no hay declaración, cuatro respuestas con tipo sellado, el plazo es de la enfermedad | §5.2 y figura 6 |
 | La exportación y la traza: la cohorte se forma sola, los dos ámbitos, seudonimización por lista blanca, `400` ante parámetro no soportado, caducidad y barrendero, la traza se escribe después de contestar, `entity.query` a `0..0` | §7.4, §7.6 |
@@ -89,7 +89,7 @@ El fichero más denso de los ocho (23 KB). Es el que más rescate necesitaba.
 |---|---|
 | La tabla R5 ≠ R4 (misma que arriba, con matices propios del FSH) | §6.5 |
 | Versión fijada `hl7.fhir.r5.core@5.0.0` y dependencia `hl7.fhir.uv.extensions@5.3.0` | §6.2 |
-| Base canónica y de dónde cuelgan los `Identifier.system` | §6.2, §6.3 |
+| Base canónica y de dónde cuelgan los `system` de identificador | §6.2; los dos adoptados y los seis propios, en §1 y §10.1 (D21) |
 | La fuente de verdad son los `.fsh`; lo generado no se edita ni se commitea | §6.2 |
 | Perfilar restringiendo lo mínimo; el *slicing* jerárquico CIP-SNS / CIP-AUT / NHC | §6.3 |
 | Nada de `required` sobre conjuntos que no están cerrados | §6.2 |
@@ -102,7 +102,7 @@ El fichero más denso de los ocho (23 KB). Es el que más rescate necesitaba.
 | Las reglas del laboratorio viven en propiedades de `catalogo-pruebas` | §6.6 |
 | `Sistema#CODIGO` no lleva `display`, y nada lo avisa | §11.1 |
 | SUSHI compila, el validador conforma | §11.1 |
-| **Las cuatro trampas del IG Publisher** y la negativa a construir con un espacio en la ruta | §11.1 |
+| **Las cuatro trampas del IG Publisher** y la negativa a construir con un espacio en la ruta | §11.1; el espacio en la ruta, en §8.4 |
 | Cómo construir la guía en local dentro de la imagen oficial, y cuánto tarda | §8.4 |
 | La línea base de `qa.html` y por qué «cuántos errores» solo significa algo comparado con ella | §9.1, §11.1 |
 | Inventario de artefactos producidos | §6.2 |
@@ -116,8 +116,8 @@ El fichero más denso de los ocho (23 KB). Es el que más rescate necesitaba.
 | Los dos planos que no se mezclan (tabla) | §3.1 |
 | Reglas del canal: original íntegro, dedup por `MSH-10`, DLQ y reproceso idempotente, charset en `MSH-18`, estructura `origen → filtro → transformador → destino` | §5.3 |
 | Cómo se identifica el motor: SMART Backend Services, clave por variable de entorno, JWKS en `/motor/jwks.json`, las cuatro cosas de la norma que se incumplen con facilidad, los cinco *scopes* que pide | §7.5 |
-| Que `IdentidadDePrueba` verifica la aserción de verdad | §7.5 |
-| El catálogo se pregunta: `OBR-4`, `OBX-3`, `SPM-4`; la vuelta del mapa solo donde hay equivalencia; lo que no se traduce va a la bandeja | §6.6 |
+| Que `IdentidadDePrueba` verifica la aserción de verdad | §7.5 *(añadido al pasar la puerta del desmontaje)* |
+| El catálogo se pregunta: `OBR-4`, `OBX-3`, `SPM-4`; la vuelta del mapa solo donde hay equivalencia; lo que no se traduce va a la bandeja | §6.6 *(los tres campos, añadidos al pasar la puerta)*; la bandeja, en §5.3 |
 | La vuelta de `$translate` con `targetCode` y la caída a `reverse=true` | §11.2 |
 | Contratos entrantes y salientes (tabla de mensajes) | §6.7 |
 | **MLLP: la trampa documental de tres capas** y que el impacto en código es ninguno | §6.7 |
@@ -129,7 +129,7 @@ El fichero más denso de los ocho (23 KB). Es el que más rescate necesitaba.
 | Qué construye y con qué lanzamiento (SMART EHR launch) | §5.4 |
 | Habla R5 y solo R5; paginación por `Bundle.link`; errores en `OperationOutcome` en español | §5.4 |
 | Nunca PHI en la URL, ni en logs de navegador, ni en analítica | §4.1 (invariante 6), §7.6 |
-| Los `display` se muestran como llegan; apellidos sin partir; charset obligatorio | §6.3, §9.3 |
+| Los `display` se muestran como llegan; apellidos sin partir; charset obligatorio | §6.3, §6.6, §9.3 |
 | Cliente público con PKCE `S256` y sin `client_secret` | §7.5 |
 | Accesibilidad clínica: unidad junto al valor, rango de referencia visible | §5.4 |
 | Las cinco cosas no opcionales del lanzamiento: nada se cablea, `iss` contra lista, `state` de 256 bits, `user/*.rs` no basta para el alta, el testigo solo a las llamadas del laboratorio | §7.5 |
@@ -146,7 +146,7 @@ El fichero más denso de los ocho (23 KB). Es el que más rescate necesitaba.
 |---|---|
 | Flutter (D13) y el argumento: clientes multiplataforma, iOS es media España | §5.5, §10.1 |
 | SMART standalone + PKCE, cliente público, *scopes* `patient/*.rs` | §7.5 |
-| Nunca `client_secret`; los testigos al almacén seguro de la plataforma | §7.5 |
+| Nunca `client_secret`; los testigos al almacén seguro de la plataforma | §5.5, §7.5 |
 | Un *scope* concedido no garantiza los datos | §4.1 (invariante 3 y §7.3) |
 | Caché local mínima y cifrada, borrada al cerrar sesión | §5.5 |
 | Apellidos, charset y texto de usuario en español | §6.3, §9.3 |
@@ -156,7 +156,7 @@ El fichero más denso de los ocho (23 KB). Es el que más rescate necesitaba.
 
 | Qué contiene que merece sobrevivir | Dónde ha quedado |
 |---|---|
-| Qué hay en cada carpeta y de qué hito es (tabla) | §5.6 |
+| Qué hay en cada carpeta y de qué hito es (tabla) | §5.6 *(la columna «Hito», añadida al pasar la puerta)* |
 | El generador resuelve la terminología contra el mismo servidor que todos; sin servidor no genera | §5.6, §4.1 (invariante 4) |
 | Lo difícil son los resultados verosímiles, no la demografía | §5.6, §10.1 (D15) |
 | Localización real: apellidos dobles, DNI/NIE con dígito de control, NUHSA `AN` + 10, códigos INE, y los tres apellidos de charset | §5.6, §9.3 |
@@ -164,7 +164,7 @@ El fichero más denso de los ocho (23 KB). Es el que más rescate necesitaba.
 | Semilla parametrizable: sin reproducibilidad no sirve de arnés | §5.6 |
 | Reglas del receptor de notificaciones: sin clave no arranca, exige `id-only`, detecta huecos de `eventNumber`, contesta el código que corresponde | §5.6 |
 | Reglas del SVEA simulado: verosímil no fiel, **exige que no llegue filiación**, deduplica por el id del `Task`, sin plazo `422`, lo que llega tarde se registra, los cuatro modos provocables | §5.6, §12 |
-| Los simuladores v2: `MSH-10` repetible a propósito | §5.6 |
+| Los simuladores v2: `MSH-10` repetible a propósito | §5.6 *(añadido al pasar la puerta del desmontaje)* |
 
 ## 8. `terminologia/CLAUDE.md`
 
@@ -183,9 +183,9 @@ El fichero más denso de los ocho (23 KB). Es el que más rescate necesitaba.
 | Qué contiene que merece sobrevivir | Dónde ha quedado |
 |---|---|
 | La tabla de comandos por componente (build, tests, lint, arranque) | §8.5 |
-| Spotless con `palantir-java-format` enganchado a `verify`; Maven por *wrapper* en modo `only-script` | §8.5, §11.4 |
-| Los tests de Angular corren con **vitest sobre jsdom**, no Karma; Node 24 | §8.5 |
-| SUSHI por `npx`; `ig.ini` se mantiene a mano y está versionado | §11.1 |
+| Spotless con `palantir-java-format` enganchado a `verify`; Maven por *wrapper* en modo `only-script` | §8.1, §8.5, §11.4 |
+| Los tests de Angular corren con **vitest sobre jsdom**, no Karma; Node 24 | §8.1, §8.5 |
+| SUSHI por `npx`; `ig.ini` se mantiene a mano y está versionado | §8.2, §8.5, §11.1 |
 | Un workflow por componente, todos con `paths:` | §8.6, §9.5 |
 | **El bit de ejecución no lo gobierna `.gitattributes`**: todo guion que la CI invoque va como `100755` | §11.4 |
 | *Ciclo de trabajo, definición de «hecho», cómo retomar tras `/compact`, reglas de oro, modo git* | **No pasa**: contrato de agente |
@@ -201,7 +201,7 @@ El fichero más grande (346 KB, 3 726 líneas) y el que más mezcla registro de 
 | Las decisiones **D21** (`system` de identificador: dos adoptados de ÚNICAS, seis propios), **D22** (la puerta transaccional sigue cerrada) y **D23** (quién exporta, sobre qué, qué sale y qué pasa con el fichero) | §10.1, con su razonamiento |
 | Los tres hitos, sus fechas y sus criterios de aceptación | §2.3, §2.4 |
 | Los criterios del hito 3 uno a uno con su prueba concreta | §2.4 |
-| **La transcripción del circuito de extremo a extremo** contra la pila levantada y con la seguridad puesta | §8.3 |
+| **La transcripción del circuito de extremo a extremo** contra la pila levantada y con la seguridad puesta | §8.2, §8.3 |
 | Los **siete fallos** que destapó recorrerlo en vivo y que 290 tests no veían | §11.5 |
 | Los **cuatro fallos del README** que solo se vieron ejecutándolo | §11.5 |
 | La ronda de testing: fuzzing, propiedades, cobertura leída por los ceros, reconciliador con volumen | §9.2 |
@@ -209,7 +209,7 @@ El fichero más grande (346 KB, 3 726 líneas) y el que más mezcla registro de 
 | **Los números finales**: tests por componente, tiempos del circuito, tiempos de cada puerta, cobertura, estado de los siete workflows | §9 entero |
 | Las dos trampas de entorno medidas (Keycloak y `varchar(255)`; `private_key_jwt` exige `iat`) | §11.2 |
 | Los dos avisos de entorno: WSL2 y la mitad de la RAM; el repositorio de Confluent antes que Central | §11.4 |
-| **Lo que queda abierto**, las dieciséis entradas | §13, íntegras |
+| **Lo que queda abierto**, las dieciséis entradas | §13, íntegras; el ítem 42 aparece además en §2.4 |
 | *Notas / riesgos* (municipio ausente, NDJSON en disco local, SUSHI no comprueba invariantes, EDO de instancia única, la dependencia entre validar y la terminología, el facultativo duplicado) | §11 y §13 |
 | *El checklist de los 52 ítems, ítem por ítem, con su commit* | **Resumido, no copiado.** Motivo: es el registro de ejecución, no conocimiento. Lo que cada ítem demostró está en §2.4 y en los criterios uno a uno; el rastro de cada uno vive en el historial de git, que no se borra |
 | *Las «decisiones triviales resueltas al…» de cada tanda* | **Absorbidas.** Las que siguen teniendo consecuencia están en §10 y §11; las que solo justificaban un valor por defecto ya reversible se van con el plan |
@@ -244,3 +244,23 @@ No entra en la memoria técnica **a propósito**, y este es el motivo:
 **Comprobación final.** Todas las filas de las once tablas de arriba tienen destino en
 `memoria-tecnica.md`, salvo las dos marcadas explícitamente («resumido, no copiado» y «absorbidas»)
 y las cinco de esta última sección, cada una con su motivo escrito.
+
+---
+
+## La puerta: esta lista recorrida contra el PDF, antes de borrar nada
+
+El 16 de agosto de 2026, antes de retirar el andamiaje, cada fila de arriba se buscó **en el PDF ya
+compuesto** —no en el Markdown, ni en el informe de la ronda anterior—, extrayendo el texto de cada
+sección y comprobando dentro de la sección declarada. 125 comprobaciones. **Cuatro no pasaron**, y
+por eso el documento se amplió y se volvió a generar antes de borrar:
+
+| Lo que faltaba | Dónde está ahora |
+|---|---|
+| `OBR-4`, `OBX-3` y `SPM-4`: los tres campos v2 con los que el motor pregunta al catálogo | §6.6 |
+| Que `IdentidadDePrueba` se baja el JWKS y comprueba la firma RS384, en vez de fingir el testigo | §7.5 |
+| Que los simuladores v2 pueden repetir el `MSH-10` a propósito, que es lo que prueba el camino de duplicados | §5.6 |
+| **Redis**: el diseño lo dibuja y no existe. Como `docs/diseno.md` sobrevive y sigue nombrándolo, quien lea el diseño lo buscará | §12.2, junto a MinIO |
+
+Lo demás estaba dentro. Donde el puntero de esta tabla apuntaba a una sección y el contenido había
+acabado en otra, se corrigió el puntero —no el documento—: son los destinos que ahora aparecen con
+dos o tres secciones.

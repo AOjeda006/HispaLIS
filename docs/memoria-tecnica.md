@@ -421,13 +421,13 @@ resultados solo para Android no cumple la premisa.
 
 ## `simuladores/` — el generador y los terceros
 
-| Carpeta | Qué es |
-|---|---|
-| `generador/` | El generador de **datos sintéticos** |
-| `his/` | El HIS de la clínica: emite `ADT^A01`/`A08` y `OML^O21` por MLLP |
-| `analizador/` | El analizador: emite `ORU^R01` por MLLP |
-| `receptor/` | El receptor de notificaciones de `Subscription` |
-| `svea/` | El servicio de declaraciones de Salud Pública |
+| Carpeta | Qué es | Hito |
+|---|---|---|
+| `generador/` | El generador de **datos sintéticos** | 1 |
+| `his/` | El HIS de la clínica: emite `ADT^A01`/`A08` y `OML^O21` por MLLP | 2 |
+| `analizador/` | El analizador: emite `ORU^R01` por MLLP | 2 |
+| `receptor/` | El receptor de notificaciones de `Subscription` | 3 |
+| `svea/` | El servicio de declaraciones de Salud Pública | 3 |
 
 **El generador** es lo que hace que el resto valga algo:
 
@@ -459,6 +459,10 @@ demuestra desde los dos*:
   plazo (`422` si falta) y **registra lo que llega tarde**, porque el plazo no extingue la
   obligación: la hace tardía. Tiene cuatro modos provocables (`acusa`, `rechaza`, `sin-registro`,
   `silencio`), que son los cuatro finales que el notificador distingue.
+
+**Los dos simuladores v2** hablan V2.5.1 con el juego de caracteres declarado en `MSH-18`, y **pueden
+repetir el `MSH-10` a propósito**: es la clave de deduplicación del motor, y el camino de duplicados
+no se prueba de verdad si no hay quien mande el mismo identificador dos veces.
 
 ## `terminologia/` — el servidor y su cargador
 
@@ -684,6 +688,14 @@ operación propietaria que configurar**: apuntar a Snowstorm o a Ontoserver es c
   que no rechaza, con un aviso por cada caída. El nombre es presentación, el código es el dato — un
   servidor caído no puede impedir que se registre un resultado.
 
+**Del lado del motor v2, lo que se pregunta son tres campos**: `OBR-4` —la prueba que pide el
+volante—, `OBX-3` —la que informa el analizador— y `SPM-4` —el tipo de muestra—. Los tres pasan por
+`CatalogoDelLaboratorio`, que resuelve contra el mismo servidor con las cuatro operaciones estándar:
+`$lookup` para el nombre y la unidad UCUM, `$validate-code` para saber si la prueba o el tipo de
+muestra existen, `$translate` para el LOINC y su vuelta, y `$expand` para contar el catálogo al
+arrancar. **Ninguna tabla de códigos dentro del motor**, y lo que no tiene equivalencia declarada no
+se inventa: el mensaje va a la bandeja de errores.
+
 **Las reglas del laboratorio viven en propiedades del concepto**, dentro de `catalogo-pruebas`: el
 umbral crítico, la prueba refleja y la obligación de declarar. No son `CodeSystem` ni `ConceptMap`
 aparte, y el motivo es siempre el mismo: un catálogo paralelo con los mismos códigos crea *conceptos
@@ -841,6 +853,10 @@ cosas de la norma que se incumplen con facilidad y que aquí están respetadas: 
 llega por variable de entorno y nunca está en el repositorio; **el JWKS se publica en
 `GET /motor/jwks.json`** y Keycloak se lo baja de ahí, de modo que rotar la clave no exige una
 ventana de indisponibilidad.
+
+Y el arnés con el que se prueba todo eso **verifica la aserción de verdad**: `IdentidadDePrueba` se
+baja el JWKS del motor por HTTP y comprueba la firma RS384. Un doble que devolviera el testigo sin
+mirar dejaría sin probar justo la parte que cuesta acertar.
 
 ## La auditoría: todo se registra, y sin PHI
 
@@ -1431,6 +1447,11 @@ Sin suavizar. Esto se monta para enseñar cómo encajan las piezas, **no para po
 - **Los NDJSON exportados viven en un disco local, no en un almacén de objetos.** El diseño prevé
   MinIO y el compose no lo trae. Con una sola instancia no se nota —el que sondea es el mismo proceso
   que escribió el fichero—, pero es la misma limitación.
+- **Del `Redis` que dibujaba el diseño tampoco hay nada**, y conviene decirlo porque `docs/diseno.md`
+  sigue nombrándolo: iba a servir de caché de terminología y de soporte de la deduplicación, y ninguna
+  de las dos cosas acabó necesitándolo. La primera la prohíbe el invariante 4 —se pregunta código a
+  código, y cachear el catálogo entero es justo la lista paralela que no puede existir—; la segunda
+  vive en PostgreSQL, por `hechoId` en los consumidores del bus y por `MSH-10` en el motor.
 - **El contador de `MSH-10` de los acuses del motor es efímero**: el contenedor no tiene volumen para
   el fichero de identificadores de HAPI.
 - No hay alta disponibilidad, ni copias de seguridad, ni plan de recuperación, ni observabilidad más
