@@ -48,12 +48,9 @@ entorno=$raiz/infra/compose/.env
 
 # Las credenciales de administración salen del mismo `.env` que usa el `compose`. No hay valor por
 # defecto para la contraseña: es un secreto de verdad.
-if [[ -f $entorno ]]; then
-  set -a
-  # shellcheck disable=SC1090
-  . "$entorno"
-  set +a
-fi
+# shellcheck source=../entorno.sh
+. "$raiz/infra/entorno.sh"
+cargar_entorno "$entorno"
 
 admin=${HISPALIS_KEYCLOAK_ADMIN:-admin}
 clave=${HISPALIS_KEYCLOAK_ADMIN_CLAVE:-}

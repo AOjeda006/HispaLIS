@@ -33,12 +33,9 @@ set -euo pipefail
 raiz=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 entorno=$raiz/infra/compose/.env
 
-if [[ -f $entorno ]]; then
-  set -a
-  # shellcheck disable=SC1090
-  . "$entorno"
-  set +a
-fi
+# shellcheck source=../entorno.sh
+. "$raiz/infra/entorno.sh"
+cargar_entorno "$entorno"
 
 BASE_FHIR=${BASE_FHIR:-http://localhost:8080/fhir}
 USUARIO=${HISPALIS_FACULTATIVO:-dra.alvarez}
