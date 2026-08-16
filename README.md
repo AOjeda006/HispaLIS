@@ -413,8 +413,14 @@ Notas de las cadenas de construcción, por si sorprenden:
 
   ```bash
   docker run --rm -v "$PWD":/repo -v "$HOME/.m2":/root/.m2 -w /repo/backend \
-    eclipse-temurin:21-jdk ./mvnw -o spotless:check
+    eclipse-temurin:21-jdk ./mvnw --batch-mode spotless:check
   ```
+
+  ⚠️ **Sin `-o`, y no es un descuido.** Con `-o` la orden solo funciona si `~/.m2` ya está poblado, y
+  nada de esta página lo puebla: en un equipo recién montado contesta *«Cannot access confluent […]
+  in offline mode»* y ni siquiera llega a leer el `pom`, porque lo que le falta es el POM padre de
+  Spring Boot. Funcionaba en el equipo donde se escribió porque allí había medio giga de tandas
+  anteriores.
 
   Ese contenedor sirve para el formato, **no para los tests**: corre como `root` y el PostgreSQL
   embebido se niega a arrancar (`initdb`), con un error que no menciona el motivo. Para el `verify`
@@ -423,8 +429,27 @@ Notas de las cadenas de construcción, por si sorprenden:
   ```bash
   docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp \
     -v "$PWD":/repo -v "$HOME/.m2":/tmp/.m2 -w /repo/backend \
-    eclipse-temurin:21-jdk ./mvnw clean verify
+    eclipse-temurin:21-jdk ./mvnw --batch-mode -Dmaven.repo.local=/tmp/.m2/repository clean verify
   ```
+
+  ⚠️ **`-Dmaven.repo.local` no es opcional, y sin él el montaje de arriba no sirve para nada.** Maven
+  no mira `$HOME`: el repositorio local lo saca de `${user.home}`, que la JVM resuelve por el uid
+  contra `/etc/passwd`. En `eclipse-temurin` el uid 1000 es el usuario `ubuntu`, así que las
+  dependencias se van a `/home/ubuntu/.m2/` —**dentro** del contenedor— y el `--rm` se las lleva. El
+  único que respeta `$HOME` es el guion del *wrapper*, y por eso lo que sí aparecía en el volumen era
+  la distribución de Maven y nunca los `.jar`.
+
+  **La primera vuelta con la caché vacía tarda lo suyo, y la mayor parte no es descarga.** El `pom`
+  declara el repositorio de Confluent —hace falta: las *serdes* de Avro no están en Central— y un
+  repositorio declarado en el `pom` se consulta **antes** que el heredado, así que cada uno de los
+  cientos de artefactos del árbol pide primero a Confluent, se lleva un fallo y vuelve a pedir a
+  Central. Se paga una sola vez: la CI lo tapa con `cache: maven` y la segunda vuelta local no
+  pregunta nada.
+
+  ⚠️ **No lances el `verify` con el `compose` levantado en un equipo de 16 GB.** WSL2 se queda con la
+  mitad de la RAM (7,6 GB), y ahí no caben a la vez los diez servicios de la pila y una suite que
+  levanta contextos de Spring con PostgreSQL empotrado: la VM entra en *thrashing*, el demonio de
+  Docker deja de responder y hay que `wsl --shutdown`. Se para la pila y se mide.
 
 ## Integración continua
 
