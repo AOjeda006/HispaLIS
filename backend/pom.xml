@@ -67,8 +67,10 @@
       <artifactId>spring-boot-starter-web</artifactId>
     </dependency>
 
-    <!-- Modelo FHIR R5 y SOLO R5. Si un import trae `…model.r4…`, está mal (adr-0001, y la tabla
-         de §2.1 de docs/diseno.md con los nueve elementos que cambian). -->
+    <!--
+      Modelo FHIR R5 y SOLO R5. Si un import trae `…model.r4…`, está mal (adr-0001, y la tabla de
+      §2.1 de docs/diseno.md con los nueve elementos que cambian).
+    -->
     <dependency>
       <groupId>ca.uhn.hapi.fhir</groupId>
       <artifactId>hapi-fhir-structures-r5</artifactId>
