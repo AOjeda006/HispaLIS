@@ -2065,7 +2065,128 @@ criterio de un *fuzzer*, el *shrinking* como requisito y cómo se lee la cobertu
 **Lo que se marca como que no aporta nada**, además de Bulk Data: `stacks/python/` (dos componentes en
 Python y ni una lección de Python), `fundamentos/concurrencia/` (el único intermitente **confirma** la
 regla que ya está), y `ux-ipo/` (hay web y app, y sus decisiones de interfaz no se tomaron: se
-heredaron del camino más corto). El dossier queda en **42 ADR + 2 fichas transversales**, 25 destinos.
+heredaron del camino más corto). El dossier quedó en **42 ADR + 2 fichas transversales** y 25
+destinos; el prompt 26 lo dejó en **44 y 26**.
+
+### La verificación desde un clon limpio, y los números finales (prompt 26, 2026-08-16)
+
+No «pasan los tests» sino **funciona para quien lo recibe**. Clon nuevo desde GitHub en un directorio
+que no existía (`C:\hl-limpio`, 689 ficheros, HEAD `852a6e0`), **siguiendo solo el README**, con Docker
+dentro de WSL2 y sin reutilizar nada de la copia de trabajo: ni `target/`, ni `node_modules/`, ni la
+caché de Maven del usuario —que tenía **541 MB de tandas anteriores**, y es exactamente lo que hacía
+invisible el tercero de los cuatro fallos—.
+
+**Los cuatro «funciona en mi máquina», y ninguno se veía leyendo:**
+
+| Lo que falla desde el clon limpio | Por qué no se veía | Dónde queda |
+|---|---|---|
+| **Los tres guiones de `infra/` mueren con `rc=127` antes de hacer nada** si el `.env` trae un valor con un espacio. `source` no lee configuración: ejecuta un guion, y `PROYECTOS Y REPOS` es una orden | El `.env.example` propone una ruta **relativa y sin espacios**. La variable existe para apuntar a otro sitio, y el día que se usa para eso los tres caen a la vez. En Windows, «otro sitio» lleva un espacio la mitad de las veces | `adr-0043` · `infra/entorno.sh`, uno y no tres copias |
+| **El montaje de la caché de Maven que documenta el README es inerte.** Maven no mira `$HOME`: `user.home` sale del uid contra `/etc/passwd`, y en `eclipse-temurin` el uid 1000 es `ubuntu`, así que se lo lleva a `/home/ubuntu/.m2` y el `--rm` lo borra | El volumen **no estaba vacío**: el *wrapper* sí respeta `$HOME` y dejaba ahí la distribución de Maven. Un `ls` decía que funcionaba; solo el `du` decía la verdad —11 MB tras nueve minutos de descargas— | `adr-0044` · `-Dmaven.repo.local` en el README |
+| **`./mvnw -o spotless:check` no arranca en un equipo recién montado**: *«Cannot access confluent […] in offline mode»*, y ni llega a leer el `pom` porque lo que le falta es el POM padre de Spring Boot | `-o` exige una caché poblada y **nada de la página la poblaba**. En el equipo donde se escribió había medio giga de antes | `adr-0044` · sin `-o` |
+| **`infra/fhir/exportar-cohorte.sh` no lleva bit de ejecución en el índice** (`100644`, frente al `100755` de los otros dos guiones). En un clon sobre Linux o macOS, la orden que escribe el README contesta *Permission denied* | Se desarrolla en Windows: en `/mnt/c` el sistema de ficheros da `0777` a todo, así que el guion **siempre** parece ejecutable y el modo real solo está en el índice. Es `adr-0008` —se desarrolla en Windows y se construye en Linux— por un flanco nuevo | `git update-index --chmod=+x` |
+
+Y **un cero de cobertura que la tabla de huecos aceptados no enumeraba**: `guarda-de-sesion.ts`, que
+corre en **cada** navegación a una pantalla clínica. Es el veredicto «camino real sin test» de
+`adr-0041`, así que lleva test: cuatro casos que afirman lo que la guarda sí promete —dejar pasar,
+mandar al lanzamiento conservando el destino, no confundir un testigo caducado con una sesión— y que
+el destino que viaja es una ruta y nunca un criterio de búsqueda con PHI.
+
+**El circuito completo, recorrido desde el clon con la seguridad puesta.** Dos pacientes sintéticos,
+`MUÑOZ DE LA TORRE, Begoña María` y `PEÑA ÁLVAREZ, Íñigo`, con el charset intacto de punta a punta:
+
+```
+1. Siembra        Practitioner/COL12345 201 · COL41902 201  (PKCE, sustituyendo solo al navegador)
+2. HIS por MLLP   MSA|AA ×2 — filiación y volante
+3. Analizador     MSA|AA — TSH 8,5 · K 7,5 mmol/L · LEGIOAG
+4. Refleja        ServiceRequest intent=reflex-order → T4L 0,6 ng/dL, triggeredBy=reflex
+5. Doble firma    1ª (COL12345) 200 preliminary · la MISMA otra vez 422 «…la misma persona mirando
+                  dos veces no es una segunda revisión…» · 2ª (COL41902) 200 FINAL · Provenance: 2
+6. Informe        201 + Location · GET inmediato al Location → 200   (read-your-writes)
+7. EDO            un POS en `valueString` NO se declara (adr-0034); el mismo POS CODIFICADO sí:
+                  Task completed/ACUSADA · Group/cohorte-legionelosis · SVEA {"LEGIONELOSIS": 1}
+8. Traza          entity.query relleno: 0 · PHI en el volcado de AuditEvent: 0 coincidencias
+9. $reconciliar   sin testigo 401 · con testigo de profesional 403 («los scopes no alcanzan»)
+10. $export       concede, exporta, comprueba y retira: Patient {gender, birthDate:"1981"} y nada más,
+                  DELETE 202, el sondeo pasa a 404 y el cliente se borra del realm
+```
+
+**Los tiempos**, que es lo que necesita saber quien recibe esto:
+
+| Paso | En frío | En caliente |
+|---|---|---|
+| `git clone` (689 ficheros) | ~5 s | — |
+| `npx --yes fsh-sushi .` | **41 s** (0 errores, 0 avisos) | — |
+| `docker compose up -d` (construye backend, motor y web) | **7 min 47 s** | **1 min 39 s** |
+| `infra/fhir/sembrar-facultativos.sh` | 3 s | — |
+| **El circuito entero, de la petición al informe** | — | **2,2 s** |
+| `infra/fhir/exportar-cohorte.sh` | 2 s | — |
+
+Desglose del circuito: ADT 0,3 s · OML 0,3 s · ORU 0,5 s · ORU de la refleja 0,4 s · testigo SMART
+0,2 s · doble firma 0,2 s · informe 0,1 s · `GET` inmediato 0,0 s.
+
+**Las siete puertas, con la misma orden que ejecuta cada workflow:**
+
+| Puerta | Tiempo | Resultado |
+|---|---|---|
+| `ci-backend` | **954 s** (caché de Maven en frío) | **296 tests**, 0 fallos · Spotless: 218 ficheros limpios |
+| `ci-integracion` | **140 s** (con la caché ya poblada por el anterior) | **299 tests**, 0 fallos, 4 omitidos |
+| `ci-web-profesional` | **167 s** | lint limpio · **98 tests** · empaquetado |
+| `ci-app-ciudadano` | **1 955 s** (32,6 min; el APK solo, 1 739 s en frío) | *No issues found* · **77 tests** · web · **APK 48,2 MB** |
+| `ci-simuladores` | 19 s + 16 s el corpus | ruff limpio, 38 ficheros · **143 tests** · corpus de 644 recursos |
+| `ci-terminologia` | **18 s** | ruff limpio, 15 ficheros · **47 tests** · imagen del cargador construida |
+| `ci-ig` | SUSHI 41 s + **IG Publisher 950 s** (15 min 50 s) | 12/12 perfiles con ejemplo · 2/2 copias de conformidad idénticas · `qa.html`: **1 error, 91 avisos, 822 enlaces rotos**, que es la línea base documentada · 68 recursos validados en 49 s |
+
+**Novecientos sesenta tests** en total, y **las siete puertas en verde en local**. El validador oficial
+de HL7, aparte, sobre lo que produce cada suite: circuito del backend 30 s, canal del motor 28 s,
+**644 recursos** del corpus en 62 s y los 68 artefactos de la guía contra el paquete construido en
+49 s — los cuatro sin un solo error, solo `dom-6` (la recomendación de narrativa) y el aviso de
+canónicas sin fijar. Las dos descargas que comparten cuatro workflows: validador 187 MB en 15 s,
+IG Publisher 231 MB en 22 s.
+
+Sumando todo, **una verificación completa desde cero cuesta poco más de una hora** en este equipo, y
+de esa hora **media es el APK y la guía**: el circuito clínico, que es lo que el sistema hace, son dos
+segundos.
+
+**Las tres reglas de `principios/testing.md` se cumplen ejecutando, no de boquilla**, y se comprobó
+mirando qué clases corrieron y no qué ficheros existen:
+
+| Regla | Quién la cumple | En esta ejecución |
+|---|---|---|
+| *Fuzzing* de lo que parsea formato externo | `FuzzingDelParserTest`, por socket, TLS y MLLP escrito a mano | **112 tests**, 0 fallos |
+| *Property-based* sobre los invariantes | `PropiedadDelCharsetEnElHilo` (30), `PropiedadDelOruSaliente` (25), `PropiedadDeLaClaveDeDeduplicacion` (24) y `PropiedadDeLaIdempotencia` (15) | **94 tests**, 0 fallos |
+| Cobertura medida y **leída por los ceros** | los seis componentes, sin umbral y sin `check` | 6 informes, 0 ceros nuevos |
+
+De paso queda explicado el salto de `integracion` de 86 a 299 tests: **206 de ellos son esas dos
+suites**, que no existían cuando se contaron los 86.
+
+**La cobertura, remedida entera después de los prompts 24 y 25.** No hay **ningún cero redondo nuevo**,
+y no por suerte: de las catorce rutas que tocaron esas dos tandas, el único código de producción con
+lógica es `terminologia/cargador/snomed.py` —que sale a **92 % y sin ceros**—; el resto son ADR, el
+dossier, este plan, los tests de SNOMED, `aliases.fsh` y `.env.example`. En Java, en TypeScript y en
+Dart no se movió una línea de producción, así que no había de dónde salieran ceros nuevos.
+
+| Componente | Antes | Ahora |
+|---|---|---|
+| `backend/` | 89,8 % | **90,3 %** |
+| `integracion/` | 88,5 % | **88,4 %** |
+| `terminologia/` (cargador) | 91,5 % | **92 %** |
+| `app-ciudadano/` | 83,6 % | **83,8 %** |
+| `web-profesional/` (todos los fuentes) | 74,9 % | 74,6 % → **75,8 %** con la guarda cubierta |
+| `simuladores/` (sin los tests) | — | **82 %** |
+
+Lo que sí apareció, y no es un cero nuevo sino **un hueco que la tabla no enumeraba**, son los dos
+`__main__.py` del receptor y del SVEA a 0 %: la lógica de los dos vive en su `__init__.py` y está
+probada (`test_receptor.py`, `test_svea.py`); lo que no toca nadie es el `argparse` y el bucle HTTP,
+que solo corren como contenedor. Veredicto: hueco aceptado, y ahora escrito.
+
+**Dos avisos de entorno medidos, que no son del producto:** WSL2 se queda con la mitad de la RAM
+(7,6 GB de 16), y ahí **no caben a la vez la pila entera y un `verify` de Maven** — la VM entra en
+*thrashing*, el demonio de Docker deja de responder y hay que `wsl --shutdown`. Y la primera vuelta de
+Maven es lenta por una razón que no es la red: el `pom` declara el repositorio de Confluent —hace
+falta— y un repositorio declarado en el `pom` se consulta **antes** que el heredado, así que cada
+artefacto pide primero a Confluent, falla y vuelve a pedir a Central. Se documenta y **no se toca el
+`pom`**: reordenar repositorios al cierre cambia de dónde sale cada `jar` a cambio de unos minutos que
+se pagan una sola vez.
 
 ### Lo que queda abierto al cerrar el proyecto
 
@@ -3974,6 +4095,9 @@ contra la pila del `compose` levantada desde el clon limpio, no contra un doble.
   **Puesto al día el 2026-08-15:** 42 ADR y dos fichas que no son de ninguno porque son de varios; las
   25 rutas citadas comprobadas una a una; y marcado lo que **no** aporta nada, que ahora son cinco
   entradas y no una.
+  **Y el 2026-08-16, con lo que dejó el clon limpio:** `adr-0043` (un `.env` que leen dos parsers no es
+  un formato, son dos) y `adr-0044` (una caché montada no es una caché usada). **44 ADR + 2 fichas**,
+  26 destinos — el único nuevo es `principios/naming-y-estilo.md`.
 - **⚠️ Siete fallos que 290 tests no vieron y un recorrido contra el `compose` sí** (ítem 51). Están
   en la tabla de *Estado actual*, en `adr-0033`–`adr-0036` y en la tercera parte de `adr-0030`. El
   patrón común merece quedar escrito aparte, porque es la lección más cara del proyecto: **viven en

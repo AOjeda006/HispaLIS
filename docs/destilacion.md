@@ -27,12 +27,12 @@ mitad del trabajo y la que evita que la biblioteca se llene de un solo proyecto.
 
 | | |
 |---|---|
-| ADR escritos en el proyecto | **42** (`adr-0001` … `adr-0042`) |
-| Con aportación transversal | **42** |
-| Que aportan **regla nueva** (`convenciones.md` + `referencia.md`) | **37** |
+| ADR escritos en el proyecto | **44** (`adr-0001` … `adr-0044`) |
+| Con aportación transversal | **44** |
+| Que aportan **regla nueva** (`convenciones.md` + `referencia.md`) | **39** |
 | Que aportan **solo contexto** (`referencia.md`) | **5** — `0001`, `0004`, `0006`, `0011`, `0013` |
 | **Fichas que no salen de un solo ADR** | **2** — el arnés sin probar y la configuración que no ejecuta nadie |
-| Destinos distintos en la biblioteca | **25** (una carpeta con su `convenciones.md` y su `referencia.md` cuenta como uno) |
+| Destinos distintos en la biblioteca | **26** (una carpeta con su `convenciones.md` y su `referencia.md` cuenta como uno) |
 | Aportaciones **arrastradas** de hitos anteriores, aún sin destilar | **2** — la trampa documental de MLLP (hito 1) y la tabla 0354 (hito 2) |
 
 **Rutas comprobadas el 2026-08-15.** Los 25 destinos existen hoy en `BibliotecaDocumentacion`, con su
@@ -53,7 +53,7 @@ era la correcta era la de `adr-0038`: el caso concreto es del constructor de Ang
 | `interoperabilidad/espana/` | 0003, 0039, 0040 |
 | `interoperabilidad/bulk-data/` | *(ninguno nuevo; ver «Lo que no aporta nada»)* |
 | `stacks/spring/` | 0012, 0013, 0020, 0031 |
-| `stacks/java/` | 0036 |
+| `stacks/java/` | 0036, **0044** |
 | `stacks/flutter/` | 0025 |
 | `stacks/typescript/` | 0038 |
 | `stacks/angular/` | 0038 |
@@ -63,15 +63,16 @@ era la correcta era la de `adr-0038`: el caso concreto es del constructor de Ang
 | `herramientas/seguridad.md` | 0016, 0020, 0022, 0027, 0033, **0037**, + la ficha transversal II |
 | `herramientas/api-rest.md` | 0016, 0017 |
 | `herramientas/autenticacion.md` | 0024, 0025 |
-| `herramientas/docker.md` | 0026, 0035 |
+| `herramientas/docker.md` | 0026, 0035, **0043**, **0044** |
 | `herramientas/entrega-continua.md` | 0004, 0007, 0008 |
 | `principios/testing.md` | 0014, 0026, 0033, 0034, 0037, 0038, 0039, 0040, **0041**, **0042**, + las dos fichas transversales (I y II) |
 | `principios/manejo-errores.md` | 0031, 0036, 0037, 0039 |
+| `principios/naming-y-estilo.md` | **0043** |
 | `principios/git-workflow.md` | 0008 |
 | `principios/desarrollo-con-ia.md` | 0004 |
 | `diseno/` | 0002, 0014, 0028, 0032, + la ficha transversal II |
 
-`principios/testing.md` se lleva **doce de las cuarenta y cuatro entradas** de este dossier, y eso
+`principios/testing.md` se lleva **doce de las cuarenta y seis entradas** de este dossier, y eso
 **no** es un reparto casual: es el fichero cuyas reglas el proyecto incumplía —fuzzing,
 *property-based* y cobertura leída— y el que se puso a prueba al cumplirlas. Tres de sus líneas
 actuales salen de aquí **matizadas o corregidas**, no solo confirmadas; van marcadas con ⚠️.
@@ -711,6 +712,48 @@ Ficha B de arriba. **Aportación arrastrada del hito 2.**
   (dobles apellidos, partículas, `Ñ`, tildes, `ç`) y semilla fija.
 - **Se queda aquí:** los canales concretos, y que la propiedad descartada fuera la de la banda
   magnética de la tarjeta sanitaria.
+
+---
+
+### ADR-0043 · Un `.env` que leen dos parsers no es un formato, son dos
+
+- **Transversal:** (1) **Un fichero de configuración que leen dos herramientas tiene dos gramáticas, y
+  hay que escribir contra la más estricta.** `docker compose`, `dotenv`, `systemd` y `source` de bash
+  no coinciden en comillas, espacios ni escapes, y que coincidan en los valores fáciles es lo que hace
+  que el fallo llegue tarde. (2) **`set -a; . fichero` no es «leer variables»: es ejecutar código que
+  alguien escribió para otra herramienta** — un espacio, un `$`, un backtick o un `#` cambian lo que
+  hace, y con `set -e` el guion muere en una línea que no es suya. (3) **Un valor de ejemplo sin
+  espacios esconde toda esta clase de fallo**: si una variable admite una ruta, el ejemplo debería
+  llevar un espacio a propósito. (4) **Cuando el bloque frágil está copiado en N guiones, el arreglo es
+  un fichero compartido**, no N parches — si no, la copia que se olvida es la que corre.
+- **Destino:** `herramientas/docker.md` (**C**: no *sourcear* un `.env` de `compose`; la función de
+  lectura de tres líneas). `principios/naming-y-estilo.md` (**R**: por qué
+  `export $(grep -v '^#' .env | xargs)`, que es el remedio que más circula, es peor que el original —
+  `xargs` parte por espacios y convierte una ruta en dos variables).
+- **Autoridad:** `docker compose` v2.40 (se queda con todo lo que hay tras el primer `=` y quita las
+  comillas envolventes) frente a `bash` 5.2 (`.` ejecuta).
+- **Se queda aquí:** que la variable fuera `HISPALIS_RELEASES` y que el espacio viniera de
+  «PROYECTOS Y REPOS».
+
+---
+
+### ADR-0044 · Una caché montada no es una caché usada
+
+- **Transversal:** (1) **Montar un volumen donde crees que la herramienta escribe no es comprobar que
+  escribe ahí**; se comprueba con `du` tras la primera vuelta, no con `ls`, porque un volumen con algo
+  dentro parece un volumen que funciona. (2) **`$HOME` no es `user.home`.** La JVM lo resuelve por el
+  uid contra `/etc/passwd`, así que `-e HOME=…` no mueve el repositorio local de Maven ni el `~/.gradle`
+  ni nada que pregunte a la plataforma en vez de al entorno — y las imágenes oficiales traen el uid
+  1000 ya ocupado por un usuario con `home` propio. (3) **Una orden con `-o` / `--offline` /
+  `--frozen-lockfile` hereda un prerrequisito que hay que escribir**: si la documentación no dice quién
+  llena la caché, la orden solo funciona en el equipo de quien la escribió. (4) **El síntoma de estas
+  dos trampas no es un error: es tiempo.** Nada falla, todo tarda, y por eso pueden vivir años sin que
+  nadie las mire.
+- **Destino:** `herramientas/docker.md` (**C**: la regla del `user.home` y cómo se verifica un montaje
+  de caché). `stacks/java/convenciones.md` (**C**: `-Dmaven.repo.local` al correr Maven en contenedor;
+  **R**: el caso completo, con los 954 s en frío frente a los 140 s con la caché poblada).
+- **Autoridad:** medido sobre `eclipse-temurin:21-jdk` (uid 1000 = `ubuntu`) y Maven 3.9.11.
+- **Se queda aquí:** las cifras concretas y que el repositorio de más fuera el de Confluent.
 
 ---
 
