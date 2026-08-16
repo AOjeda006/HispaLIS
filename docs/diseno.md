@@ -12,7 +12,7 @@
 > respecto de v1.0 son correcciones factuales aprendidas construyendo.
 > **Última revisión:** 2026-08-12
 
-> **Nota de entrega (2026-08-15).** Este documento describe también el **andamiaje con el que se
+> **Nota de entrega (2026-08-16).** Este documento describe también el **andamiaje con el que se
 > dirigió el desarrollo** —la decisión **D20** y su §13.2, el `docs/PLAN.md` como spec viva, el
 > `AGENTS.md`, la carpeta `.claude/` y las entradas correspondientes de §12 y del árbol de §13—.
 > **Nada de eso sigue en el repositorio:** se borró al entregar, en el commit **`5aaaef8`**, y

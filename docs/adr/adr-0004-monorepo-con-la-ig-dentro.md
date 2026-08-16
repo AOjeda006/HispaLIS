@@ -12,7 +12,7 @@ tags: [adr, monorepo, ci, organizacion, ig, claude-md, agentes]
 - **Fecha:** 2026-08-03
 - **Decisiones de diseño:** D10 y D20 (`docs/diseno.md` §13)
 
-> **Nota de entrega (2026-08-15).** La mitad **D10** de esta decisión —monorepo con la IG dentro y
+> **Nota de entrega (2026-08-16).** La mitad **D10** de esta decisión —monorepo con la IG dentro y
 > CI filtrada por rutas— sigue en pie tal cual. La mitad **D20** —los `CLAUDE.md`, el `AGENTS.md` y
 > el `docs/PLAN.md`— era andamiaje de desarrollo y **ya no está en el árbol**: se borró al entregar,
 > en el commit **`5aaaef8`**, y `git revert 5aaaef8` lo devuelve entero. El texto de abajo se
