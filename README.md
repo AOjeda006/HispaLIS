@@ -485,9 +485,10 @@ git revert 5aaaef8
 ```
 
 Las convenciones que aquellos ficheros importaban —commits, estilo, testing— viven en
-**`BibliotecaDocumentacion`**, que sigue siendo un repositorio aparte. Ya no hace falta tenerlo
-clonado al lado para compilar ni para pasar los tests; solo para trabajar con esas mismas
-convenciones.
+**`BibliotecaDocumentacion`**, que sigue siendo un repositorio aparte. Con el andamiaje fuera **ya
+nada del código las importa**: quien quiera seguirlas las lee allí. Ojo, que la biblioteca sigue
+haciendo falta como **carpeta hermana** por otro motivo, y ese no ha cambiado: es donde están
+archivadas las *releases* de terminología que monta el `compose` (punto 2 de «Cómo levantarlo»).
 
 Los commits van **firmados**, con la identidad del autor y **sin ningún trailer ajeno**.
 
