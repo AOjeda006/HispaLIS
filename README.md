@@ -33,6 +33,11 @@ con terminología (LOINC, UCUM, SNOMED CT Edición Española), un puente HL7 v2 
 eventos, SMART on FHIR y una obligación legal española implementada (notificación EDO al SVEA)— sin
 degenerar en una historia clínica electrónica en miniatura.
 
+- **Memoria técnica (PDF):** [`docs/HispaLIS-memoria-tecnica.pdf`](docs/HispaLIS-memoria-tecnica.pdf)
+  — qué es y qué no es, arquitectura, invariantes, interoperabilidad, seguridad, decisiones, números
+  medidos y lo que queda abierto, en un solo documento autosuficiente. Su fuente es
+  [`docs/memoria-tecnica.md`](docs/memoria-tecnica.md) y se regenera con
+  [`docs/generar-memoria-pdf.sh`](docs/generar-memoria-pdf.sh).
 - **Diseño completo:** [`docs/diseno.md`](docs/diseno.md) — decisiones D1–D20, arquitectura, perfiles,
   contexto legal español. Es la fuente de verdad.
 - **Estado del trabajo:** [`docs/PLAN.md`](docs/PLAN.md) — **nota de entrega**, checklist, estado
