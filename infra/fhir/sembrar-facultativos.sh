@@ -27,7 +27,7 @@
 #
 # La alternativa —que el motor busque `Practitioner?identifier=<colegio>|COL12345` y referencie el
 # UUID que devuelva el servidor— es más correcta en FHIR y toca el transformador, sus tests y el
-# ejemplo de la guía. Queda anotada en `docs/PLAN.md`.
+# ejemplo de la guía. Queda anotada aquí.
 set -euo pipefail
 
 raiz=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)

@@ -62,7 +62,8 @@ caro de diagnosticar de los cuatro, porque todo lo que uno mira parece haber ido
 ## Decisión
 
 1. **`ig.ini` se mantiene a mano, versionado y sin una sola línea de comentario.** La explicación de
-   por qué existe y por qué no lleva comentarios vive en `ig/CLAUDE.md`, no dentro del fichero.
+   por qué existe y por qué no lleva comentarios vive fuera del fichero: en este ADR y en la memoria
+   técnica (§11.1).
 2. **La plantilla es `fhir2.base.template#current`**, desde el primer commit. No se adopta
    `fhir.base.template` ni siquiera de forma transitoria: está anunciada su retirada.
 3. **La CI instala Ruby y Jekyll explícitamente** (`ruby/setup-ruby` + `gem install jekyll`) antes de
@@ -84,7 +85,8 @@ caro de diagnosticar de los cuatro, porque todo lo que uno mira parece haber ido
 **En contra:**
 
 - `ig/ig.ini` es un fichero de configuración **sin comentarios que expliquen para qué sirve**, lo cual
-  contradice la práctica habitual del proyecto. Se compensa documentándolo en `ig/CLAUDE.md`, pero es
+  contradice la práctica habitual del proyecto. Se compensa documentándolo aquí y en la memoria
+  técnica (§11.1), pero es
   una excepción que hay que recordar: **quien añada un comentario "de mejora" rompe la construcción**.
 - El desarrollo local de la IG queda condicionado a la ruta del clon, algo que no se puede arreglar
   desde el repositorio.

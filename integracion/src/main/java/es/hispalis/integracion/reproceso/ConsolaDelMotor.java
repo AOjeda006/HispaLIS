@@ -32,10 +32,10 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * <h2>Deuda conocida: esto todavía no pide credenciales</h2>
  *
- * <p>Keycloak es el ítem 36. Hasta entonces esta consola se sirve dentro de la red del {@code compose}
- * y no se publica hacia fuera; el punto de enganche del token es el mismo
- * {@code AutenticacionDelMotor} que ya usa el cliente FHIR. Está anotado en {@code docs/PLAN.md} →
- * <em>Notas / riesgos</em>, que es donde vive el trabajo pendiente.
+ * <p>Esta consola se sirve dentro de la red del {@code compose} y <strong>no se publica hacia
+ * fuera</strong>; el punto de enganche del token es el mismo {@code AutenticacionDelMotor} que ya
+ * usa el cliente FHIR. Está anotado en la memoria técnica (§12.3 y §13.3), que es donde vive el
+ * trabajo pendiente.
  */
 @RestController
 @RequestMapping("/motor/dlq")

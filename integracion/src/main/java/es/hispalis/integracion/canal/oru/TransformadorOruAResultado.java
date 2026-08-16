@@ -67,8 +67,8 @@ import org.springframework.stereotype.Component;
  *
  * <p>Así que <strong>este canal no rellena {@code performer}</strong>. La identidad del analizador no
  * se pierde por eso: el mensaje original se guarda íntegro y es él el registro de auditoría. Queda
- * pendiente modelar el inventario y entonces poblar {@code Observation.device} — anotado en
- * {@code docs/PLAN.md}, no aquí.
+ * pendiente modelar el inventario y entonces poblar {@code Observation.device} — anotado en la
+ * memoria técnica (§13.2), no aquí.
  */
 @Component
 public class TransformadorOruAResultado {

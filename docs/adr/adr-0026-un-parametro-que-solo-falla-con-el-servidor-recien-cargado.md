@@ -67,10 +67,10 @@ Y dos reglas de las que el arreglo es solo el caso concreto:
 
 - La comprobación pide 21 códigos en vez de un entero. Es un coste irrelevante y compra que el paso
   ejercite exactamente el camino que va a recorrer el generador.
-- **`count=0` queda proscrito contra HAPI en todo el proyecto**, y así está escrito en
-  `terminologia/CLAUDE.md`. Los ejemplos de `README.md` y de ese mismo fichero lo usaban: los dos
-  habrían fallado contra un servidor recién levantado, que es justo cuando alguien copia un comando
-  de la documentación.
+- **`count=0` queda proscrito contra HAPI en todo el proyecto**, y así queda escrito aquí y en la
+  memoria técnica (§11.2). Los ejemplos de `README.md` y de las instrucciones del servidor de
+  terminología lo usaban: los dos habrían fallado contra un servidor recién levantado, que es justo
+  cuando alguien copia un comando de la documentación.
 - **El síntoma es el peor posible para diagnosticar**: «produced too many codes» apuntando a un
   conjunto de veintiún elementos manda a buscar un límite de tamaño que no tiene nada que ver, y el
   `maximum 0` del mensaje pasa desapercibido porque parece parte de la plantilla del error.

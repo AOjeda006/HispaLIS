@@ -370,7 +370,7 @@ class RelayDelOutboxTest extends TestDeIntegracion {
      * banco de pruebas de KRaft elige el suyo— y comprobado aquí, pedir el 40245 abría el 40247. Y
      * fijar el puerto es justo lo que permite que la aplicación arranque apuntando a un broker que
      * todavía no existe, que es el escenario del test. Kafka 4 retira ZooKeeper: cuando se suba,
-     * habrá que buscar otra forma de fijar el puerto, y está anotado en {@code docs/PLAN.md}.
+     * habrá que buscar otra forma de fijar el puerto, y queda anotado aquí.
      */
     private static synchronized void arrancarElBrokerSiHaceFalta() {
         if (broker != null) {

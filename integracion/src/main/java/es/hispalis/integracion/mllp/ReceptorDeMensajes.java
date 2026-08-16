@@ -78,7 +78,7 @@ public class ReceptorDeMensajes implements ReceivingApplication<Message> {
             cabecera = CabeceraMsh.de(recibido);
         } catch (CharsetDeclarado.CharsetNoSoportado ilegible) {
             // Sin cabecera fiable no hay clave de deduplicación ni metadatos, así que este es el
-            // único camino en el que el mensaje no llega al archivo. Queda anotado en `docs/PLAN.md`.
+            // único camino en el que el mensaje no llega al archivo, y queda anotado aquí.
             LOG.warn("Mensaje rechazado por charset: {}", ilegible.getMessage());
             return acusar(recibido, Desenlace.rechazado(ilegible.getMessage()));
         }

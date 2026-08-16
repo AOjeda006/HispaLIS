@@ -32,7 +32,7 @@ firma nadie; el hito 1 ya tomó esa decisión en la proyección y aquí se sosti
 """
 
 // El `id` explícito no es decorativo: sin él SUSHI lo saca del nombre del bloque —que es
-// PascalCase— y la URL publicada no coincidiría con la canónica de abajo (`ig/CLAUDE.md`).
+// PascalCase— y la URL publicada no coincidiría con la canónica de abajo (memoria técnica, §11.1).
 * id = "resultado-validado"
 * url = "https://aojeda006.github.io/HispaLIS/fhir/SubscriptionTopic/resultado-validado"
 * version = "0.1.0"

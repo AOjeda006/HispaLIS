@@ -24,8 +24,8 @@ import org.junit.jupiter.api.Test;
  * Docker (misma razón que el PostgreSQL embebido), así que no hay un Schema Registry de verdad
  * levantado. Lo que se usa es {@code MockSchemaRegistryClient}, que decide la compatibilidad con
  * <em>el mismo</em> {@code CompatibilityChecker} que ejecuta el servidor: la decisión es la del
- * registro, no una reimplementación. Lo que este test NO cubre es el camino HTTP hasta él, y eso
- * está dicho en {@code docs/PLAN.md}.
+ * registro, no una reimplementación. Lo que este test NO cubre es el camino HTTP hasta él, y queda
+ * dicho aquí.
  */
 class CompatibilidadDeEsquemasTest {
 

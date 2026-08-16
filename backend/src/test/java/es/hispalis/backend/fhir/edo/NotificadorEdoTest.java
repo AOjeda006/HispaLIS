@@ -75,8 +75,8 @@ import org.springframework.test.context.DynamicPropertySource;
  * acuse o rechazar. Un doble del cliente no podría hacer ninguna de las tres.
  *
  * <p><strong>Declara su propio {@code @SpringBootTest}</strong>, que oculta entero el del padre
- * —propiedades incluidas—, así que las suyas se repiten. Es la trampa que documenta
- * {@code backend/CLAUDE.md}.
+ * —propiedades incluidas—, así que las suyas se repiten. Es la trampa que documenta la memoria
+ * técnica (§11.4).
  */
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
@@ -287,7 +287,7 @@ class NotificadorEdoTest extends TestDeIntegracion {
      * <p>⚠️ Una declaración EDO <strong>real</strong> lleva filiación — Salud Pública tiene que poder
      * localizar al caso para la encuesta epidemiológica—. Esta no, y no es un descuido: el
      * destinatario es simulado y el proyecto no manda datos de persona a ningún sitio. Queda escrito
-     * en la guía y en {@code docs/PLAN.md}.
+     * en la guía y en la memoria técnica (§12.4).
      */
     @Test
     @DisplayName("lo que se manda no lleva nombre, ni DNI, ni NUHSA, ni NHC")

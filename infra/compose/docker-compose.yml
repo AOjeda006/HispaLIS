@@ -500,7 +500,8 @@ services:
   #
   # ⚠️ Es una simulación VEROSÍMIL, NO FIEL: el contrato de Redalerta no es público, así que lo que
   # se manda es el `Task` que publica la propia guía, y va SIN FILIACIÓN — una declaración de verdad
-  # la lleva. Está escrito en `docs/PLAN.md`, en el perfil `NotificacionEDO` y en el propio módulo.
+  # la lleva. Está escrito en la memoria técnica (§12.4), en el perfil `NotificacionEDO` y en el
+  # propio módulo.
   svea:
     profiles: ['edo']
     build:

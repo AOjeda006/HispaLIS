@@ -110,7 +110,7 @@ Alias: $SID_COLEGIADO_COM_SEVILLA = https://aojeda006.github.io/HispaLIS/sid/col
 // ─── Extensiones estándar (paquete aparte en R5: `hl7.fhir.uv.extensions`) ───
 //
 // ⚠️ Las dos de apellidos se declaran sobre el elemento `HumanName.family`, NO sobre `HumanName`.
-// Declararlas en el sitio equivocado hace que la IG no compile (§4.2, `ig/CLAUDE.md`).
+// Declararlas en el sitio equivocado hace que la IG no compile (`docs/diseno.md` §4.2).
 
 Alias: $EXT_APELLIDO_PADRE = http://hl7.org/fhir/StructureDefinition/humanname-fathers-family
 Alias: $EXT_APELLIDO_MADRE = http://hl7.org/fhir/StructureDefinition/humanname-mothers-family

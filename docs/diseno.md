@@ -12,6 +12,15 @@
 > respecto de v1.0 son correcciones factuales aprendidas construyendo.
 > **Última revisión:** 2026-08-12
 
+> **Nota de entrega (2026-08-15).** Este documento describe también el **andamiaje con el que se
+> dirigió el desarrollo** —la decisión **D20** y su §13.2, el `docs/PLAN.md` como spec viva, el
+> `AGENTS.md`, la carpeta `.claude/` y las entradas correspondientes de §12 y del árbol de §13—.
+> **Nada de eso sigue en el repositorio:** se borró al entregar, en el commit **`5aaaef8`**, y
+> `git revert 5aaaef8` lo devuelve entero. El texto de abajo **se mantiene tal cual se escribió**,
+> porque es el registro de por qué se decidió lo que se decidió, no un mapa del árbol de hoy. Lo
+> que aquellos ficheros contenían y merecía sobrevivir está en `docs/memoria-tecnica.md`; el
+> recorrido pieza por pieza, en `docs/inventario-desmontaje.md`.
+
 ### Cambios sobre v1.0 (2026-08-03)
 
 | Fecha | Qué cambia | Por qué |
@@ -28,7 +37,8 @@ Ninguna reabre una decisión: las dos primeras son del mismo tipo que las filas 
 > **Lo que NO cambia, y conviene saber al leer §4.3:** «un *slice* por colegio emisor» en
 > `Practitioner.identifier` **no es realizable** —el discriminador por `system` exige un valor fijo
 > por *slice* y ese `system` es paramétrico—. El texto se mantiene tal cual; la desviación y cómo se
-> modela en su lugar (`identifier.assigner`) están registradas en `PLAN.md` → *Notas / riesgos*.
+> modela en su lugar (`identifier.assigner`) están explicadas en la cabecera del propio perfil,
+> `ig/input/fsh/profiles/FacultativoLab.fsh`.
 
 **Marcas de verificación:** `✅` verificado contra paquete canónico o repositorio oficial ·
 `🔍` verificado por fuente web secundaria · `⚠️` no verificado contra fuente primaria.

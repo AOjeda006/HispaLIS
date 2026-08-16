@@ -8,10 +8,10 @@ import org.springframework.boot.SpringApplication;
 /**
  * Arranca el backend en local con su propio PostgreSQL, sin Docker y sin instalar nada.
  *
- * <p>Existe porque en este equipo <strong>no hay Docker</strong> (ver el ítem 6 de
- * {@code docs/PLAN.md}) y sin base de datos el servidor JPA de HAPI ni siquiera levanta el contexto.
- * Con esto la web del profesional se puede ejercitar contra la API de verdad hoy, en vez de esperar
- * al {@code docker compose} del ítem 15.
+ * <p>Existe porque en este equipo <strong>no hay Docker</strong> (ver {@code docs/adr/adr-0013}) y
+ * sin base de datos el servidor JPA de HAPI ni siquiera levanta el contexto. Con esto la web del
+ * profesional se puede ejercitar contra la API de verdad hoy, en vez de esperar al
+ * {@code docker compose}.
  *
  * <p>Vive en {@code src/test} porque el PostgreSQL embebido es una dependencia de alcance
  * {@code test}, y ahí es donde debe quedarse: <strong>esto no es un modo de despliegue</strong>. La

@@ -42,7 +42,8 @@ lib/
 └── presentacion/    MVVM: un `ChangeNotifier` por pantalla y widgets que solo miran
 ```
 
-Las carpetas van **en español** como el resto del monorepo (invariante 9 del `CLAUDE.md` raíz).
+Las carpetas van **en español** como el resto del monorepo (invariante 9 de los nueve del proyecto,
+en la memoria técnica §4.1).
 No hay ficheros `.arb`: la app es monolingüe por diseño y `intl` entra solo por el formato de
 números y fechas.
 

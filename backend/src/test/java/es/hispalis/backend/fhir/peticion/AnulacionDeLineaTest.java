@@ -60,8 +60,8 @@ class AnulacionDeLineaTest extends TestDeIntegracion {
     private static final String MOTIVO = "Muestra hemolizada y el paciente no vuelve a extracción.";
     private static final String FACULTATIVA = FacultativaDePrueba.REFERENCIA;
 
-    // Las decenas de millón están agotadas (ver `docs/PLAN.md`, decisiones del ítem 16), así que las
-    // clases nuevas se reparten DENTRO de ellas y no detrás: el NHC son exactamente ocho dígitos.
+    // Las decenas de millón están agotadas, así que las clases nuevas se reparten DENTRO de ellas y
+    // no detrás: el NHC son exactamente ocho dígitos.
     private static final AtomicInteger SIGUIENTE = new AtomicInteger(15_000_000);
 
     private final FhirContext contexto = FhirContext.forR5();

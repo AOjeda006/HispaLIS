@@ -114,8 +114,9 @@ Thumbs.db
 __MACOSX/
 ._*
 
-# ─── Claude Code: la configuración compartida SÍ se commitea ──────────────────
-.claude/settings.local.json
+# ─── Claude Code: el andamiaje se retiró al entregar (commit 5aaaef8) ─────────
+# Nada de esta carpeta vuelve al repositorio.
+.claude/
 
 # ─── Memoria técnica: los diagramas rasterizados son artefacto generado ───────
 # Las fuentes son los .mmd; los PNG los produce docs/generar-memoria-pdf.sh.

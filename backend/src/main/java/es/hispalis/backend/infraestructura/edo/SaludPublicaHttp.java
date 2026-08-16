@@ -29,8 +29,8 @@ import java.time.Instant;
  * Pública tiene que poder localizar al caso para la encuesta epidemiológica—. Aquí van el código de la
  * enfermedad, el plazo y una referencia seudónima al caso, y nada más, porque el destinatario es
  * simulado y este proyecto no manda datos de persona a ningún sistema externo. Queda escrito en la
- * guía, en {@code docs/PLAN.md} y aquí: es la diferencia consciente entre esta simulación y el sistema
- * real, no un descuido que haya que descubrir leyendo el código.
+ * guía, en la memoria técnica (§12.4) y aquí: es la diferencia consciente entre esta simulación y
+ * el sistema real, no un descuido que haya que descubrir leyendo el código.
  *
  * <h2>El acuse se lee del cuerpo, y su ausencia también es una respuesta</h2>
  *

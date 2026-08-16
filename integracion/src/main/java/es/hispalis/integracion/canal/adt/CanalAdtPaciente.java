@@ -19,8 +19,8 @@ import org.springframework.stereotype.Component;
 /**
  * Canal de demografía: {@code ADT^A01} y {@code ADT^A08} → {@code Patient}.
  *
- * <p>Es el primer canal del motor a propósito. Es el único contrato de la tabla de
- * {@code integracion/CLAUDE.md} que produce <strong>un solo recurso</strong>, así que estrena la
+ * <p>Es el primer canal del motor a propósito. Es el único contrato de la tabla de canales —la de
+ * la memoria técnica, §6.7— que produce <strong>un solo recurso</strong>, así que estrena la
  * tubería entera —listener, almacén, deduplicación, acuses— sin arrastrar además el problema de
  * atomicidad que D22 resuelve para el {@code OML^O21}.
  *

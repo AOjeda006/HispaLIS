@@ -19,7 +19,7 @@ import org.springframework.test.context.DynamicPropertySource;
  * <p>La proyección FHIR de HAPI no arranca sin una base de datos real, así que aquí se levanta
  * <strong>PostgreSQL de verdad</strong> —el mismo motor y el mismo dialecto que en producción—
  * desde un binario que se ejecuta en proceso. No hace falta Docker: la decisión y sus alternativas
- * están en la sección del ítem 6 de {@code docs/PLAN.md}.
+ * están en {@code docs/adr/adr-0013}.
  *
  * <p>La instancia es <strong>una sola para toda la ejecución</strong>. Arrancar PostgreSQL cuesta
  * unos segundos y hacerlo por clase de test multiplicaría ese coste sin ganar aislamiento real: el

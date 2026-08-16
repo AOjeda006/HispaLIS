@@ -39,10 +39,9 @@ degenerar en una historia clínica electrónica en miniatura.
   [`docs/memoria-tecnica.md`](docs/memoria-tecnica.md) y se regenera con
   [`docs/generar-memoria-pdf.sh`](docs/generar-memoria-pdf.sh).
 - **Diseño completo:** [`docs/diseno.md`](docs/diseno.md) — decisiones D1–D20, arquitectura, perfiles,
-  contexto legal español. Es la fuente de verdad.
-- **Estado del trabajo:** [`docs/PLAN.md`](docs/PLAN.md) — **nota de entrega**, checklist, estado
-  actual y las decisiones D21–D23, que se tomaron ejecutando y no en el diseño.
-- **Decisiones de arquitectura:** [`docs/adr/`](docs/adr/).
+  contexto legal español. Es la fuente de verdad del **porqué**.
+- **Decisiones de arquitectura:** [`docs/adr/`](docs/adr/) — cuarenta y cuatro, una por fichero.
+  Las decisiones D21–D23, tomadas ejecutando y no en el diseño, están en el capítulo 10 de la memoria.
 - **Guía de implementación publicada:** <https://aojeda006.github.io/HispaLIS/>.
 
 > **Los tres hitos están cerrados, y con ellos el proyecto.**
@@ -60,13 +59,13 @@ degenerar en una historia clínica electrónica en miniatura.
 >
 > El circuito entero está recorrido **contra la pila levantada y con la seguridad puesta**, de la
 > petición del HIS por MLLP a la cohorte exportada y borrada; la transcripción, paso a paso, está en
-> [`docs/PLAN.md`](docs/PLAN.md) → *Estado actual*. Ese recorrido destapó **siete fallos que 290 tests
-> no veían** (`adr-0033`–`adr-0036` y la tercera parte de `adr-0030`), arreglados en rojo→verde.
+> la memoria técnica (§8.3). Ese recorrido destapó **siete fallos que 290 tests no veían**
+> (`adr-0033`–`adr-0036` y la tercera parte de `adr-0030`), arreglados en rojo→verde.
 >
 > **Lo que queda abierto** —SNOMED sin cargar por licencia, la app sin ejecutar en un dispositivo y
-> una docena más— es una lista **cerrada y explícita** en [`docs/PLAN.md`](docs/PLAN.md) → *Lo que
-> queda abierto al cerrar el proyecto*. Lo que el proyecto aporta a la biblioteca de convenciones está
-> inventariado ADR por ADR en [`docs/destilacion.md`](docs/destilacion.md).
+> una docena más— es una lista **cerrada y explícita**: el capítulo 13 de la memoria, entrada por
+> entrada. Lo que el proyecto aporta a la biblioteca de convenciones está inventariado ADR por ADR en
+> [`docs/destilacion.md`](docs/destilacion.md).
 
 ## Arquitectura en tres frases
 
@@ -92,9 +91,7 @@ degenerar en una historia clínica electrónica en miniatura.
 | `simuladores/` | Generador de datos sintéticos, HIS y analizador | Python |
 | `terminologia/` | Servidor de terminología y su cargador | HAPI FHIR + Python |
 | `infra/` | Compose, Keycloak, Kafka | Docker / YAML |
-| `docs/` | Diseño, plan y ADR | Markdown |
-
-Cada subproyecto tiene su propio `CLAUDE.md` con las convenciones de su stack (ver `AGENTS.md`).
+| `docs/` | Diseño, memoria técnica y ADR | Markdown |
 
 ## Cómo levantarlo
 
@@ -314,8 +311,8 @@ Cuatro cosas que conviene saber antes de usarlo, todas deliberadas:
 - **Lo que sale va seudonimizado**: sexo, **año** de nacimiento y municipio. El exportador **construye
   un `Patient` nuevo** desde una lista blanca en vez de quitarle campos al original, que es la
   diferencia entre olvidarse de tapar algo y no tener por dónde colarlo. *(El municipio sale vacío
-  hoy: el dominio no modela la dirección, así que la proyección no la tiene. Ver `docs/PLAN.md` →
-  Notas / riesgos.)*
+  hoy: el dominio no modela la dirección, así que la proyección no la tiene. Está en la memoria
+  técnica, §13.2, entre lo que queda abierto.)*
 - **Un parámetro no soportado se rechaza con `400`.** Al revés que en una búsqueda, y a propósito:
   ignorar un `_since` devolvería más datos de los que has pedido sin decírtelo.
 - **El fichero caduca (`Expires`, quince minutos), un barrendero lo borra y `DELETE` lo borra ya.**
@@ -380,7 +377,8 @@ simulado por MLLP, mensaje a mensaje, y la propia pantalla de alta.
 > sesión anterior —imagen vieja incluida— escuchando en el mismo puerto. Deja una sesión de WSL
 > abierta mientras uses la pila, y ante cualquier resultado raro mira primero `docker compose ps`.
 
-El estado real de cada pieza está en [`docs/PLAN.md`](docs/PLAN.md).
+El estado real de cada pieza está en la memoria técnica: el capítulo 9 cuenta lo que hay construido y
+el 13, lo que quedó fuera y por qué.
 
 ## Comandos por componente
 
@@ -471,19 +469,27 @@ un fallo del manifiesto o del `network_security_config` no lo veía nadie.
 > cada componente en el último commit que le afectó. Quien los quiera todos a la vez, los lanza con
 > `workflow_dispatch`.
 
-## Desarrollo con agentes
+## El andamiaje de agente, y dónde quedó
 
-El repo está preparado para trabajar con **Claude Code**: `CLAUDE.md` (raíz y por componente),
-`AGENTS.md` (contrato operativo) y `docs/PLAN.md` (estado en disco, y **nota de entrega** al
-principio). Los `CLAUDE.md` importan las convenciones de **`BibliotecaDocumentacion`**, que debe
-estar clonada como **carpeta hermana** de este repo:
+El proyecto se construyó con **Claude Code**, y para dirigirlo había un andamiaje en el árbol: los
+`CLAUDE.md` (raíz y uno por componente), `AGENTS.md` como contrato operativo, `docs/PLAN.md` como
+estado en disco y la carpeta `.claude/`. Eran ficheros de trabajo y su vida terminaba con el trabajo
+activo, así que **se borraron en la entrega**. Lo que de ellos merecía sobrevivir —decisiones,
+invariantes, tropiezos y lo que costó cada cosa— está en la memoria técnica; el recorrido pieza por
+pieza, en [`docs/inventario-desmontaje.md`](docs/inventario-desmontaje.md).
 
+**El borrado es un solo commit, `5aaaef8`.** Quien lo quiera de vuelta entero:
+
+```bash
+git revert 5aaaef8
 ```
-/carpeta/HispaLIS
-/carpeta/BibliotecaDocumentacion
-```
 
-Los commits van **firmados**, con la identidad del usuario y **sin ningún trailer ajeno**.
+Las convenciones que aquellos ficheros importaban —commits, estilo, testing— viven en
+**`BibliotecaDocumentacion`**, que sigue siendo un repositorio aparte. Ya no hace falta tenerlo
+clonado al lado para compilar ni para pasar los tests; solo para trabajar con esas mismas
+convenciones.
+
+Los commits van **firmados**, con la identidad del autor y **sin ningún trailer ajeno**.
 
 ## Licencia y avisos
 

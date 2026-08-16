@@ -42,8 +42,9 @@ existen **solo** en R5.
 - **Synthea y la mayoría de generadores producen R4** → resuelto por D15 (generador propio).
 - **Menos red de seguridad:** pocos servidores públicos de prueba y suites de conformancia para R5.
 - **Trampa permanente:** todo ejemplo, tutorial, respuesta de IA o librería basada en R4 falla en los
-  nueve elementos de §2.1 del diseño. Esa tabla se repite en `ig/CLAUDE.md` y `backend/CLAUDE.md`
-  precisamente porque es el error que más caro sale.
+  nueve elementos de §2.1 del diseño. Esa tabla se repetía en las instrucciones de la IG y del
+  backend precisamente porque es el error que más caro sale; retirado el andamiaje, la fuente es
+  `docs/diseno.md` §2.1.
 
 ## Alternativas consideradas
 

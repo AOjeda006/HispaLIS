@@ -69,8 +69,8 @@ Dos rarezas más, verificadas en el texto:
 > **Refinamiento sobre la biblioteca.** `interoperabilidad/hl7-v2/referencia.md` da **nueve** códigos
 > solo-capítulo; la medición de aquí da **diez**, y el que falta es `MFR_M05`. Se entiende por qué:
 > su fila es precisamente la del `Mo5` mal escrito, y cualquier extracción que valide la columna de
-> evento la descarta. La biblioteca **no se edita a mitad de proyecto** (CLAUDE.md §5.3); queda
-> anotado aquí para corregirlo cuando toque.
+> evento la descarta. La biblioteca **no se edita a mitad de proyecto** —la aportación se acumula y
+> se entrega junta, en `docs/destilacion.md`—; queda anotado aquí para corregirlo cuando toque.
 
 ### Por qué importa más de lo que parece
 
@@ -105,7 +105,7 @@ canal **rechace** un `MSH-9-3` que no cuadre con lo que espera, en vez de intent
 - **`ADT_A08` no existe.** No está en el capítulo 2 ni en el apéndice A, ni en V2.5 ni en V2.5.1: los
   eventos `A01`, `A04`, `A08` y `A13` comparten la estructura `ADT_A01`, y así lo escribe el propio
   ejemplo de `MSH` del capítulo 2, que en las dos versiones lleva `ADT^A08^ADT_A01`. Es un error tan
-  natural de cometer que **estaba escrito en nuestro propio `docs/PLAN.md`** antes de este cruce.
+  natural de cometer que **estaba escrito en nuestro propio plan de trabajo** antes de este cruce.
 - **El canal valida el tercer componente cuando viene y no lo exige cuando no.** `MSH-9-3` es opcional
   en la práctica; muchos HIS lo dejan vacío. Si viene y no es `ADT_A01`, el mensaje se rechaza con un
   `AR` que **nombra el código correcto** en el `ERR`, en lugar de aceptarlo y decodificar con la clase

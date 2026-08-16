@@ -37,7 +37,7 @@ podrá es contestar esa pregunta.
 """
 
 // Sin `id` explícito, SUSHI lo saca del nombre del bloque, que es PascalCase, y la página publicada
-// diría otra cosa que la URL canónica (`ig/CLAUDE.md`).
+// diría otra cosa que la URL canónica (memoria técnica, §11.1).
 * id = "notificacion-edo-vencimiento"
 * url = "https://aojeda006.github.io/HispaLIS/fhir/SearchParameter/notificacion-edo-vencimiento"
 * version = "0.1.0"

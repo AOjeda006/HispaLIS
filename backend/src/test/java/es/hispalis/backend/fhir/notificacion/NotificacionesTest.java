@@ -51,7 +51,7 @@ import org.springframework.http.ResponseEntity;
  *
  * <p><strong>Este test declara su propio {@code @SpringBootTest}</strong>, que oculta entero el del
  * padre —propiedades incluidas—, así que hay que repetir las tres suyas. Es la trampa que documenta
- * {@code backend/CLAUDE.md}; sin repetirlas, el contexto arranca con la seguridad encendida y sin
+ * la memoria técnica (§11.4); sin repetirlas, el contexto arranca con la seguridad encendida y sin
  * emisor, y no levanta.
  */
 @SpringBootTest(

@@ -77,8 +77,9 @@ en un fallo silencioso y global.
   API con un `201` de vuelta.
 - Un log más largo cuando algo revienta de verdad. Es el intercambio correcto: la traza se lee una
   vez y la ausencia de traza cuesta una tarde.
-- Queda **sin resolver**, y anotado en `PLAN.md`, si el laboratorio debería además **rechazar al
-  escribir** una `Subscription` cuyo parámetro de clave no tiene valor. Hay argumento para las dos:
+- Queda **sin resolver** —y este ADR es donde queda anotado— si el laboratorio debería además
+  **rechazar al escribir** una `Subscription` cuyo parámetro de clave no tiene valor. Hay argumento
+  para las dos:
   rechazar avisa antes, y aceptar y cortar deja el motivo escrito donde el suscriptor lo consulta.
 
 ## Alternativas descartadas

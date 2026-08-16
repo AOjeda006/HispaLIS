@@ -1,6 +1,6 @@
 # Configuración de SUSHI para la guía de implementación de HispaLIS.
 #
-# La versión de FHIR está FIJADA a 5.0.0: nada de «FHIR» a secas (ig/CLAUDE.md).
+# La versión de FHIR está FIJADA a 5.0.0: nada de «FHIR» a secas (docs/adr/adr-0001).
 # SUSHI genera a partir de aquí el recurso ImplementationGuide, que es artefacto generado y no se
 # commitea. El `ig.ini` que consume el IG Publisher SÍ se mantiene a mano y está versionado: SUSHI
 # retiró la propiedad `template` y ya no lo genera.
