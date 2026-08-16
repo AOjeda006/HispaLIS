@@ -78,11 +78,20 @@ import org.springframework.test.context.DynamicPropertySource;
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = {
-            // Se repite porque esta clase declara su propio `@SpringBootTest` y ese oculta el de
+            // Se repiten porque esta clase declara su propio `@SpringBootTest` y ese oculta el de
             // `TestDeIntegracion` entero, propiedades incluidas. Sin esta línea, la seguridad se
             // enciende sin emisor y el contexto no arranca — que es exactamente lo que tiene que
             // pasar, pero aquí no viene a cuento: este test va del bus.
             "hispalis.seguridad.habilitada=false",
+            // Y estos dos, que faltaban, por un motivo que no da la cara aquí sino en OTRA clase.
+            // Los dos consumen `outbox.hecho`; encendidos, este contexto —que Spring CACHEA y no
+            // destruye al terminar la clase— sigue vaciando el outbox mientras corre
+            // `NotificadorEdoTest`, le quita el hecho y lo descarta con su propio catálogo. Allí se
+            // ve como «el sistema no volvió a dar ni un Task», sin una sola excepción y sin nada que
+            // señale a este fichero. Es la sexta vez que aparece la trampa del `@SpringBootTest`
+            // propio; por eso ahora hay un test que la busca (`InterruptoresDeContextoTest`).
+            "hispalis.notificaciones.habilitado=false",
+            "hispalis.edo.habilitado=false",
             "hispalis.bus.habilitado=true",
             "hispalis.bus.registro-de-esquemas=mock://" + RelayDelOutboxTest.AMBITO,
             "hispalis.bus.intervalo=PT1H",
