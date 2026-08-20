@@ -1,6 +1,7 @@
 package es.hispalis.backend.dominio.informe;
 
 import es.hispalis.backend.dominio.DatoInvalido;
+import es.hispalis.backend.dominio.MarcaDeTiempo;
 import es.hispalis.backend.dominio.ReglaDeNegocioIncumplida;
 import es.hispalis.backend.dominio.resultado.Resultado;
 import java.time.Instant;
@@ -93,7 +94,9 @@ public final class Informe {
                 paciente,
                 resultados.stream().map(Resultado::id).toList(),
                 emisor.strip(),
-                emitidoEn == null ? Instant.now() : emitidoEn);
+                // En milisegundos, que es la única precisión que sobrevive a la ida y vuelta por el
+                // almacén: ver MarcaDeTiempo, y el rojo intermitente que la puso ahí.
+                MarcaDeTiempo.publicable(emitidoEn));
     }
 
     /**

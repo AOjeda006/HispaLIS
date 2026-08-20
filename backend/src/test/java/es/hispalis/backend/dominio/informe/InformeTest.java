@@ -14,6 +14,7 @@ import es.hispalis.backend.dominio.resultado.Medicion;
 import es.hispalis.backend.dominio.resultado.Resultado;
 import es.hispalis.backend.dominio.resultado.ValoresCriticos;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -154,6 +155,40 @@ class InformeTest {
                         null))
                 .isInstanceOf(DatoInvalido.class)
                 .hasMessageContaining("pacientes");
+    }
+
+    /**
+     * La marca de emisión no puede llevar más precisión de la que el laboratorio sabe devolver.
+     *
+     * <p>Parece una minucia de formato y es un fallo de la proyección. La emisión publica el
+     * {@code DiagnosticReport} a partir del agregado <strong>en memoria</strong>, con la marca tal y
+     * como salió del reloj; el reconciliador lo regenera a partir del agregado <strong>releído de la
+     * base</strong>. Entre las dos hay un {@code timestamptz}, que guarda microsegundos y
+     * <strong>redondea</strong> lo que sobra, y un {@code instant} de FHIR, que publica
+     * milisegundos. Cuando el reloj cae en el último medio microsegundo de un milisegundo, el
+     * redondeo cruza la frontera y las dos proyecciones del mismo informe se separan un milisegundo:
+     * el reconciliador ve una divergencia que nadie provocó y que no se va nunca.
+     *
+     * <p>Por eso el agregado nace ya en milisegundos. Es la precisión más estrecha de las tres —la
+     * del reloj, la del almacén y la de FHIR— y la única en la que ida y vuelta dan lo mismo.
+     */
+    @Test
+    void la_marca_de_emision_no_lleva_mas_precision_de_la_que_sobrevive_a_la_base() {
+        Peticion linea = linea(UN_PACIENTE, "GLU");
+
+        Informe delReloj = Informe.emitir(List.of(resultado(linea, "GLU")), List.of(resuelta(linea)), EMISOR, null);
+        Informe conMarcaDada = Informe.emitir(
+                List.of(resultado(linea, "GLU")),
+                List.of(resuelta(linea)),
+                EMISOR,
+                Instant.ofEpochSecond(1_755_000_000L, 123_999_600L));
+
+        assertThat(delReloj.emitidoEn().getNano() % 1_000_000)
+                .as("del reloj sale con nanosegundos, y el almacén no los devuelve")
+                .isZero();
+        assertThat(conMarcaDada.emitidoEn())
+                .as("y la que llega de fuera tampoco se guarda más fina de lo que se puede publicar")
+                .isEqualTo(Instant.ofEpochSecond(1_755_000_000L, 123_000_000L));
     }
 
     private static Peticion linea(UUID paciente, String codigo) {

@@ -11,6 +11,7 @@ import es.hispalis.backend.dominio.especimen.NumeroDeAcceso;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -53,13 +54,37 @@ class ResultadoTest {
 
     @Test
     void validar_deja_constancia_de_quien_firma_y_de_cuando() {
-        Instant cuando = Instant.now().minus(Duration.ofMinutes(5));
+        Instant cuando = Instant.now().minus(Duration.ofMinutes(5)).truncatedTo(ChronoUnit.MILLIS);
 
         Resultado firmado = informar().validar(SIN_UMBRALES, FACULTATIVA, cuando);
 
         assertThat(firmado.estado()).isEqualTo(EstadoDeResultado.VALIDADO);
         assertThat(firmado.ultimaFirma().orElseThrow().facultativo()).isEqualTo(FACULTATIVA);
         assertThat(firmado.ultimaFirma().orElseThrow().realizadaEn()).isEqualTo(cuando);
+    }
+
+    /**
+     * La firma no se fecha con más precisión de la que el laboratorio sabe devolver.
+     *
+     * <p>Es el mismo defecto que en {@code InformeTest}, y por el mismo camino: la validación publica
+     * el {@code Provenance} desde el agregado <strong>en memoria</strong> y el reconciliador lo
+     * regenera desde el agregado <strong>releído</strong>. En medio, un {@code timestamptz} que
+     * redondea a microsegundos y un {@code instant} de FHIR que publica milisegundos. Con el reloj
+     * cayendo en el último medio microsegundo de un milisegundo, el redondeo sube y las dos
+     * proyecciones de la misma firma se separan un milisegundo para siempre.
+     */
+    @Test
+    void la_fecha_de_la_firma_no_lleva_mas_precision_de_la_que_sobrevive_a_la_base() {
+        Resultado delReloj = informar().validar(SIN_UMBRALES, FACULTATIVA, null);
+        Resultado conFechaDada =
+                informar().validar(SIN_UMBRALES, FACULTATIVA, Instant.ofEpochSecond(1_755_000_000L, 123_999_600L));
+
+        assertThat(delReloj.ultimaFirma().orElseThrow().realizadaEn().getNano() % 1_000_000)
+                .as("del reloj sale con nanosegundos, y el almacén no los devuelve")
+                .isZero();
+        assertThat(conFechaDada.ultimaFirma().orElseThrow().realizadaEn())
+                .as("y la que llega de fuera tampoco se guarda más fina de lo que se puede publicar")
+                .isEqualTo(Instant.ofEpochSecond(1_755_000_000L, 123_000_000L));
     }
 
     /** Validar es responder de una cifra, no reescribirla. Si el valor cambiara, sería otra operación. */

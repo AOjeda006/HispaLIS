@@ -1,6 +1,7 @@
 package es.hispalis.backend.dominio.resultado;
 
 import es.hispalis.backend.dominio.DatoInvalido;
+import es.hispalis.backend.dominio.MarcaDeTiempo;
 import java.time.Instant;
 
 /**
@@ -42,7 +43,9 @@ public final class Validacion {
         if (realizadaEn != null && realizadaEn.isAfter(Instant.now())) {
             throw new DatoInvalido("La fecha de validación %s está en el futuro.".formatted(realizadaEn));
         }
-        return new Validacion(facultativo.strip(), realizadaEn == null ? Instant.now() : realizadaEn);
+        // En milisegundos, por lo mismo que la emisión del informe: ver MarcaDeTiempo. La firma se
+        // publica como `Provenance.recorded`, que es un `instant` de FHIR.
+        return new Validacion(facultativo.strip(), MarcaDeTiempo.publicable(realizadaEn));
     }
 
     public String facultativo() {
