@@ -27,9 +27,9 @@ mitad del trabajo y la que evita que la biblioteca se llene de un solo proyecto.
 
 | | |
 |---|---|
-| ADR escritos en el proyecto | **44** (`adr-0001` … `adr-0044`) |
-| Con aportación transversal | **44** |
-| Que aportan **regla nueva** (`convenciones.md` + `referencia.md`) | **39** |
+| ADR escritos en el proyecto | **45** (`adr-0001` … `adr-0045`) |
+| Con aportación transversal | **45** |
+| Que aportan **regla nueva** (`convenciones.md` + `referencia.md`) | **40** |
 | Que aportan **solo contexto** (`referencia.md`) | **5** — `0001`, `0004`, `0006`, `0011`, `0013` |
 | **Fichas que no salen de un solo ADR** | **2** — el arnés sin probar y la configuración que no ejecuta nadie |
 | Destinos distintos en la biblioteca | **26** (una carpeta con su `convenciones.md` y su `referencia.md` cuenta como uno) |
@@ -53,11 +53,11 @@ era la correcta era la de `adr-0038`: el caso concreto es del constructor de Ang
 | `interoperabilidad/espana/` | 0003, 0039, 0040 |
 | `interoperabilidad/bulk-data/` | *(ninguno nuevo; ver «Lo que no aporta nada»)* |
 | `stacks/spring/` | 0012, 0013, 0020, 0031 |
-| `stacks/java/` | 0036, **0044** |
+| `stacks/java/` | 0036, **0044**, **0045** |
 | `stacks/flutter/` | 0025 |
 | `stacks/typescript/` | 0038 |
 | `stacks/angular/` | 0038 |
-| `bases-de-datos/sql/` | 0015 |
+| `bases-de-datos/sql/` | 0015, **0045** |
 | `fundamentos/datos-distribuidos/` | 0019, 0023 |
 | `fundamentos/redes/` | 0017, 0022 |
 | `herramientas/seguridad.md` | 0016, 0020, 0022, 0027, 0033, **0037**, + la ficha transversal II |
@@ -65,14 +65,14 @@ era la correcta era la de `adr-0038`: el caso concreto es del constructor de Ang
 | `herramientas/autenticacion.md` | 0024, 0025 |
 | `herramientas/docker.md` | 0026, 0035, **0043**, **0044** |
 | `herramientas/entrega-continua.md` | 0004, 0007, 0008 |
-| `principios/testing.md` | 0014, 0026, 0033, 0034, 0037, 0038, 0039, 0040, **0041**, **0042**, + las dos fichas transversales (I y II) |
+| `principios/testing.md` | 0014, 0026, 0033, 0034, 0037, 0038, 0039, 0040, **0041**, **0042**, **0045**, + las dos fichas transversales (I y II) |
 | `principios/manejo-errores.md` | 0031, 0036, 0037, 0039 |
 | `principios/naming-y-estilo.md` | **0043** |
 | `principios/git-workflow.md` | 0008 |
 | `principios/desarrollo-con-ia.md` | 0004 |
 | `diseno/` | 0002, 0014, 0028, 0032, + la ficha transversal II |
 
-`principios/testing.md` se lleva **doce de las cuarenta y seis entradas** de este dossier, y eso
+`principios/testing.md` se lleva **trece de las cuarenta y siete entradas** de este dossier, y eso
 **no** es un reparto casual: es el fichero cuyas reglas el proyecto incumplía —fuzzing,
 *property-based* y cobertura leída— y el que se puso a prueba al cumplirlas. Tres de sus líneas
 actuales salen de aquí **matizadas o corregidas**, no solo confirmadas; van marcadas con ⚠️.
@@ -754,6 +754,35 @@ Ficha B de arriba. **Aportación arrastrada del hito 2.**
   **R**: el caso completo, con los 954 s en frío frente a los 140 s con la caché poblada).
 - **Autoridad:** medido sobre `eclipse-temurin:21-jdk` (uid 1000 = `ubuntu`) y Maven 3.9.11.
 - **Se queda aquí:** las cifras concretas y que el repositorio de más fuera el de Confluent.
+
+### ADR-0045 · Una marca de tiempo que no sobrevive a su almacén divergirá, una de cada dos mil veces
+
+- **Transversal:** (1) **Una marca de tiempo que cruza una frontera de persistencia tiene tres
+  precisiones, no una** —la del reloj, la del almacén y la del formato de salida—; si no coinciden, el
+  valor no es el mismo a la ida que a la vuelta, y toda comparación entre las dos copias falla *a
+  veces*. Se guarda en la más estrecha, desde el principio. (2) **`timestamptz` de PostgreSQL redondea
+  a microsegundos, no trunca**, y por eso una pérdida de precisión inofensiva se convierte en un salto
+  de un milisegundo entero cuando el reloj cae en el último medio microsegundo. (3) **Escribir dos
+  copias en la misma transacción garantiza que estén las dos, no que digan lo mismo**: si una sale de
+  la memoria y la otra de la base, la atomicidad no las iguala. (4) **Un intermitente que no se
+  reproduce en local puede ser una diferencia de reloj, no de carga**: la resolución de
+  `Instant.now()` no es la misma en Windows que en Linux —medido: 17 valores distintos por debajo del
+  milisegundo en 300 000 muestras— y medirla es una línea. (5) **Un mensaje de fallo que no dice de
+  dónde sale lo que sobra cuesta ejecuciones enteras**: la pregunta a dejar respondida de antemano es
+  «¿esto es mío o es de otro?», porque separa un fallo del sistema de uno de aislamiento. (6) **Un
+  verde de un commit que no toca el componente no es un verde**, y con la CI filtrada por rutas es la
+  forma más fácil de dar por cerrado un rojo que sigue ahí.
+- **Destino:** `principios/testing.md` (**C**: las tres reglas de diagnóstico —(4), (5) y (6)—; son
+  material nuevo, el fichero habla de qué probar y no de cómo se cierra un intermitente. **R**: el
+  caso, con la probabilidad y las dos ejecuciones que se fueron sin diagnosticar). `bases-de-datos/sql/`
+  (**C**: el redondeo de `timestamptz` y la regla de no guardar más precisión de la que la columna
+  devuelve; **R**: la ida y vuelta medida). `stacks/java/convenciones.md` (**C**: `Instant.now()` no
+  tiene la misma resolución en todos los sistemas operativos, y `Date.from` trunca donde la base
+  redondea).
+- **Autoridad:** medido sobre PostgreSQL 16 embebido con pgjdbc, HAPI FHIR 8.10.1 y JDK 21/25, con la
+  ida y vuelta reproducida a mano y el arreglo cerrado en rojo→verde.
+- **Se queda aquí:** que fuera `DiagnosticReport.issued` y `Provenance.recorded`, los `UUID` del
+  fallo, y que `Observation.effective` se salvara por publicarse como `dateTime`.
 
 ---
 

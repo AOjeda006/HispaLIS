@@ -40,7 +40,7 @@ degenerar en una historia clínica electrónica en miniatura.
   [`docs/generar-memoria-pdf.sh`](docs/generar-memoria-pdf.sh).
 - **Diseño completo:** [`docs/diseno.md`](docs/diseno.md) — decisiones D1–D20, arquitectura, perfiles,
   contexto legal español. Es la fuente de verdad del **porqué**.
-- **Decisiones de arquitectura:** [`docs/adr/`](docs/adr/) — cuarenta y cuatro, una por fichero.
+- **Decisiones de arquitectura:** [`docs/adr/`](docs/adr/) — cuarenta y cinco, una por fichero.
   Las decisiones D21–D23, tomadas ejecutando y no en el diseño, están en el capítulo 10 de la memoria.
 - **Guía de implementación publicada:** <https://aojeda006.github.io/HispaLIS/>.
 

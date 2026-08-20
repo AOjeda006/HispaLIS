@@ -105,6 +105,11 @@ dominio dentro**, que parece que el interceptor funciona y solo falla el código
   heredar, sobrescribir la creación, implementar `ProveedorPropio`. Los siguientes salen baratos.
 - **La traducción de errores está en un solo sitio.** Añadir un tipo de error de dominio es añadir
   una rama, no repetir un `try`/`catch` en cada proveedor.
+- **La transacción única garantiza que estén las dos escrituras, no que digan lo mismo**, y ese
+  corolario se dio por hecho aquí sin escribirlo. La proyección se escribe desde el agregado **en
+  memoria** y el reconciliador la regenera desde el agregado **releído**, así que cualquier conversión
+  con pérdida entre los dos produce una divergencia permanente que la atomicidad no evita. Pasó con
+  las marcas de tiempo, una de cada dos mil: `adr-0045`.
 
 ## Alternativas consideradas
 

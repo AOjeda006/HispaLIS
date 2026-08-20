@@ -66,7 +66,7 @@ puede no saber FHIR, y que tiene que entender **qué es esto, por qué está hec
 
 Es **autosuficiente**: no remite a ningún documento de trabajo que ya no exista. Lo que sigue vivo
 en el repositorio y amplía lo de aquí es `docs/diseno.md` (el porqué de las decisiones, con las
-fuentes normativas españolas citadas), `docs/adr/` (cuarenta y cuatro decisiones de arquitectura,
+fuentes normativas españolas citadas), `docs/adr/` (cuarenta y cinco decisiones de arquitectura,
 una por fichero) y `README.md` (la puerta de entrada operativa).
 
 ## Qué NO es, dicho por su nombre
@@ -220,6 +220,13 @@ proyección puede ir «un poquito por detrás».
 
 El riesgo de esta decisión está asumido y registrado (`adr-0002`, `adr-0012`): escribir en el
 esquema de HAPI dentro de la transacción del dominio ata el proyecto a sus DAO.
+
+**Y hay un corolario que parecía gratis y no lo era.** Que las dos escrituras ocurran en la misma
+transacción garantiza que estén las dos; **no** garantiza que digan lo mismo. La proyección se
+escribe desde el agregado en memoria y el reconciliador la regenera desde el agregado releído, así
+que cualquier conversión con pérdida entre los dos —una precisión que el almacén no devuelve igual
+que la recibió— produce una divergencia permanente que la atomicidad no evita. Pasó, con las marcas
+de tiempo, y está contado en `adr-0045`.
 
 ## El reconciliador: la vía de recuperación es oficial, no un script de emergencia
 
@@ -1048,11 +1055,11 @@ sin fijar.
 
 ## Los tests
 
-**961 tests**, todos en verde:
+**965 tests**, todos en verde:
 
 | Componente | Tests | Cobertura |
 |---|---|---|
-| `backend/` | 297 | 90,3 % |
+| `backend/` | 301 | 90,3 % |
 | `integracion/` | 299 | 88,4 % |
 | `simuladores/` | 143 | 82 % |
 | `web-profesional/` | 98 | 75,8 % |
@@ -1070,6 +1077,15 @@ existe:**
 
 Esas dos primeras filas son, además, la explicación de que `integracion/` salte de 86 a 299 tests:
 206 de ellos son esas suites.
+
+**Y una prueba intermitente es un bug, no un contratiempo.** El último rojo del proyecto fue uno:
+`ReconciliacionDelLaboratorioEnteroTest` encontraba, una ejecución de CI de cada tantas, un
+`DiagnosticReport` divergente que nadie había tocado. Se cerró **sin tocar el test** —el fallo era
+del sistema y el test estaba haciendo su trabajo— y con las dos mitades que pide cerrar un
+intermitente: la causa, en `adr-0045`, y **la próxima vez que caiga, un mensaje que se diagnostica
+solo**, diciendo de cada referencia inesperada si es del corpus del propio test, qué clase de
+divergencia es y en qué capa existe. Cuatro tests nuevos lo fijan, y el que lo reproduce lo hace
+**provocando la condición a mano**, porque con el reloj de verdad es un dado de dos mil caras.
 
 **La cobertura se lee por los ceros redondos, no por el porcentaje.** La doctrina está en `adr-0041`:
 un cero redondo admite cuatro veredictos escritos —regla duplicada, regla redundante, camino real sin
@@ -1111,7 +1127,7 @@ SMART 0,2 s; doble firma 0,2 s; informe 0,1 s; `GET` inmediato 0,0 s.
 
 | Puerta | Tiempo | Resultado |
 |:----------------------|:---------------|:-----------------------------------------|
-| `ci-backend` | **954 s** en frío, **363 s** con caché | 297 tests, 0 fallos; Spotless limpio sobre 219 ficheros |
+| `ci-backend` | **954 s** en frío, **363 s** con caché | 301 tests, 0 fallos; Spotless limpio sobre 221 ficheros |
 | `ci-integracion` | **140 s** | 299 tests, 0 fallos, 4 omitidos |
 | `ci-web-profesional` | **167 s** | lint limpio, 98 tests, empaquetado |
 | `ci-app-ciudadano` | **1 955 s** (32,6 min) | sin avisos, 77 tests, web y **APK de 48,2 MB** |
@@ -1177,7 +1193,7 @@ D23), y aquí está lo esencial de las tres últimas porque su documento origina
 | **D22** | **La puerta transaccional sigue cerrada; la atomicidad la pone el reproceso** | `adr-0014` cerró el procesador de `Bundle transaction` de HAPI porque llama a las DAO sin pasar por el núcleo. Pero un `OML^O21` produce `ServiceRequest` **más** `Specimen`, un par que quiere escribirse junto. De tres salidas —abrir la puerta desviándola al núcleo, escribir recurso a recurso con reproceso idempotente, o inventar una operación propia— se eligió **la segunda**: el reproceso hay que construirlo igualmente, así que no añade trabajo, y la ventana en la que puede quedar un volante sin muestra es **exactamente el fallo que la DLQ existe para cerrar**. Lo que no se negocia en ninguna de las tres: **la puerta no se abre sin que lo que entre por ella pase por el núcleo** |
 | **D23** | **Quién exporta, sobre qué, qué sale y qué pasa con el fichero** | Cuatro caras de una misma decisión, desarrolladas en §7.4: los dos ámbitos a la vez con `Group` por su nombre; la cohorte EDO que abre el laboratorio y que de fuera es de solo lectura; el NDJSON seudonimizado construido desde una lista blanca; y las tres formas de que el fichero desaparezca |
 
-## Los cuarenta y cuatro ADR
+## Los cuarenta y cinco ADR
 
 Están en `docs/adr/`, un fichero por decisión, y **no se borran**. Cada uno lleva contexto,
 alternativas descartadas y consecuencias; aquí va una línea de cada uno para poder localizarlo.
@@ -1228,6 +1244,7 @@ alternativas descartadas y consecuencias; aquí va una línea de cada uno para p
 | `adr-0042-una-propiedad-mal-enunciada-da-un-rojo-que-es-del-test.md` | Una propiedad mal enunciada da un rojo que es del test |
 | `adr-0043-un-env-que-leen-dos-parsers-no-es-un-formato-son-dos.md` | Un `.env` que leen dos parsers no es un formato, son dos |
 | `adr-0044-una-cache-montada-no-es-una-cache-usada.md` | Una caché montada no es una caché usada |
+| `adr-0045-una-marca-de-tiempo-que-no-sobrevive-a-su-almacen.md` | Una marca de tiempo que no sobrevive a su almacén divergirá, una de cada dos mil veces |
 
 `docs/destilacion.md` inventaría, ADR por ADR, qué tiene cada uno de transversal más allá de este
 proyecto y a qué documento de convenciones iría. También se conserva.
@@ -1401,8 +1418,9 @@ que más caro sale volver a descubrir y la que menos aparece en la documentació
 
 ## Lo que solo se ve ejecutando
 
-Tres rondas de este proyecto consistieron en **ejecutar lo que ya estaba escrito**, y las tres
-encontraron cosas que ninguna lectura y ningún test veían. Merece quedar como método:
+Cuatro rondas de este proyecto consistieron en **ejecutar lo que ya estaba escrito** —la última, en
+ejecutarlo con volumen y en otro sistema operativo—, y las cuatro encontraron cosas que ninguna
+lectura y ningún test veían. Merece quedar como método:
 
 - **Recorrer el circuito entero contra la pila levantada y con la seguridad puesta** destapó **siete
   fallos que 290 tests no veían**, y todos por el mismo motivo: *un test elige su configuración y un
@@ -1421,6 +1439,18 @@ encontraron cosas que ninguna lectura y ningún test veían. Merece quedar como 
   dependían de estado que el usuario no tiene: los guiones que morían con un `.env` con espacios, la
   caché de Maven inerte, un `-o` que exigía una caché que nada llenaba y un guion sin bit de
   ejecución. El quinto solo apareció en la CI y es el del `@SpringBootTest` de arriba.
+- **Ejecutar con volumen y en otro sistema operativo** destapó el último fallo del proyecto, y es el
+  único que **ninguna ejecución local podía encontrar**: un `DiagnosticReport` de cada dos mil salía
+  publicado con una marca de emisión un milisegundo distinta de la que el dominio guardaba, porque
+  `Instant.now()` da nanosegundos, `timestamptz` **redondea** a microsegundos y el `instant` de FHIR
+  publica milisegundos. El reconciliador —que compara las dos— lo veía como una divergencia real, y
+  lo era. No se reproduce en Windows porque su reloj no llega a la franja: medido, `Instant.now()`
+  devuelve **17 valores distintos** por debajo del milisegundo en 300 000 muestras, y ninguno en la
+  franja mala. Hicieron falta un barrido de sesenta pacientes y un *runner* Linux para pisarla una
+  vez. Está en `adr-0045`, con las dos lecciones de método que deja: **un mensaje de fallo que no
+  dice de dónde sale lo que sobra cuesta ejecuciones enteras** —este rojo se fue dos sin
+  diagnosticar— y **un verde de un commit que no toca el componente no es un verde**, que es como se
+  dio por cerrado la primera vez.
 
 ---
 
@@ -1623,7 +1653,7 @@ quedado está en `docs/inventario-desmontaje.md`, junto a la fuente de este docu
 |---|---|
 | `README.md` | La puerta de entrada operativa: cómo levantarlo, orden por orden |
 | `docs/diseno.md` | El **porqué** de las decisiones D1 a D20, con las fuentes normativas españolas citadas una a una |
-| `docs/adr/` (44) | Cada decisión de arquitectura con su contexto, sus alternativas descartadas y sus consecuencias |
+| `docs/adr/` (45) | Cada decisión de arquitectura con su contexto, sus alternativas descartadas y sus consecuencias |
 | `docs/destilacion.md` | Qué aporta cada ADR más allá de este proyecto, y a qué documento de convenciones iría |
 | El historial de git | Commits firmados, atómicos y en español, con la identidad del autor y sin ningún trailer ajeno |
 
