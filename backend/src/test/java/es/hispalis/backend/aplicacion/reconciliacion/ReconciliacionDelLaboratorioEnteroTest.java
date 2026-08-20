@@ -7,15 +7,23 @@ import ca.uhn.fhir.jpa.api.dao.DaoRegistry;
 import ca.uhn.fhir.rest.api.server.SystemRequestDetails;
 import es.hispalis.backend.TestDeIntegracion;
 import es.hispalis.backend.aplicacion.reconciliacion.Divergencia.Clase;
+import es.hispalis.backend.dominio.especimen.RepositorioDeEspecimenes;
+import es.hispalis.backend.dominio.informe.Informe;
+import es.hispalis.backend.dominio.informe.RepositorioDeInformes;
 import es.hispalis.backend.dominio.paciente.RepositorioDePacientes;
+import es.hispalis.backend.dominio.peticion.RepositorioDePeticiones;
+import es.hispalis.backend.dominio.resultado.RepositorioDeResultados;
 import es.hispalis.backend.fhir.CatalogoDePruebas;
 import es.hispalis.backend.fhir.CircuitoDePrueba;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.hl7.fhir.r5.model.CodeableConcept;
 import org.hl7.fhir.r5.model.Coding;
@@ -110,12 +118,29 @@ class ReconciliacionDelLaboratorioEnteroTest extends TestDeIntegracion {
     @Autowired
     private RepositorioDePacientes pacientes;
 
+    // Los cuatro que faltaban, y solo para el diagnóstico: cuando una referencia aparece donde no
+    // se la esperaba, lo primero que hay que saber es si el dominio la conoce.
+    @Autowired
+    private RepositorioDePeticiones peticiones;
+
+    @Autowired
+    private RepositorioDeEspecimenes especimenes;
+
+    @Autowired
+    private RepositorioDeResultados resultados;
+
+    @Autowired
+    private RepositorioDeInformes informes;
+
     private CircuitoDePrueba circuito;
 
     /** Las divergencias que ya había antes de que esta clase escribiera nada. */
     private Set<String> preexistentes;
 
     private List<Escenario> corpus;
+
+    /** Lo que este test rompe a propósito, para que el diagnóstico no lo confunda con un hallazgo. */
+    private final Set<String> plantadas = new LinkedHashSet<>();
 
     @BeforeAll
     void escribirElCorpusPorLaApi() {
@@ -156,11 +181,12 @@ class ReconciliacionDelLaboratorioEnteroTest extends TestDeIntegracion {
                 tardo.toNanos() / 1_000_000.0 / enElLaboratorio,
                 informe.divergencias().size());
 
-        assertThat(referenciasDe(informe))
+        Set<String> encontradas = referenciasDe(informe);
+        assertThat(encontradas)
                 .as(
                         "la proyección se escribe en la transacción del dominio: %d pacientes recién "
-                                + "escritos por la API tienen que cuadrar todos",
-                        PACIENTES)
+                                + "escritos por la API tienen que cuadrar todos%s",
+                        PACIENTES, deDondeSalen(informe, loQueSobraDe(encontradas, preexistentes)))
                 .isEqualTo(preexistentes);
     }
 
@@ -187,17 +213,23 @@ class ReconciliacionDelLaboratorioEnteroTest extends TestDeIntegracion {
         UUID resultadoDeNadie = publicarUnResultadoSinAgregado(ultimo);
         UUID pacienteDeNadie = publicarUnPacienteSinAgregado();
 
+        Set<String> provocadas = new LinkedHashSet<>(List.of(
+                "DiagnosticReport/" + primero.informeId(),
+                "Observation/" + porElMedio.resultadoId(),
+                "Observation/" + resultadoDeNadie,
+                "Patient/" + pacienteDeNadie));
+        plantadas.addAll(provocadas);
+
         long empezo = System.nanoTime();
         InformeDeReconciliacion revision = reconciliador.ejecutar(null, false);
         System.out.printf("Barrido con divergencias provocadas: %s.%n", enSegundos(System.nanoTime() - empezo));
 
-        assertThat(loNuevoEn(revision))
-                .as("una divergencia provocada que el barrido no ve es un reconciliador que no sirve")
-                .containsExactlyInAnyOrder(
-                        "DiagnosticReport/" + primero.informeId(),
-                        "Observation/" + porElMedio.resultadoId(),
-                        "Observation/" + resultadoDeNadie,
-                        "Patient/" + pacienteDeNadie);
+        Set<String> nuevas = loNuevoEn(revision);
+        assertThat(nuevas)
+                .as(
+                        "una divergencia provocada que el barrido no ve es un reconciliador que no sirve%s",
+                        deDondeSalen(revision, loQueSobraDe(nuevas, provocadas)))
+                .containsExactlyInAnyOrderElementsOf(provocadas);
         assertThat(revision.de(Clase.HUERFANO))
                 .as("el paciente sin agregado detrás solo lo caza el recorrido completo")
                 .extracting(Divergencia::referencia)
@@ -230,6 +262,10 @@ class ReconciliacionDelLaboratorioEnteroTest extends TestDeIntegracion {
     // ── El corpus ────────────────────────────────────────────────────────────────────────────────
 
     private record Escenario(String paciente, String resultado, String informe) {
+
+        UUID pacienteId() {
+            return UUID.fromString(CircuitoDePrueba.identidadDe(paciente));
+        }
 
         UUID resultadoId() {
             return UUID.fromString(CircuitoDePrueba.identidadDe(resultado));
@@ -327,12 +363,116 @@ class ReconciliacionDelLaboratorioEnteroTest extends TestDeIntegracion {
 
     /** Lo que este test ha provocado, sin lo que ya venía de antes. */
     private Set<String> loNuevoEn(InformeDeReconciliacion informe) {
-        Set<String> nuevas = new java.util.LinkedHashSet<>(referenciasDe(informe));
+        Set<String> nuevas = new LinkedHashSet<>(referenciasDe(informe));
         nuevas.removeAll(preexistentes);
         return nuevas;
     }
 
     private static String enSegundos(long nanos) {
         return "%.2f s".formatted(nanos / 1_000_000_000.0);
+    }
+
+    // ── De dónde sale lo que no se esperaba ──────────────────────────────────────────────────────
+
+    /**
+     * El diagnóstico que acompaña a una afirmación rota.
+     *
+     * <p>Existe porque un fallo de esta clase costó <strong>dos ejecuciones de CI sin diagnosticar</strong>:
+     * el mensaje decía qué referencia sobraba y no decía nada más, y con un {@code UUID} suelto no se
+     * puede saber si el reconciliador acaba de encontrar una divergencia de verdad en un recurso que
+     * este test acababa de escribir —un fallo del sistema— o si ha recogido algo que dejó otro test
+     * —un fallo de aislamiento—. Son diagnósticos opuestos y llevan a arreglos opuestos.
+     *
+     * <p>Así que de cada referencia inesperada se dice lo que separa las dos cosas: <strong>si es del
+     * corpus</strong> de este test, <strong>qué clase</strong> de divergencia es y <strong>en qué capa
+     * existe</strong>. Lo último se mide aparte, no se deduce de la clase: la clase ya dice lo que el
+     * reconciliador cree —{@code AUSENTE} es dominio sí y proyección no, {@code HUERFANO} al revés,
+     * {@code DISTINTO} las dos— y contrastarlo con una lectura directa es justamente lo que distingue
+     * «el recurso no está» de «el recurso está y la búsqueda no lo encuentra».
+     *
+     * @return el diagnóstico, o la cadena vacía si no sobra nada — el caso normal, y por eso no cuesta
+     */
+    private String deDondeSalen(InformeDeReconciliacion informe, Set<String> inesperadas) {
+        if (inesperadas.isEmpty()) {
+            return "";
+        }
+        Map<String, Divergencia> porReferencia = informe.divergencias().stream()
+                .collect(Collectors.toMap(Divergencia::referencia, Function.identity(), (una, otra) -> una));
+
+        StringBuilder diagnostico =
+                new StringBuilder("%n%d referencia(s) inesperada(s), y de dónde salen:".formatted(inesperadas.size()));
+        for (String referencia : inesperadas) {
+            String tipo = referencia.substring(0, referencia.indexOf('/'));
+            UUID id = UUID.fromString(referencia.substring(referencia.indexOf('/') + 1));
+            Divergencia divergencia = porReferencia.get(referencia);
+
+            diagnostico.append("%n  · %-52s %-8s · %s · dominio: %s · proyección: %s"
+                    .formatted(
+                            referencia,
+                            divergencia == null ? "?" : divergencia.clase(),
+                            deQuienEs(tipo, id),
+                            enElDominio(tipo, id),
+                            existeEnLaProyeccion(tipo, id) ? "sí" : "no"));
+        }
+        return diagnostico.toString();
+    }
+
+    /** Si la referencia es de este test, y de qué parte. Es la pregunta que decide el diagnóstico. */
+    private String deQuienEs(String tipo, UUID id) {
+        for (int i = 0; i < corpus.size(); i++) {
+            Escenario escenario = corpus.get(i);
+            String cual = null;
+            if (escenario.pacienteId().equals(id)) {
+                cual = "el paciente";
+            } else if (escenario.resultadoId().equals(id)) {
+                cual = "el resultado";
+            } else if (escenario.informeId().equals(id)) {
+                cual = "el informe";
+            }
+            if (cual != null) {
+                return "DEL CORPUS: %s del escenario #%d de %d".formatted(cual, i + 1, corpus.size());
+            }
+        }
+        if (plantadas.contains(tipo + "/" + id)) {
+            return "plantada a propósito por este test";
+        }
+        return "AJENA a este test";
+    }
+
+    /**
+     * Si el dominio conoce el recurso.
+     *
+     * <p>El {@code Provenance} no tiene agregado detrás —es la proyección de una firma que vive dentro
+     * del resultado, con identidad derivada— así que la pregunta no se le puede hacer. El informe no
+     * se busca por identidad en ningún sitio del sistema, y no se le va a añadir un método al
+     * repositorio para un diagnóstico: se barre, que solo pasa cuando algo ya ha fallado.
+     */
+    private String enElDominio(String tipo, UUID id) {
+        return switch (tipo) {
+            case "Patient" -> siONo(pacientes.buscarPorId(id).isPresent());
+            case "ServiceRequest" -> siONo(peticiones.buscarPorId(id).isPresent());
+            case "Specimen" -> siONo(especimenes.buscarPorId(id).isPresent());
+            case "Observation" -> siONo(resultados.buscarPorId(id).isPresent());
+            case "DiagnosticReport" -> siONo(algunPacienteLoTieneEmitido(id));
+            case "Provenance" -> "no aplica (se deriva de la firma del resultado)";
+            default -> "?";
+        };
+    }
+
+    private boolean algunPacienteLoTieneEmitido(UUID informeId) {
+        return pacientes.todasLasIdentidades().stream()
+                .flatMap(paciente -> informes.buscarDePaciente(paciente).stream())
+                .map(Informe::id)
+                .anyMatch(informeId::equals);
+    }
+
+    private static String siONo(boolean loEs) {
+        return loEs ? "sí" : "no";
+    }
+
+    private static Set<String> loQueSobraDe(Set<String> encontradas, Set<String> esperadas) {
+        Set<String> sobrantes = new LinkedHashSet<>(encontradas);
+        sobrantes.removeAll(esperadas);
+        return sobrantes;
     }
 }
